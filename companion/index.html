@@ -1,0 +1,230 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     ONE CLICK FM-1 companion: drives the firmware over Web MIDI (Chrome / Edge). Protocol: firmware/src/oc_proto.c.
+     Web MIDI needs a secure context: open it from https or http://localhost (python3 -m http.server). -->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ONE CLICK Companion</title>
+<style>
+  :root {
+    --bg: #0e0e12; --surf: #22222a; --sel: #34304a; --text: #e8e6f0; --dim: #78768a; --acc: #ffaa28; --hot: #ff465a;
+    --bass: #5ac8ff; --chords: #aa82ff; --lead: #78e68c; --drums: #ffaa28;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) { --bg: #f4f3f8; --surf: #ffffff; --sel: #ebe7fb; --text: #1b1a22; --dim: #6c6a7c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  main { max-width: 980px; margin: 0 auto; padding: 16px; }
+  header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 28px; letter-spacing: 2px; color: var(--acc); }
+  .status { color: var(--dim); font-size: 13px; }
+  .status.ok { color: var(--lead); }
+  .status.err { color: var(--hot); }
+  button { font: inherit; color: var(--text); background: var(--surf); border: 1px solid #ffffff1a; border-radius: 8px;
+           padding: 8px 12px; cursor: pointer; }
+  button:hover { border-color: var(--acc); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.big { background: var(--acc); color: #111; font-weight: 700; font-size: 18px; padding: 12px 22px; border: 0; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 12px 0; }
+  .song { display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; margin: 8px 0 4px; }
+  .key { font-size: 22px; }
+  .prog { color: var(--dim); }
+  input[type=range] { accent-color: var(--acc); width: 160px; }
+  .track { background: var(--surf); border-radius: 10px; padding: 10px 12px; margin: 10px 0; border-left: 5px solid var(--c); }
+  .track.sel { background: var(--sel); }
+  .thead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .tname { font-size: 18px; min-width: 90px; }
+  .eng { color: var(--c); font-size: 13px; flex: 1; }
+  .thead button { padding: 4px 9px; font-size: 13px; }
+  .bars { display: grid; grid-template-columns: repeat(16, 1fr); gap: 3px; margin-top: 8px; }
+  .cell { aspect-ratio: 1; border-radius: 3px; background: #ffffff10; cursor: pointer; position: relative; }
+  .cell.beat { background: #ffffff1c; }
+  .cell.on { background: var(--c); }
+  .cell.tie { background: color-mix(in srgb, var(--c) 35%, transparent); }
+  .cell.now { outline: 2px solid var(--text); }
+  .cell span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 9px; color: #111; }
+  .lanes { display: grid; grid-template-columns: 34px repeat(16, 1fr); gap: 3px; margin-top: 8px; align-items: center; }
+  .lanes b { font-weight: 400; font-size: 11px; color: var(--dim); }
+  .help { color: var(--dim); font-size: 13px; margin-top: 18px; }
+  @media (max-width: 560px) { .bars, .lanes { gap: 2px; } h1 { font-size: 22px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>ONE CLICK</h1>
+    <button id="connect">Mit FM-1 verbinden</button>
+    <span id="status" class="status">nicht verbunden</span>
+  </header>
+
+  <div class="row">
+    <button id="oneclick" class="big" disabled>ONE CLICK</button>
+    <button id="play" disabled>▶ Play</button>
+    <button id="newkey" disabled>Neue Tonart</button>
+    <button id="undo" disabled>Undo</button>
+    <label>Tempo <input id="bpm" type="range" min="60" max="200" value="122" disabled> <span id="bpmv">122</span></label>
+  </div>
+
+  <div class="song"><span class="key" id="key">–</span><span class="prog" id="prog"></span></div>
+  <div id="tracks"></div>
+
+  <p class="help">Zellen anklicken bearbeitet das Pattern im Gerät: bei Bass, Akkorden und Lead schaltet ein Klick zwischen
+  Note und Pause (neue Noten nehmen den Akkordgrundton des Takts), bei den Drums setzt oder löscht er einen Schlag.
+  Gezeigt wird Takt 1 von 4; die Takt-Knöpfe wechseln.</p>
+</main>
+<script>
+"use strict";
+const ENG = ["SUBTRACT", "ACID", "FM", "SUPERSAW", "ADDITIVE", "DRUMS"];
+const ROLE = ["BASS", "CHORDS", "LEAD", "DRUMS"], COL = ["--bass", "--chords", "--lead", "--drums"];
+const NOTE = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const SCALE = ["MINOR", "DORIAN", "MAJOR", "MIXOLYD", "HARM MIN", "PHRYGIAN"];
+const SCALES = [[0,2,3,5,7,8,10],[0,2,3,5,7,9,10],[0,2,4,5,7,9,11],[0,2,4,5,7,9,10],[0,2,3,5,7,8,11],[0,1,3,5,7,8,10]];
+const RN = ["I", "II", "III", "IV", "V", "VI", "VII"], LANES = ["BD", "SD", "CP", "CH", "OH", "TM", "RS", "CB"];
+const ST_REST = 0, ST_NOTE = 1, ST_TIE = 2;
+
+let out = null, inp = null, state = null, bar = [0, 0, 0, 0], sel = 0;
+const $ = id => document.getElementById(id);
+
+function pack7(bytes) {
+  const o = [];
+  for (let i = 0; i < bytes.length; i += 7) {
+    const m = Math.min(7, bytes.length - i); let hi = 0; const h = o.length; o.push(0);
+    for (let k = 0; k < m; k++) { hi |= ((bytes[i + k] >> 7) & 1) << k; o.push(bytes[i + k] & 0x7f); }
+    o[h] = hi;
+  }
+  return o;
+}
+function unpack7(d) {
+  const o = [];
+  for (let i = 0; i < d.length;) { const hi = d[i++]; for (let k = 0; k < 7 && i < d.length; k++) o.push(d[i++] | (((hi >> k) & 1) << 7)); }
+  return o;
+}
+function send(cmd, data = []) { if (out) out.send([0xF0, 0x7D, 0x4F, 0x43, cmd, ...data, 0xF7]); }
+let dumpTimer = 0;
+function refresh(ms = 120) { clearTimeout(dumpTimer); dumpTimer = setTimeout(() => send(0x10), ms); }
+
+function parseDump(raw) {
+  if (raw[0] !== 1) return null;
+  const ps = raw[1], ss = raw[2]; let n = 3;
+  const s = { root: raw[n++], scale: raw[n++], prog: raw.slice(n, n + 4), bpm: raw[n + 4], playing: raw[n + 5], tracks: [] };
+  n += 6;
+  for (let t = 0; t < 4; t++) {
+    const patch = raw.slice(n, n + ps); n += ps;
+    const len = raw[n++], gate = raw[n++], steps = [];
+    for (let i = 0; i < 64; i++, n += ss) {
+      const b = raw.slice(n, n + ss);
+      steps.push({ note: b.slice(0, 4), n: b[4], time: b[5], flags: b[6], vel: b[7], hit: b[8], acc: b[9] });
+    }
+    s.tracks.push({ engine: patch[0], patch, len, gate, steps });
+  }
+  return s;
+}
+function stepBytes(st) { return [...st.note, st.n, st.time, st.flags, st.vel, st.hit, st.acc]; }
+function uploadSteps(t) {
+  const tr = state.tracks[t];
+  for (let h = 0; h < 2; h++) {
+    const raw = [tr.len, tr.gate];
+    for (let i = h * 32; i < h * 32 + 32; i++) raw.push(...stepBytes(tr.steps[i]));
+    send(0x12, [t, h, ...pack7(raw)]);
+  }
+}
+function near(off, around) { let n = off; while (n < around - 6) n += 12; while (n > around + 5) n -= 12; return n; }
+
+function render() {
+  const box = $("tracks"); box.innerHTML = "";
+  if (!state) return;
+  $("key").textContent = NOTE[state.root % 12] + " " + (SCALE[state.scale] || "?");
+  $("prog").textContent = state.prog.map(p => RN[p % 7]).join(" – ");
+  $("bpm").value = state.bpm; $("bpmv").textContent = state.bpm;
+  $("play").textContent = state.playing ? "■ Stop" : "▶ Play";
+  state.tracks.forEach((tr, t) => {
+    const el = document.createElement("div");
+    el.className = "track" + (t === sel ? " sel" : "");
+    el.style.setProperty("--c", `var(${COL[t]})`);
+    const head = document.createElement("div"); head.className = "thead";
+    head.innerHTML = `<span class="tname">${ROLE[t]}</span><span class="eng">${ENG[tr.engine] || "?"} · ${tr.len} Steps</span>`;
+    const mk = (label, fn) => { const b = document.createElement("button"); b.textContent = label; b.onclick = fn; head.appendChild(b); };
+    mk("Neu", () => { send(0x02, [t]); refresh(); });
+    mk("Sound", () => { send(0x03, [t]); refresh(); });
+    mk("Pattern", () => { send(0x04, [t]); refresh(); });
+    if (tr.len > 16) for (let b = 0; b < 4; b++) mk(bar[t] === b ? `[${b + 1}]` : `${b + 1}`, () => { bar[t] = b; render(); });
+    el.appendChild(head);
+    const base = tr.len > 16 ? bar[t] * 16 : 0;
+    if (tr.engine === 5) {
+      const g = document.createElement("div"); g.className = "lanes";
+      for (let l = 0; l < 8; l++) {
+        const lb = document.createElement("b"); lb.textContent = LANES[l]; g.appendChild(lb);
+        for (let i = 0; i < 16; i++) {
+          const st = tr.steps[i], c = document.createElement("div");
+          const on = st.time === ST_NOTE && (st.hit >> l) & 1;
+          c.className = "cell" + (i % 4 === 0 ? " beat" : "") + (on ? " on" : "");
+          c.onclick = () => {
+            st.hit ^= 1 << l; st.acc &= st.hit;
+            st.time = st.hit ? ST_NOTE : ST_REST; if (!st.vel) st.vel = 104;
+            uploadSteps(t); render();
+          };
+          g.appendChild(c);
+        }
+      }
+      el.appendChild(g);
+    } else {
+      const g = document.createElement("div"); g.className = "bars";
+      for (let i = 0; i < 16; i++) {
+        const st = tr.steps[base + i], c = document.createElement("div");
+        c.className = "cell" + (i % 4 === 0 ? " beat" : "") + (st.time === ST_NOTE ? " on" : st.time === ST_TIE ? " tie" : "");
+        if (st.time === ST_NOTE) c.innerHTML = `<span>${NOTE[st.note[0] % 12]}</span>`;
+        c.onclick = () => {
+          if (st.time === ST_NOTE) { Object.assign(st, { time: ST_REST, n: 0, note: [0, 0, 0, 0], flags: 0, vel: 0 }); }
+          else {
+            const b = Math.floor((base + i) / 16) % 4, around = t === 0 ? 39 : t === 1 ? 60 : 72;
+            const sc = SCALES[state.scale] || SCALES[0], d = state.prog[b] % 7;
+            const notes = t === 1 ? [0, 2, 4].map(k => near(state.root + sc[(d + k) % 7] + 12 * Math.floor((d + k) / 7), 60))
+                                  : [near(state.root + sc[d], around)];
+            notes.sort((a, b) => a - b);
+            Object.assign(st, { time: ST_NOTE, n: notes.length, note: [...notes, 0, 0, 0, 0].slice(0, 4), flags: 0, vel: 96 });
+          }
+          uploadSteps(t); render();
+        };
+        g.appendChild(c);
+      }
+      el.appendChild(g);
+    }
+    el.addEventListener("click", e => { if (e.target === el || e.target.classList.contains("tname")) { sel = t; render(); } });
+    box.appendChild(el);
+  });
+}
+
+function onMessage(e) {
+  const d = Array.from(e.data);
+  if (d[0] !== 0xF0 || d[1] !== 0x7D || d[2] !== 0x4F || d[3] !== 0x43) return;
+  if (d[4] === 0x11) { const s = parseDump(unpack7(d.slice(5, -1))); if (s) { state = s; render(); } }
+}
+function setStatus(txt, cls = "") { const s = $("status"); s.textContent = txt; s.className = "status " + cls; }
+function enable(on) { ["oneclick", "play", "newkey", "undo", "bpm"].forEach(id => $(id).disabled = !on); }
+
+async function connect() {
+  if (!navigator.requestMIDIAccess) { setStatus("Web MIDI fehlt: Chrome oder Edge verwenden", "err"); return; }
+  try {
+    const acc = await navigator.requestMIDIAccess({ sysex: true });
+    const pick = m => [...m.values()].find(p => /one click/i.test(p.name || "")) || null;
+    const bind = () => {
+      out = pick(acc.outputs); inp = pick(acc.inputs);
+      if (inp) inp.onmidimessage = onMessage;
+      if (out && inp) { setStatus("verbunden: " + out.name, "ok"); enable(true); refresh(10); }
+      else { setStatus("FM-1 mit ONE CLICK nicht gefunden (USB-Kabel?)", "err"); enable(false); }
+    };
+    acc.onstatechange = bind; bind();
+  } catch (err) { setStatus("kein MIDI-Zugriff: " + err.message, "err"); }
+}
+$("connect").onclick = connect;
+$("oneclick").onclick = () => { send(0x01); refresh(); };
+$("play").onclick = () => { send(0x06, [state && state.playing ? 0 : 1]); refresh(60); };
+$("newkey").onclick = () => { send(0x05); refresh(); };
+$("undo").onclick = () => { send(0x08); refresh(); };
+$("bpm").oninput = e => { $("bpmv").textContent = e.target.value; send(0x07, [e.target.value - 60]); };
+</script>
+</body>
+</html>

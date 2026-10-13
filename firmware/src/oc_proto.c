@@ -1,0 +1,130 @@
+/* SPDX-License-Identifier: GPL-3.0-only
+ * ONE CLICK FM-1: the companion protocol (the browser app over Web MIDI; the same frames could ride BLE-MIDI later).
+ * SysEx, manufacturer id 7D (non-commercial), then 'O' 'C', a command, its data (8-bit data packed 7 in 8):
+ *   01           ONE CLICK (a new song)          02 t   a new track t (sound and part)
+ *   03 t         a new sound on t                04 t   a new part on t
+ *   05           a new key                       06 p   play (1) / stop (0)
+ *   07 b         tempo (b + 60)                  08     undo / redo
+ *   10           dump: the device answers 11 + the packed state: 1, sizeof patch_t, sizeof step_t, root, scale,
+ *                prog[4], bpm, playing; then each track: patch_t (engine first), LEN, GATE, 64 x step_t
+ *                (step_t: note[4] n time flags vel hit acc)
+ *   12 t h + packed  steps of t, half h (0: steps 1..32, 1: 33..64): LEN, GATE, 32 steps (a frame stays < 640 B)   13 t + packed  the sound of t   14 + packed  root scale prog[4]
+ * proto_frame(p, n): one frame without F0 / F7; replies through proto_send. Unknown frames are left alone. */
+
+static int proto_send(const uint8_t *p, uint32_t n);   /* a whole F0..F7 message (platform) */
+
+/* 8-bit bytes <-> 7-bit groups: each 7 bytes become a byte of their high bits and the 7 low halves */
+static uint32_t pack7(const uint8_t *in, uint32_t n, uint8_t *out)
+{
+    uint32_t i, o = 0;
+    for (i = 0; i < n; i += 7u) {
+        uint32_t k, hi = 0, m = n - i < 7u ? n - i : 7u, h = o++;
+        for (k = 0; k < m; k++) {
+            hi |= ((in[i + k] >> 7) & 1u) << k;
+            out[o++] = in[i + k] & 0x7Fu;
+        }
+        out[h] = (uint8_t)hi;
+    }
+    return o;
+}
+static uint32_t unpack7(const uint8_t *in, uint32_t n, uint8_t *out, uint32_t max)
+{
+    uint32_t i = 0, o = 0;
+    while (i < n) {
+        uint32_t hi = in[i++], k;
+        for (k = 0; k < 7u && i < n && o < max; k++)
+            out[o++] = (uint8_t)(in[i++] | ((hi >> k) & 1u) << 7);
+    }
+    return o;
+}
+
+#define TRK_WIRE (sizeof(patch_t) + 2u + NSTEP * sizeof(step_t))
+static uint8_t px_raw[11u + NTRK * TRK_WIRE] __attribute__((section(".pool")));
+static uint8_t px_wire[sizeof px_raw * 8u / 7u + 16u] __attribute__((section(".pool")));
+
+static void proto_dump(void)
+{
+    uint32_t i, n = 0, w;
+    px_raw[n++] = 1;                              /* the dump's version, then the sizes it uses */
+    px_raw[n++] = (uint8_t)sizeof(patch_t);
+    px_raw[n++] = (uint8_t)sizeof(step_t);
+    px_raw[n++] = song.root;
+    px_raw[n++] = song.scale;
+    memcpy(px_raw + n, song.prog, 4);
+    n += 4;
+    px_raw[n++] = song.bpm;
+    px_raw[n++] = song.playing;
+    for (i = 0; i < NTRK; i++) {
+        memcpy(px_raw + n, &trk[i].s, sizeof(patch_t));
+        n += sizeof(patch_t);
+        px_raw[n++] = trk[i].len;
+        px_raw[n++] = trk[i].gate;
+        memcpy(px_raw + n, trk[i].step, sizeof trk[i].step);
+        n += sizeof trk[i].step;
+    }
+    px_wire[0] = 0xF0;
+    px_wire[1] = 0x7D;
+    px_wire[2] = 'O';
+    px_wire[3] = 'C';
+    px_wire[4] = 0x11;
+    w = 5u + pack7(px_raw, n, px_wire + 5);
+    px_wire[w++] = 0xF7;
+    (void)proto_send(px_wire, w);
+}
+
+static void ui_say(const char *s);
+static void undo_take(void);
+static void undo_swap(void);
+/* 1 = the frame was ours */
+static int proto_frame(const uint8_t *p, uint32_t n)
+{
+    uint32_t t, k;
+    if (n < 4u || p[0] != 0x7Du || p[1] != 'O' || p[2] != 'C')
+        return 0;
+    t = n > 4u ? p[4] % NTRK : song.sel;
+    switch (p[3]) {
+    case 0x01: undo_take(); gen_all(); ui_say("ONE CLICK (APP)"); break;
+    case 0x02: undo_take(); gen_track(&trk[t]); break;
+    case 0x03: undo_take(); gen_sound(&trk[t]); break;
+    case 0x04: undo_take(); gen_pattern(&trk[t]); break;
+    case 0x05: undo_take(); gen_key(); break;
+    case 0x06: seq_play(n > 4u && p[4]); break;
+    case 0x07: if (n > 4u) song.bpm = (uint8_t)clamp(p[4] + 60, 60, 200); break;
+    case 0x08: undo_swap(); break;
+    case 0x10: proto_dump(); break;
+    case 0x12: {                                  /* steps of t */
+        uint32_t h = n > 5u ? p[5] & 1u : 0u, half = NSTEP / 2u * sizeof(step_t);
+        k = n > 6u ? unpack7(p + 6, n - 6u, px_raw, 2u + half) : 0u;
+        if (k == 2u + half) {
+            gen_lock();
+            trk[t].len = (uint8_t)clamp(px_raw[0], 1, NSTEP);
+            trk[t].gate = (uint8_t)clamp(px_raw[1], 1, 100);
+            memcpy(&trk[t].step[h * NSTEP / 2u], px_raw + 2, half);
+            gen_unlock();
+        }
+        break;
+    }
+    case 0x13: {                                  /* the sound of t (the engine number checked) */
+        k = unpack7(p + 5, n - 5u, px_raw, sizeof(patch_t));
+        if (k == sizeof(patch_t) && px_raw[0] < E_N && (t == ROLE_DRUM) == (px_raw[0] == E_DRUM)) {
+            gen_lock();
+            track_panic(t);
+            memcpy(&trk[t].s, px_raw, sizeof(patch_t));
+            gen_unlock();
+        }
+        break;
+    }
+    case 0x14: {
+        k = unpack7(p + 4, n - 4u, px_raw, 6);
+        if (k == 6u && px_raw[1] < SC_N) {
+            song.root = (uint8_t)(px_raw[0] % 12u);
+            song.scale = px_raw[1];
+            for (k = 0; k < 4u; k++)
+                song.prog[k] = (uint8_t)(px_raw[2u + k] % 7u);
+        }
+        break;
+    }
+    default: break;
+    }
+    return 1;
+}
