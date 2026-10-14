@@ -61,7 +61,8 @@ int main(void)
             check_parts();
             host_run(200, meter, 0);
         }
-        for (i = 0; i < NVOICE; i++) CHECK(!voice[i].active || voice[i].trk < NTRK, "voice track");
+        for (i = 0; i < NVOICE; i++) CHECK(!voice[i].active || voice[i].trk < ROLE_DRUM, "synth voice on track %u", voice[i].trk);
+        for (i = 0; i < NLANE; i++) CHECK(!dvoice[i].active || (dvoice[i].trk == ROLE_DRUM && dvoice[i].lane == i), "drum voice %u", i);
     }
     CHECK(quiet < 8, "%u quiet rounds of 80", quiet);
     /* undo / redo */

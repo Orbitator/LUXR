@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * ONE CLICK FM-1: core types. Four tracks with fixed roles (bass, chords, lead, drums), each a sound (patch_t) and a
- * 64-step pattern; one pool of NVOICE voices shared by them. Everything is fixed point (no FPU on the FM-1). */
+ * 64-step pattern; a pool of NVOICE voices shared by the three melodic tracks, one voice per lane for the drums. Everything is fixed point (no FPU on the FM-1). */
 #include <stdint.h>
 
 #define NTRK 4
 #define NSTEP 64
-#define NVOICE 8
+#define NVOICE 8                 /* synth voices (bass, chords, lead); the drums have one voice per lane (dvoice) */
 #define NLANE 8
 #define HALF_FRAMES 128          /* I2S half buffer (audio.c) */
 #define NELEM(a) (sizeof(a) / sizeof((a)[0]))
@@ -94,6 +94,7 @@ typedef struct {
 static track_t trk[NTRK];
 static song_t song;
 static voice_t voice[NVOICE];
+static voice_t dvoice[NLANE];   /* the drum track's: one per lane, as a drum machine (no stealing) */
 #define TSEL (&trk[song.sel % NTRK])
 
 /* scales the generator uses: 7-note, semitones above the root */

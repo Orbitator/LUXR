@@ -168,7 +168,7 @@ const wasmBytes = Uint8Array.from(atob(WASM_B64), (c) => c.charCodeAt(0));
 /* ---------------------------------------------------------------- worklet --- */
 const WORKLET = `
 function stateOf(ex) {
-  return { playing: ex.emu_playing(), step: ex.emu_step(), voices: ex.emu_voices(), sel: ex.emu_sel(), bpm: ex.emu_bpm(),
+  return { playing: ex.emu_playing(), step: ex.emu_step(), voices: ex.emu_voices(), dvoices: ex.emu_dvoices(), cuts: ex.emu_cuts(), sel: ex.emu_sel(), bpm: ex.emu_bpm(),
            root: ex.emu_root(), scale: ex.emu_scale(), eng: [0, 1, 2, 3].map((t) => ex.emu_engine(t)),
            mute: [0, 1, 2, 3].map((t) => ex.emu_muted(t)) };
 }
@@ -309,7 +309,7 @@ function showState(st) {
   $("sSong").textContent = `${NOTE[st.root % 12]} ${SCALE[st.scale] || "?"} · ${st.bpm} BPM`;
   $("sTracks").textContent = st.eng.map((e, t) => `${t === st.sel ? "▸ " : ""}${ROLE[t]} ${ENG[e] || "?"}${st.mute[t] ? " (stumm)" : ""}`).join(" · ");
   $("sStep").textContent = st.playing ? `Takt ${Math.floor(st.step / 16) % 4 + 1}, Step ${st.step % 16 + 1}` : "gestoppt";
-  $("sVoices").textContent = `${st.voices} von 8`;
+  $("sVoices").textContent = `Synth ${st.voices} von 8 · Drums ${st.dvoices ?? 0} von 8 · ${st.cuts ?? 0} hörbare Abschnitte`;
 }
 const logEl = $("log");
 function log(html) { logEl.innerHTML += "\n" + html; logEl.scrollTop = logEl.scrollHeight; }

@@ -109,23 +109,86 @@ static void voice_start(voice_t *v, uint32_t t, uint32_t note, uint32_t vel, uin
     v->active = 1;
 }
 
-static voice_t *voice_alloc(uint32_t t)
+/* steals (diagnostics, the emulator and the tests read them): [taker][victim's track], a cut that was still audible
+ * (above about -36 dB), split by whether the victim's note was still held */
+static struct { uint32_t held[NTRK][NTRK], tail[NTRK][NTRK], quiet, loud, lvl[6]; } vstat;   /* lvl: cuts by level, 6 dB bands from -36 dB */
+static void steal_count(uint32_t t, const voice_t *v)
 {
-    voice_t *best = 0;
-    uint32_t i;
+    if (!v->active)
+        return;
+    if (v->amp >= 512) {
+        uint32_t b = 0, a = (uint32_t)v->amp >> 10;
+        while (a && b < 5u) { a >>= 1; b++; }
+        vstat.lvl[b]++;
+        vstat.loud += v->amp >= 3277;
+    }
+    if (v->amp < 512)
+        vstat.quiet++;
+    else if (v->gate)
+        vstat.held[t % NTRK][v->trk % NTRK]++;
+    else
+        vstat.tail[t % NTRK][v->trk % NTRK]++;
+}
+/* The pool: NVOICE voices for the three melodic tracks (the drums have their own, dvoice). Each track has a reserve
+ * (VRES: a chord needs 4; two float); a track over its reserve gives voices up first. A voice's level is v->amp (Q15, every engine).
+ * A note (track t, note n; drums: the lane) takes, in this order:
+ *   1. a voice of t already on that note / lane (a retrigger: the drum machine's choke, a repeated note)
+ *   2. a free voice
+ *   3. a releasing voice of a track over its reserve (t's own counts as over), the quietest
+ *   4. any releasing voice, the quietest, if t is under its reserve
+ *   5. t's own oldest voice (a held one: t plays more notes than it has)
+ *   6. the quietest voice of a track over its reserve */
+static const uint8_t VRES[NTRK] = {1, 4, 1, 0};
+static uint8_t alloc_retrig;                     /* the last voice_alloc_ was a retrigger (rule 1) */
+static voice_t *voice_alloc_(uint32_t t, uint32_t note, uint32_t lane)
+{
+    voice_t *best = 0, *v;
+    uint32_t i, k, cnt[NTRK] = {0, 0, 0, 0}, drum = trk[t % NTRK].s.engine == E_DRUM;
+    for (i = 0; i < NVOICE; i++) {
+        v = &voice[i];
+        if (v->active && v->trk == t && (drum ? v->lane == lane : v->note == note && !v->gate)) {
+            alloc_retrig = 1;                   /* (1: taken over, not a steal; voice_start keeps its phases) */
+            return v;
+        }
+    }
+    alloc_retrig = 0;
     for (i = 0; i < NVOICE; i++)
         if (!voice[i].active)
             return &voice[i];
-    for (i = 0; i < NVOICE; i++)                /* a released one, the quietest */
-        if (!voice[i].gate && (!best || voice[i].env < best->env))
-            best = &voice[i];
-    if (best)
-        return best;
-    for (i = 0; i < NVOICE; i++)                /* the oldest, of this track if it has one */
-        if (!best || (voice[i].trk == t && best->trk != t) ||
-            ((voice[i].trk == t) == (best->trk == t) && voice[i].age < best->age))
+    for (i = 0; i < NVOICE; i++)
+        cnt[voice[i].trk % NTRK]++;
+    for (k = 3; k <= 6; k++) {
+        if (k == 4 && cnt[t] >= VRES[t])
+            continue;
+        for (i = 0; i < NVOICE; i++) {
+            uint32_t vt;
+            v = &voice[i];
+            vt = v->trk % NTRK;
+            if (k == 3 && (v->gate || (vt != t && cnt[vt] <= VRES[vt])))
+                continue;
+            if (k == 4 && v->gate)
+                continue;
+            if (k == 5 && vt != t)
+                continue;
+            if (k == 6 && cnt[vt] <= VRES[vt])
+                continue;
+            if (!best || (k == 5 ? v->age < best->age : v->amp < best->amp))
+                best = v;
+        }
+        if (best)
+            return best;
+    }
+    for (i = 0; i < NVOICE; i++)                /* (only when every track sits at its reserve: the quietest) */
+        if (!best || voice[i].amp < best->amp)
             best = &voice[i];
     return best;
+}
+static voice_t *voice_alloc(uint32_t t, uint32_t note, uint32_t lane)
+{
+    voice_t *v = voice_alloc_(t, note, lane);
+    if (!alloc_retrig)
+        steal_count(t, v);
+    return v;
 }
 
 /* a note on track t (drums: note = the lane mask, acc the accented lanes) */
@@ -136,16 +199,14 @@ static void note_on(uint32_t t, uint32_t note, uint32_t vel, uint32_t flags)
     uint32_t i;
     if (tr->s.engine == E_DRUM) {
         for (i = 0; i < NLANE; i++) {
-            uint32_t j;
             if (!((note >> i) & 1u))
                 continue;
-            if (i == LN_HATC)                   /* the closed hat chokes the open one */
-                for (j = 0; j < NVOICE; j++)
-                    if (voice[j].active && voice[j].trk == t && voice[j].lane == LN_HATO)
-                        voice[j].active = 0;
-            v = voice_alloc(t);
+            if (i == LN_HATC && dvoice[LN_HATO].active)   /* the closed hat chokes the open one (a 3 ms fade) */
+                dvoice[LN_HATO].stage = 3;
+            v = &dvoice[i];                     /* the lane's voice: a hit again restarts it */
             voice_start(v, t, 60, vel, (flags >> i) & 1u, i);
             v->gate = 0;                        /* one-shot */
+            v->pa[3] = 32767;                   /* (the choke fade's level) */
         }
         return;
     }
@@ -175,7 +236,7 @@ static void note_on(uint32_t t, uint32_t note, uint32_t vel, uint32_t flags)
             }
         }
     }
-    v = voice_alloc(t);
+    v = voice_alloc(t, note, 0);
     voice_start(v, t, note, vel, flags & SF_ACC, 0);
 }
 static void note_off(uint32_t t, uint32_t note)
@@ -255,6 +316,14 @@ static void render_voice(voice_t *v, int32_t *out, uint32_t n)
                 break;
             }
             e = (e * e) >> 15;                   /* a curved decay */
+            if (v->stage == 3) {                 /* choked: down in ~3 ms */
+                v->pa[3] -= 248;
+                if (v->pa[3] <= 0) {
+                    v->active = 0;
+                    break;
+                }
+                e = (e * v->pa[3]) >> 15;
+            }
             switch (lane) {
             case LN_KICK: {
                 int32_t sweep = 32767 - (int32_t)(tt < 6000u ? tt * 5u : 30000u);
@@ -298,6 +367,7 @@ static void render_voice(voice_t *v, int32_t *out, uint32_t n)
                 break;
             }
             out[i] += (((y * e) >> 15) * (vel >> 3)) >> 12;
+            v->amp = e;
         }
         return;
     }
@@ -494,6 +564,9 @@ static void mix_block(int32_t *out, uint32_t n)
     for (i = 0; i < NVOICE; i++)
         if (voice[i].active)
             render_voice(&voice[i], tb[voice[i].trk % NTRK], n);
+    for (i = 0; i < NLANE; i++)
+        if (dvoice[i].active)
+            render_voice(&dvoice[i], tb[dvoice[i].trk % NTRK], n);
     for (i = 0; i < n; i++)
         L[i] = R[i] = ds[i] = rs[i] = 0;
     for (t = 0; t < NTRK; t++) {

@@ -140,7 +140,7 @@ EXPORT void emu_render(uint32_t n)
 /* the song's state for the page */
 EXPORT uint32_t emu_playing(void) { return song.playing; }
 EXPORT uint32_t emu_step(void) { return song.step; }
-EXPORT uint32_t emu_voices(void)
+EXPORT uint32_t emu_voices(void)                  /* synth voices sounding (of NVOICE) */
 {
     uint32_t i, n = 0;
     for (i = 0; i < NVOICE; i++)
@@ -154,3 +154,19 @@ EXPORT uint32_t emu_root(void) { return song.root; }
 EXPORT uint32_t emu_scale(void) { return song.scale; }
 EXPORT uint32_t emu_engine(uint32_t t) { return trk[t % NTRK].s.engine; }
 EXPORT uint32_t emu_muted(uint32_t t) { return trk[t % NTRK].mute; }
+EXPORT uint32_t emu_dvoices(void)                 /* drum lanes sounding (of NLANE) */
+{
+    uint32_t i, n = 0;
+    for (i = 0; i < NLANE; i++)
+        n += dvoice[i].active;
+    return n;
+}
+/* hearable cuts since the start (oc_synth.c vstat: a voice taken while above about -36 dB) */
+EXPORT uint32_t emu_cuts(void)
+{
+    uint32_t a, b, n = 0;
+    for (a = 0; a < NTRK; a++)
+        for (b = 0; b < NTRK; b++)
+            n += vstat.held[a][b] + vstat.tail[a][b];
+    return n;
+}

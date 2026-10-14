@@ -34,7 +34,12 @@ das M-UPGRADE-Update über USB.
 Sechs eigene Engines in Festkomma (der FM-1 hat keine FPU): Subtraktiv (2 Osc + Sub + Noise, SVF),
 Acid (TB-303-artig, Sättigung, Accent/Slide), FM (3 Operatoren, 3 Algorithmen), Supersaw (bis 7 Sägezähne),
 Additiv (bis 8 Teiltöne, Orgel/Risset-Glocke/Marimba) und Drums (8 synthetisierte Instrumente).
-Dazu Delay (punktierte Achtel) und Reverb. 8 Stimmen gesamt.
+Dazu Delay (punktierte Achtel) und Reverb.
+
+Stimmen: 8 Synth-Stimmen für Bass, Akkorde und Lead mit Reserven (Bass 1, Akkorde 4, Lead 1, zwei frei vergeben);
+eine wiederholte Note übernimmt ihre eigene Stimme. Die Drums haben eine Stimme pro Instrument wie eine Drum-Machine
+(die geschlossene Hi-Hat blendet die offene in 3 ms aus). `tests/voices_bench.c` zählt hörbar abgeschnittene Noten:
+vorher 118 pro Minute, jetzt 0.
 
 ## Bauen
 
