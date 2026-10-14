@@ -2,6 +2,7 @@
  * ONE CLICK FM-1: every page, sub-page and layer as the FM-1's screen shows it, PPMs into a folder.
  *   screens OUT_DIR */
 #include "host.c"
+#include <math.h>
 static const char *out;
 static void shot(const char *name)
 {
@@ -14,9 +15,28 @@ int main(int argc, char **argv)
 {
     uint32_t pg, s, ns, t;
     static const char *const PN[PG_N] = {"home", "edit", "env", "lfo", "fx", "scl", "seq", "gen", "glo", "save", "menu"};
+    (void)0;
     char n[64];
     out = argc > 1 ? argv[1] : "build/screens";
     host_boot(11);
+    {   /* a kick and a 2-bar loop in the store (as the companion would send them) */
+        static uint8_t d[22050 * 2];
+        smp_t m;
+        uint32_t i;
+        for (i = 0; i < sizeof d; i++) {
+            double x = (i % 5512u < 1500u ? 0.8 * sin(i * 0.07) * (1.0 - (i % 5512u) / 1500.0) : 0.05 * sin(i * 0.9));
+            int32_t v = (int32_t)(x * 32000), sg = v < 0 ? 0x80 : 0, e;
+            v = v < 0 ? -v : v; v = v > 32635 ? 32635 : v; v += 0x84;
+            for (e = 7; e > 0 && !(v & (0x4000 >> (7 - e))); e--) ;
+            d[i] = (uint8_t)~(sg | e << 4 | ((v >> (e + 3)) & 15));
+        }
+        memset(&m, 0, sizeof m); m.kind = SK_ONESHOT; m.rate = 22050; m.len = 6000; m.root = 60; str_cpy(m.name, "KICK 808", 12);
+        smp_begin(0, &m, 4); smp_chunk(0, d, 6000); smp_commit();
+        m.kind = SK_LOOP; m.bars = 2; m.len = sizeof d; str_cpy(m.name, "AMEN", 12);
+        smp_begin(1, &m, 5);
+        for (i = 0; i < sizeof d; i += 256u) smp_chunk(i, d + i, sizeof d - i < 256u ? sizeof d - i : 256u);
+        smp_commit();
+    }
     host_tap(B_PLAY);
     host_run(1500, 0, 0);
     for (t = 0; t < NTRK; t++) {

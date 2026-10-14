@@ -4,7 +4,7 @@
  * the melodic tracks, one voice per lane on drum tracks. Everything is fixed point (no FPU on the FM-1). */
 #include <stdint.h>
 
-#define NTRK 4
+#define NTRK 6                   /* 1..4 the generator's parts, 5 the kick, 6 the loop (as ONE CLICK SYNTH's X-Generator) */
 #define NSTEP 64
 #define NVOICE 8                 /* synth voices (bass, chords, lead); the drums have one voice per lane (dvoice) */
 #define NLANE 8
@@ -17,17 +17,17 @@ enum { B_FX, B_SCL, B_ENV, B_LFO, B_EDIT, B_GLO, B_HOME, B_SAVE, B_ARP, B_SEQ, B
 enum { EN_SELECT, EN_ALGO, EN_PRESET, EN_K1, EN_K2, EN_K3, EN_K4, NE };
 
 /* the roles in the music (how a part is made) and the instrument types (what the track is: its role and its sounds) */
-enum { ROLE_BASS, ROLE_CHORD, ROLE_LEAD, ROLE_DRUM, ROLE_N };
+enum { ROLE_BASS, ROLE_CHORD, ROLE_LEAD, ROLE_DRUM, ROLE_LOOP, ROLE_N };
 enum { TY_BASS, TY_CHORDS, TY_PAD, TY_ATMO, TY_PIANO, TY_GUITAR, TY_LEAD, TY_PLUCK, TY_BRASS, TY_FLUTE,
-       TY_DRUMS, TY_KICK, TY_SNARE, TY_PERC, TY_N };
+       TY_DRUMS, TY_KICK, TY_SNARE, TY_PERC, TY_LOOP, TY_N };
 static const char *const TYPE_NAME[TY_N] = {"BASS", "CHORDS", "PAD", "ATMO", "PIANO", "GUITAR", "LEAD", "PLUCK",
-                                            "BRASS", "FLUTE", "DRUMS", "KICK", "SNARE", "PERC"};
+                                            "BRASS", "FLUTE", "DRUMS", "KICK", "SNARE", "PERC", "LOOP"};
 static const uint8_t TYPE_ROLE[TY_N] = {ROLE_BASS, ROLE_CHORD, ROLE_CHORD, ROLE_CHORD, ROLE_CHORD, ROLE_CHORD,
                                         ROLE_LEAD, ROLE_LEAD, ROLE_LEAD, ROLE_LEAD,
-                                        ROLE_DRUM, ROLE_DRUM, ROLE_DRUM, ROLE_DRUM};
-static const uint8_t TYPE_DEFAULT[4] = {TY_BASS, TY_CHORDS, TY_LEAD, TY_DRUMS};   /* the tracks at power-on */
-enum { E_SUB, E_ACID, E_FM, E_SAW, E_ADD, E_NOISE, E_DRUM, E_N };
-static const char *const ENGINE_NAME[E_N] = {"SUBTRACT", "ACID", "FM", "SUPERSAW", "ADDITIVE", "NOISE", "DRUMS"};
+                                        ROLE_DRUM, ROLE_DRUM, ROLE_DRUM, ROLE_DRUM, ROLE_LOOP};
+static const uint8_t TYPE_DEFAULT[NTRK] = {TY_BASS, TY_CHORDS, TY_LEAD, TY_DRUMS, TY_KICK, TY_LOOP};   /* the tracks at power-on */
+enum { E_SUB, E_ACID, E_FM, E_SAW, E_ADD, E_NOISE, E_DRUM, E_SAMPLE, E_N };
+static const char *const ENGINE_NAME[E_N] = {"SUBTRACT", "ACID", "FM", "SUPERSAW", "ADDITIVE", "NOISE", "DRUMS", "SAMPLE"};
 enum { LN_KICK, LN_SNARE, LN_CLAP, LN_HATC, LN_HATO, LN_TOM, LN_RIM, LN_BELL };
 
 enum { ST_REST, ST_NOTE, ST_TIE };
@@ -66,6 +66,7 @@ typedef struct {                 /* a sound; values 0..127 unless noted */
     uint8_t fatt, fsus, frel;    /* the filter envelope's attack, sustain, release (its decay: fdec) */
     int8_t tune, fine;           /* pitch: semitones -24..24, cents -100..100 */
     uint8_t dual, dmix;          /* DUAL: a second voice per note (DU_*), its level */
+    uint8_t smp, sstart;         /* SAMPLE (the kick and loop tracks): the slot (smp_dir), the start (0..127 of its length) */
 } patch_t;
 enum { DU_OFF, DU_UNISON, DU_OCTUP, DU_FIFTH, DU_OCTDN, DU_N };   /* the second voice: detuned, +12, +7, -12 */
 enum { LD_OFF, LD_CUT, LD_PITCH, LD_AMP, LD_PAN, LD_N };
@@ -139,6 +140,23 @@ enum { MI_CH14, MI_SEL, MI_N };                /* MIDI IN: channels 1..4 play tr
 static uint32_t trk_role(uint32_t t) { return TYPE_ROLE[trk[t % NTRK].type % TY_N]; }
 #define TSEL (&trk[song.sel % NTRK])
 #define IS_DRUM(t) (trk_role(t) == ROLE_DRUM)
+#define IS_LOOP(t) (trk_role(t) == ROLE_LOOP)
+#define NO_NOTES(t) (trk_role(t) >= ROLE_DRUM)   /* drums (lanes) and the loop (slices): no pitches to transpose or key */
+#define USES_DV(t) (trk_role(t) >= ROLE_DRUM)    /* their voices: dvoice[t], not the pool */
+
+/* samples (oc_smp.c): NSMP slots in the store, 8-bit mu-law mono; one-shots for the kick track (tuned by TUNE),
+ * loops cut into 16 slices a bar for the loop track */
+#define NSMP 8
+enum { SK_ONESHOT, SK_LOOP };
+typedef struct {
+    uint32_t off, len;           /* in the sample area: start, samples */
+    uint16_t rate;               /* Hz */
+    uint8_t used, kind, root, bars, pad[2];   /* root: the MIDI note it sounds at; bars: a loop's length */
+    char name[12];
+} smp_t;
+static smp_t smp_dir[NSMP];
+static const uint8_t *smp_base;  /* the sample area as memory (XIP on the FM-1, RAM in host / emulator), 0 = none */
+static uint32_t smp_slices(uint32_t k) { return smp_dir[k % NSMP].kind == SK_LOOP ? 16u * (smp_dir[k % NSMP].bars ? smp_dir[k % NSMP].bars : 1u) : 1u; }
 
 /* scales the generator uses: 7-note, semitones above the root */
 enum { SC_MIN, SC_DOR, SC_MAJ, SC_MIX, SC_HARM, SC_PHRY, SC_N };

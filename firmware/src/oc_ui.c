@@ -26,7 +26,7 @@
  * The screen as Felucca lays it out (gfx.c): the header (track, type, REC, tempo, play), four knob cards, the page's
  * picture, the footer (the page, its key hints). Each area is drawn only when what it shows changed.
  * Platform hooks (oc_main.c on the FM-1; host/, emu/): io_pressed io_held io_keys io_enc io_led_button io_led_key
- * io_store_read io_store_write, and lcd_blit / lcd_sync / lcd_fill under gfx.c. */
+ * io_store_read io_store_erase io_store_prog io_store_map, and lcd_blit / lcd_sync / lcd_fill under gfx.c. */
 
 static uint32_t io_pressed(void);                /* B_* labels pressed since the last call */
 static uint32_t io_held(void);                   /* B_* labels held */
@@ -35,7 +35,9 @@ static int32_t io_enc(uint32_t role);            /* detents since the last call,
 static void io_led_button(uint32_t b, int on);
 static void io_led_key(uint32_t k, int on);
 static int io_store_read(uint32_t off, void *d, uint32_t n);         /* the store (OC_STORE_*): 0 = ok */
-static int io_store_write(uint32_t off, const void *s, uint32_t n);  /* a 4 KiB sector at off, erased first */
+static int io_store_erase(uint32_t off);                            /* its 4 KiB sector at off */
+static int io_store_prog(uint32_t off, const void *s, uint32_t n);  /* into erased flash */
+static const uint8_t *io_store_map(void);                           /* the store as memory (0: not readable so) */
 #ifndef OC_VERSION
 #define OC_VERSION "v0.2"
 #endif
@@ -52,7 +54,8 @@ static int io_store_write(uint32_t off, const void *s, uint32_t n);  /* a 4 KiB 
 #define H_FOOT 38
 #define HOLD_MS 350u                             /* a button held this long: its hold function */
 #define PAL_AMBER 2u
-static const uint16_t TRK_COL[NTRK] = {RGB(90, 200, 255), RGB(176, 140, 255), RGB(120, 226, 140), RGB(255, 170, 40)};
+static const uint16_t TRK_COL[NTRK] = {RGB(90, 200, 255), RGB(176, 140, 255), RGB(120, 226, 140), RGB(255, 170, 40),
+                                       RGB(255, 96, 110), RGB(240, 220, 90)};
 #define C_REC RGB(255, 72, 60)
 
 /* --------------------------------------------------------- parameters --- */
@@ -78,7 +81,8 @@ enum {
     /* the song, the settings */
     P_ROOT, P_SCALE, P_PROG, P_OCT, P_TRANSP, P_SWING,
     P_DLYT, P_DLYFB, P_RSIZE, P_RDAMP,
-    P_LV1, P_LV2, P_LV3, P_LV4, P_PN1, P_PN2, P_PN3, P_PN4,
+    P_LV1, P_LV2, P_LV3, P_LV4, P_LV5, P_LV6, P_PN1, P_PN2, P_PN3, P_PN4, P_PN5, P_PN6,
+    P_SMP, P_SSTART, P_MSLOT, P_MACT,
     P_RECMODE, P_CLICK, P_MIDIIN, P_THEME, P_VERSION,
     P_SSLOT, P_GSLOT, P_SACT,
     P_COUNT
@@ -101,7 +105,10 @@ static const char *const N_LANE[NLANE] = {"KICK", "SNARE", "CLAP", "HAT", "OPEN 
 static const char *const N_DLYT[] = {"1/8", "3/16", "1/4", "3/8", "1/2", "3/4"};
 static const char *const N_RECMODE[] = {"OVERDUB", "REPLACE"};
 static const char *const N_CLICK[] = {"OFF", "REC", "ON"};
-static const char *const N_MIDIIN[] = {"CH 1-4", "SELECTED"};
+static const char *const N_MIDIIN[] = {"CH 1-6", "SELECTED"};
+static const char *const N_MACT[] = {"ASSIGN", "DELETE", "CLEAR ALL"};
+static const char *N_SMP[NSMP];                  /* the slots' names (smp_names) */
+static char smp_txt[NSMP][14];
 static const char *const N_SACT[] = {"SAVE", "LOAD"};
 static const char *const N_VERSION[] = {OC_VERSION};
 static const char *const N_RN[7] = {"I", "II", "III", "IV", "V", "VI", "VII"};
@@ -164,6 +171,10 @@ static const pdesc_t PD[P_COUNT] = {
     [P_LV3] = {"LEVEL 3", FM_PCT, 0, 127, 0}, [P_LV4] = {"LEVEL 4", FM_PCT, 0, 127, 0},
     [P_PN1] = {"PAN 1", FM_PAN, -64, 63, 0}, [P_PN2] = {"PAN 2", FM_PAN, -64, 63, 0},
     [P_PN3] = {"PAN 3", FM_PAN, -64, 63, 0}, [P_PN4] = {"PAN 4", FM_PAN, -64, 63, 0},
+    [P_LV5] = {"KICK LV", FM_PCT, 0, 127, 0}, [P_LV6] = {"LOOP LV", FM_PCT, 0, 127, 0},
+    [P_PN5] = {"KICK PAN", FM_PAN, -64, 63, 0}, [P_PN6] = {"LOOP PAN", FM_PAN, -64, 63, 0},
+    [P_SMP] = {"SAMPLE", FM_NAME, 0, NSMP - 1, N_SMP}, [P_SSTART] = {"START", FM_PCT, 0, 127, 0},
+    [P_MSLOT] = {"SLOT", FM_SLOT, 0, NSMP - 1, 0}, [P_MACT] = {"ACTION", FM_NAME, 0, 2, N_MACT},
     [P_RECMODE] = {"REC MODE", FM_NAME, 0, REC_N - 1, N_RECMODE}, [P_CLICK] = {"CLICK", FM_NAME, 0, CLICK_N - 1, N_CLICK},
     [P_MIDIIN] = {"MIDI IN", FM_NAME, 0, MI_N - 1, N_MIDIIN},
     [P_THEME] = {"THEME", FM_NAME, 0, UI_NPALETTES - 1, N_THEME}, [P_VERSION] = {"VERSION", FM_NAME, 0, 0, N_VERSION},
@@ -174,11 +185,11 @@ static const pdesc_t PD[P_COUNT] = {
 /* ------------------------------------------------------------- state --- */
 enum { PG_HOME, PG_EDIT, PG_ENV, PG_LFO, PG_FX, PG_SCL, PG_SEQ, PG_GEN, PG_GLO, PG_SAVE, PG_MENU, PG_N };
 enum { SQ_STEP, SQ_EUCLID, SQ_SEQ };              /* SEQ's pages */
-enum { SV_SOUND, SV_SONG, SV_UNDO };              /* SAVE's pages */
+enum { SV_SOUND, SV_SONG, SV_SAMPLES, SV_UNDO };  /* SAVE's pages */
 enum { LY_NONE, LY_SEQ, LY_SCL, LY_EDIT, LY_TYPE };
 static struct {
     uint8_t page, sub[PG_N], layer, hot, uboot, force, shift, menu_row, menu_back, menu_dirty;
-    uint8_t cur, lane, last_note, eu_snap, step_at, sslot, gslot, sact;
+    uint8_t cur, lane, last_note, eu_snap, step_at, sslot, gslot, sact, mslot, mact;
     uint32_t hot_t, msg_t, both_t, burst_t, burst_tag, ev;   /* ev: input events (the picture's signature) */
     char msg[28];
     uint32_t sig[8];                             /* the areas: 0 header, 1..4 cards, 5 graph, 6 footer */
@@ -195,11 +206,16 @@ static struct { snap_t s[UNDO_N]; uint32_t cur, n_undo, n_redo; } undo __attribu
 #define HIST_N 8u                                /* PRESETS: the last sounds of each track */
 static struct { patch_t p[NTRK][HIST_N]; uint8_t n[NTRK], at[NTRK]; } hist __attribute__((section(".pool")));
 
-/* the store (16 sounds, 4 songs, the settings), 4 KiB sectors from OC_STORE_LO */
+/* the store, 4 KiB sectors from OC_STORE_LO: 16 sounds, 4 songs (two sectors each), the settings, the samples'
+ * directory, then the samples themselves (8-bit, ~11 s at 22 kHz) */
 #define ST_SOUNDS 0x0000u
-#define ST_SONG(i) (0x1000u + 0x1000u * (uint32_t)(i))
-#define ST_SET 0x5000u
-#define ST_SIZE 0x6000u
+#define ST_SONG(i) (0x1000u + 0x2000u * (uint32_t)(i))
+#define ST_SET 0x9000u
+#define ST_SMPDIR 0xA000u
+#define ST_SMP0 0xB000u
+#define ST_SIZE 0x49000u
+#define SMP_AREA (ST_SIZE - ST_SMP0)
+#define MAGIC_SMP 0x31504E4Fu                    /* "ONP1" */
 #define MAGIC_SND 0x31534E4Fu                    /* "ONS1" */
 #define MAGIC_SONG 0x31474E4Fu                   /* "ONG1" */
 #define MAGIC_SET 0x31544E4Fu                    /* "ONT1" */
@@ -215,7 +231,8 @@ typedef struct {
 } song_rec_t;
 typedef struct { uint32_t magic; uint8_t theme, midi_in, click, rec_mode; } set_rec_t;
 _Static_assert(sizeof(snd_bank_t) <= 0x1000u, "the sounds fit a sector");
-_Static_assert(sizeof(song_rec_t) <= 0x1000u, "a song fits a sector");
+_Static_assert(sizeof(song_rec_t) <= 0x2000u, "a song fits two sectors");
+typedef struct { uint32_t magic; uint16_t n, size; smp_t s[NSMP]; } smp_dir_rec_t;
 static snd_bank_t bank __attribute__((section(".pool")));
 static song_rec_t song_buf __attribute__((section(".pool")));
 static struct { uint8_t used, root, scale, bpm; } song_meta[NSONG_SLOT];
@@ -333,6 +350,138 @@ static void one_click(void)
 }
 
 /* ---------------------------------------------------------- the store --- */
+static int store_write(uint32_t off, const void *src, uint32_t n)   /* whole sectors from off, erased, then written */
+{
+    const uint8_t *b = src;
+    uint32_t k;
+    for (k = 0; k < n; k += 0x1000u) {
+        int rc = io_store_erase(off + k);
+        if (rc || (rc = io_store_prog(off + k, b + k, n - k < 0x1000u ? n - k : 0x1000u)) != 0)
+            return rc;
+    }
+    return 0;
+}
+
+/* ------------------------------------------------------------ samples --- */
+/* The directory in RAM (smp_dir, oc_core.h), the samples read in place. An upload (the companion, oc_proto.c):
+ * begin (the slot, what it is, its length), chunks in order, commit (the directory written). New samples go after the
+ * last one; a slot uploaded again reuses its place when it is the last. CLEAR: all gone. */
+static struct { smp_t m; uint32_t at, erased, slot, target; uint8_t on; } up;
+static uint32_t smp_end(void)                    /* the area used: after the last sample, a whole sector */
+{
+    uint32_t k, e = 0;
+    for (k = 0; k < NSMP; k++)
+        if (smp_dir[k].used && smp_dir[k].off + smp_dir[k].len > e)
+            e = smp_dir[k].off + smp_dir[k].len;
+    return (e + 0xFFFu) & ~0xFFFu;
+}
+static void smp_load(void)
+{
+    static smp_dir_rec_t d;
+    uint32_t k;
+    const uint8_t *m = io_store_map();
+    memset(smp_dir, 0, sizeof smp_dir);
+    smp_base = m ? m + ST_SMP0 : 0;
+    if (io_store_read(ST_SMPDIR, &d, sizeof d) || d.magic != MAGIC_SMP || d.n != NSMP || d.size != sizeof(smp_t))
+        return;
+    for (k = 0; k < NSMP; k++)
+        if (d.s[k].used == 1u && d.s[k].off < SMP_AREA && d.s[k].len <= SMP_AREA - d.s[k].off && d.s[k].len > 16u &&
+            d.s[k].rate >= 4000u) {
+            smp_dir[k] = d.s[k];
+            smp_dir[k].name[11] = 0;
+        }
+}
+static int smp_dir_save(void)
+{
+    static smp_dir_rec_t d;
+    memset(&d, 0, sizeof d);
+    d.magic = MAGIC_SMP;
+    d.n = NSMP;
+    d.size = sizeof(smp_t);
+    memcpy(d.s, smp_dir, sizeof d.s);
+    return store_write(ST_SMPDIR, &d, sizeof d);
+}
+static uint32_t smp_free(void) { return SMP_AREA - smp_end(); }
+static void smp_assign(uint32_t t, uint32_t k)   /* track t plays sample k (the kick's one-shot, the loop) */
+{
+    if (t >= NTRK || k >= NSMP || !smp_dir[k].used || !USES_DV(t) ||
+        (IS_LOOP(t) ? smp_dir[k].kind != SK_LOOP : smp_dir[k].kind != SK_ONESHOT))
+        return;
+    gen_lock();
+    track_panic(t);
+    gen_unlock();
+    if (trk[t].s.engine != E_SAMPLE)
+        gen_sound_engine(&trk[t], E_SAMPLE);
+    trk[t].s.smp = (uint8_t)k;
+    if (IS_LOOP(t))                              /* its slices, as many steps as the loop has */
+        gen_pattern(&trk[t]);
+}
+/* 0 ok; -1 no space; -2 a bad slot / length */
+static int smp_begin(uint32_t slot, const smp_t *m, uint32_t target)
+{
+    uint32_t start;
+    if (slot >= NSMP || m->len < 16u || m->len > SMP_AREA || m->rate < 4000u)
+        return -2;
+    {
+        uint8_t was = smp_dir[slot].used;
+        smp_dir[slot].used = 0;                  /* (its place counts as free if it was the last) */
+        start = smp_end();
+        smp_dir[slot].used = was;
+    }
+    if (m->len > SMP_AREA - start)
+        return -1;
+    gen_lock();
+    smp_dir[slot].used = 0;                      /* (the slot is silent until the new one is in) */
+    gen_unlock();
+    up.m = *m;
+    up.m.off = start;
+    up.m.used = 1;
+    up.m.name[11] = 0;
+    up.at = 0;
+    up.erased = start;
+    up.slot = slot;
+    up.target = target;
+    up.on = 1;
+    return 0;
+}
+static int smp_chunk(uint32_t pos, const uint8_t *d, uint32_t n)   /* 0 ok; -3 out of order; -4 flash */
+{
+    if (!up.on || pos != up.at || n > up.m.len - up.at)
+        return -3;
+    while (up.m.off + up.at + n > up.erased) {   /* the sectors ahead, as the data reaches them */
+        if (io_store_erase(ST_SMP0 + up.erased))
+            return -4;
+        up.erased += 0x1000u;
+    }
+    if (io_store_prog(ST_SMP0 + up.m.off + up.at, d, n))
+        return -4;
+    up.at += n;
+    return 0;
+}
+static int smp_commit(void)
+{
+    if (!up.on || up.at != up.m.len)
+        return -3;
+    up.on = 0;
+    gen_lock();
+    smp_dir[up.slot] = up.m;
+    gen_unlock();
+    if (smp_dir_save())
+        return -4;
+    smp_assign(up.target, up.slot);
+    ui_say(up.m.kind == SK_LOOP ? "LOOP LOADED" : "SAMPLE LOADED");
+    return 0;
+}
+static int smp_clear(int slot)                   /* one slot (its place is reused if it was the last), or all (-1) */
+{
+    gen_lock();
+    if (slot < 0)
+        memset(smp_dir, 0, sizeof smp_dir);
+    else if (slot < (int)NSMP)
+        smp_dir[slot].used = 0;
+    gen_unlock();
+    return smp_dir_save() ? -4 : 0;
+}
 static void store_scan(void)
 {
     uint32_t i;
@@ -357,6 +506,7 @@ static void store_scan(void)
         song.click = (uint8_t)(st.click % CLICK_N);
         song.rec_mode = (uint8_t)(st.rec_mode % REC_N);
     }
+    smp_load();
 }
 static uint32_t rec_sum(const song_rec_t *r)
 {
@@ -369,7 +519,7 @@ static uint32_t rec_sum(const song_rec_t *r)
 static void settings_save(void)
 {
     set_rec_t st = {MAGIC_SET, song.theme, song.midi_in, song.click, song.rec_mode};
-    io_store_write(ST_SET, &st, sizeof st);
+    store_write(ST_SET, &st, sizeof st);
 }
 static void sound_save(uint32_t slot)
 {
@@ -379,7 +529,7 @@ static void sound_save(uint32_t slot)
     bank.s[slot].used = 1;
     bank.s[slot].type = TSEL->type;
     bank.s[slot].p = TSEL->s;
-    ui_say(io_store_write(ST_SOUNDS, &bank, sizeof bank) ? "SAVE FAILED" : "SOUND SAVED");
+    ui_say(store_write(ST_SOUNDS, &bank, sizeof bank) ? "SAVE FAILED" : "SOUND SAVED");
 }
 static void sound_load(uint32_t slot)
 {
@@ -420,7 +570,7 @@ static void song_save(uint32_t slot)
     memcpy(song_buf.t, trk, sizeof trk);
     gen_unlock();
     song_buf.sum = rec_sum(&song_buf);
-    if (io_store_write(ST_SONG(slot), &song_buf, sizeof song_buf)) {
+    if (store_write(ST_SONG(slot), &song_buf, sizeof song_buf)) {
         ui_say("SAVE FAILED");
         return;
     }
@@ -456,6 +606,25 @@ static void song_load(uint32_t slot)
     ui_say("SONG LOADED");
 }
 
+static void smp_action(void)                     /* SAVE > SAMPLES: OCT+ */
+{
+    uint32_t k = ui.mslot % NSMP;
+    if (ui.mact == 2u) {
+        undo_take();
+        ui_say(smp_clear(-1) ? "SAVE FAILED" : "SAMPLES CLEARED");
+    } else if (!smp_dir[k].used) {
+        ui_say("EMPTY SLOT");
+    } else if (ui.mact == 1u) {
+        ui_say(smp_clear((int)k) ? "SAVE FAILED" : "SAMPLE DELETED");
+    } else if (!USES_DV(song.sel) || (IS_LOOP(song.sel) ? smp_dir[k].kind != SK_LOOP : smp_dir[k].kind != SK_ONESHOT)) {
+        ui_say(smp_dir[k].kind == SK_LOOP ? "LOOPS: LOOP TRACK" : "ONE-SHOTS: KICK, DRUMS");
+    } else {
+        undo_take();
+        smp_assign(song.sel, k);
+        ui_say("ASSIGNED");
+    }
+}
+
 /* ------------------------------------------------------- the step editor --- */
 static uint32_t cur_idx(const track_t *t) { return ui.cur % (uint32_t)clamp(t->len, 1, NSTEP); }
 static step_t *cur_step(track_t *t) { return &t->step[cur_idx(t)]; }
@@ -476,6 +645,8 @@ static void step_chord(track_t *t, step_t *s, uint32_t shape)   /* the notes of 
 }
 static uint32_t default_note(const track_t *t)
 {
+    if (IS_LOOP(trk_i(t)))                       /* the loop: the slice the step is at */
+        return cur_idx(t) % smp_slices(t->s.smp);
     if (ui.last_note)
         return ui.last_note;
     return trk_role(trk_i(t)) == ROLE_BASS ? 36u : 60u;
@@ -500,6 +671,17 @@ static pdesc_t pdesc_of(uint32_t id, const track_t *t)
         d.max = (int16_t)(len - 1u);
     if (id == P_SLEN)
         d.max = (int16_t)(len < 16u ? len : 16u);
+    if (id == P_SNOTE && IS_LOOP(trk_i(t))) {    /* the loop's steps: slices */
+        d.min = 0;
+        d.max = (int16_t)(smp_slices(t->s.smp) - 1u);
+        d.label = "SLICE";
+    }
+    if (id == P_SMP)                             /* the slots' names as they are now */
+        for (k = 0; k < NSMP; k++) {
+            str_cpy(smp_txt[k], smp_dir[k].used ? smp_dir[k].name : "-", sizeof smp_txt[k]);
+            if (smp_dir[k].used && !smp_txt[k][0]) { smp_txt[k][0] = (char)('1' + k); smp_txt[k][1] = 0; }
+            N_SMP[k] = smp_txt[k];
+        }
     return d;
 }
 static int32_t pget(uint32_t id, const track_t *t)
@@ -592,8 +774,12 @@ static int32_t pget(uint32_t id, const track_t *t)
     case P_DLYFB: return song.dly_fb;
     case P_RSIZE: return song.rev_size;
     case P_RDAMP: return song.rev_damp;
-    case P_LV1: case P_LV2: case P_LV3: case P_LV4: return trk[id - P_LV1].s.level;
-    case P_PN1: case P_PN2: case P_PN3: case P_PN4: return trk[id - P_PN1].s.pan;
+    case P_LV1: case P_LV2: case P_LV3: case P_LV4: case P_LV5: case P_LV6: return trk[id - P_LV1].s.level;
+    case P_PN1: case P_PN2: case P_PN3: case P_PN4: case P_PN5: case P_PN6: return trk[id - P_PN1].s.pan;
+    case P_SMP: return s->smp;
+    case P_SSTART: return s->sstart;
+    case P_MSLOT: return ui.mslot;
+    case P_MACT: return ui.mact;
     case P_RECMODE: return song.rec_mode;
     case P_CLICK: return song.click;
     case P_MIDIIN: return song.midi_in;
@@ -644,7 +830,8 @@ static void step_set(track_t *t, uint32_t id, int32_t v)   /* the step editor's 
         }
         d = v - s->note[0];
         for (k = 0; k < s->n && k < 4u; k++)
-            s->note[k] = (uint8_t)clamp(s->note[k] + d, 12, 120);
+            s->note[k] = (uint8_t)(IS_LOOP(trk_i(t)) ? clamp(s->note[k] + d, 0, (int32_t)smp_slices(t->s.smp) - 1)
+                                                     : clamp(s->note[k] + d, 12, 120));
         ui.last_note = s->note[0];
         break;
     }
@@ -795,8 +982,20 @@ static void pset(uint32_t id, track_t *t, int32_t v)
     case P_DLYFB: song.dly_fb = (uint8_t)v; break;
     case P_RSIZE: song.rev_size = (uint8_t)v; break;
     case P_RDAMP: song.rev_damp = (uint8_t)v; break;
-    case P_LV1: case P_LV2: case P_LV3: case P_LV4: trk[id - P_LV1].s.level = (uint8_t)v; break;
-    case P_PN1: case P_PN2: case P_PN3: case P_PN4: trk[id - P_PN1].s.pan = (int8_t)v; break;
+    case P_LV1: case P_LV2: case P_LV3: case P_LV4: case P_LV5: case P_LV6: trk[id - P_LV1].s.level = (uint8_t)v; break;
+    case P_PN1: case P_PN2: case P_PN3: case P_PN4: case P_PN5: case P_PN6: trk[id - P_PN1].s.pan = (int8_t)v; break;
+    case P_SMP: {                                /* another slot (the loop: its slices again when its length differs) */
+        uint32_t was = smp_slices(s->smp);
+        gen_lock(); track_panic(trk_i(t)); s->smp = (uint8_t)v; gen_unlock();
+        if (IS_LOOP(trk_i(t)) && smp_slices(s->smp) != was) {
+            undo_burst(0x7100u);
+            gen_pattern(t);
+        }
+        break;
+    }
+    case P_SSTART: s->sstart = (uint8_t)v; break;
+    case P_MSLOT: ui.mslot = (uint8_t)v; break;
+    case P_MACT: ui.mact = (uint8_t)v; break;
     case P_RECMODE: song.rec_mode = (uint8_t)v; ui.menu_dirty = 1; break;
     case P_CLICK: song.click = (uint8_t)v; ui.menu_dirty = 1; break;
     case P_MIDIIN: song.midi_in = (uint8_t)v; ui.menu_dirty = 1; break;
@@ -877,7 +1076,8 @@ static void pformat(uint32_t id, const track_t *t, char *val, const char **unit)
     case FM_STEPS: fmt_u(val, (uint32_t)v); break;
     case FM_NOTE: {
         const step_t *s = &t->step[cur_idx(t)];
-        if (s->time == ST_NOTE && s->n) fmt_note(val, (uint32_t)v);
+        if (s->time == ST_NOTE && s->n && IS_LOOP(trk_i(t))) { val[0] = 'S'; fmt_u(val + 1, (uint32_t)v + 1u); }
+        else if (s->time == ST_NOTE && s->n) fmt_note(val, (uint32_t)v);
         else str_cpy(val, "---", 4);
         break;
     }
@@ -915,9 +1115,15 @@ static const sub_t SUB_SEQ_DRM[] = {{"STEP", {P_SLANE, P_SHIT, P_SVEL, P_SACC, 0
                                     {"EUCLID", {P_LEN, P_EHITS, P_EROT, P_ELANE, 0, 0, 0, 0}},
                                     {"SEQUENCE", {P_LEN, P_GATE, P_SWING, P_SHIFT, P_SEQON, P_MASTER, 0, P_MUT}}};
 static const sub_t SUB_GEN[] = {{"GENERATOR", {P_DENS, P_VAR, P_STYLE, P_RANGE, P_MUT, P_TYPE, 0, 0}}};
-static const sub_t SUB_GLO[] = {{"MIXER", {P_LV1, P_LV2, P_LV3, P_LV4, P_PN1, P_PN2, P_PN3, P_PN4}}};
+static const sub_t SUB_GLO[] = {{"MIX 1-4", {P_LV1, P_LV2, P_LV3, P_LV4, P_PN1, P_PN2, P_PN3, P_PN4}},
+                                {"MIX 5-6", {P_LV5, P_LV6, 0, 0, P_PN5, P_PN6, 0, 0}}};
+static const sub_t SUB_SMP_KICK[] = {{"SAMPLE", {P_SMP, P_SSTART, P_DTUNE, P_LEVEL, P_CUT, P_RES, 0, 0}}};
+static const sub_t SUB_SMP_LOOP[] = {{"LOOP", {P_SMP, P_LEVEL, P_CUT, P_RES, P_PAN, P_DLY, P_REV, 0}}};
+static const sub_t SUB_SEQ_LOOP[] = {{"STEP", {P_SNOTE, P_SVEL, P_STYPE, P_SACC, 0, 0, 0, 0}},
+                                     {"EUCLID", {P_LEN, P_EHITS, P_EROT, 0, 0, 0, 0, 0}},
+                                     {"SEQUENCE", {P_LEN, P_GATE, P_SWING, P_SHIFT, P_SEQON, P_MASTER, 0, P_MUT}}};
 static const sub_t SUB_SAVE[] = {{"SOUND", {P_SSLOT, P_SACT, 0, 0, 0, 0, 0, 0}}, {"SONG", {P_GSLOT, P_SACT, 0, 0, 0, 0, 0, 0}},
-                                 {"UNDO", {0, 0, 0, 0, 0, 0, 0, 0}}};
+                                 {"SAMPLES", {P_MSLOT, P_MACT, 0, 0, 0, 0, 0, 0}}, {"UNDO", {0, 0, 0, 0, 0, 0, 0, 0}}};
 static const sub_t SUB_MENU[] = {{"MENU", {0, 0, 0, 0, 0, 0, 0, 0}}};
 static const uint8_t MENU_ROWS[] = {P_TRANSP, P_RECMODE, P_CLICK, P_MIDIIN, P_THEME, P_SWING, P_VERSION};
 /* the pages of page pg on track t (EDIT: the engine's; ENV on drums: the kit) */
@@ -927,6 +1133,8 @@ static const sub_t *subs_of(uint32_t pg, const track_t *t, uint32_t *n)
     *n = 1;
     switch (pg) {
     case PG_EDIT:
+        if (e == E_SAMPLE) return IS_LOOP(trk_i(t)) ? SUB_SMP_LOOP : SUB_SMP_KICK;
+        if (IS_LOOP(trk_i(t))) return SUB_SMP_LOOP;
         if (drum || e == E_DRUM) return SUB_KIT;
         if (e == E_SUB) { *n = NELEM(SUB_SUB); return SUB_SUB; }
         if (e == E_ACID) { *n = NELEM(SUB_ACID); return SUB_ACID; }
@@ -935,13 +1143,13 @@ static const sub_t *subs_of(uint32_t pg, const track_t *t, uint32_t *n)
         if (e == E_NOISE) { *n = NELEM(SUB_NOISE); return SUB_NOISE; }
         *n = NELEM(SUB_ADD);
         return SUB_ADD;
-    case PG_ENV: return drum ? SUB_KIT : SUB_ENV;
+    case PG_ENV: return e == E_SAMPLE || IS_LOOP(trk_i(t)) ? (IS_LOOP(trk_i(t)) ? SUB_SMP_LOOP : SUB_SMP_KICK) : drum ? SUB_KIT : SUB_ENV;
     case PG_LFO: return SUB_LFO;
     case PG_FX: return SUB_FX;
     case PG_SCL: return SUB_SCL;
-    case PG_SEQ: *n = 3; return drum ? SUB_SEQ_DRM : SUB_SEQ_MEL;
+    case PG_SEQ: *n = 3; return drum ? SUB_SEQ_DRM : IS_LOOP(trk_i(t)) ? SUB_SEQ_LOOP : SUB_SEQ_MEL;
     case PG_GEN: return SUB_GEN;
-    case PG_GLO: return SUB_GLO;
+    case PG_GLO: *n = NELEM(SUB_GLO); return SUB_GLO;
     case PG_SAVE: *n = NELEM(SUB_SAVE); return SUB_SAVE;
     case PG_MENU: return SUB_MENU;
     default: return drum ? SUB_HOME_DRM : SUB_HOME;
@@ -995,6 +1203,9 @@ static void cook(track_t *t)                     /* COOK: a few notes a scale st
             d->vel = d->vel ? d->vel : 100;
             if (!s->hit)
                 s->time = ST_REST;
+        } else if (IS_LOOP(trk_i(t))) {         /* the loop: another slice nearby */
+            uint32_t sl = smp_slices(t->s.smp);
+            s->note[0] = (uint8_t)((s->note[0] + (chance(50) ? 1u : sl - 1u)) % sl);
         } else {
             int32_t sh = chance(50) ? 1 : -1;
             for (k = 0; k < s->n && k < 4u; k++)
@@ -1392,7 +1603,7 @@ static void shift_action(uint32_t a)
     case A_SINS: step_shift(1); break;
     case A_SDEL: step_shift(0); break;
     case A_NOCTD: case A_NOCTU:
-        if (st->time != ST_NOTE || IS_DRUM(song.sel)) { ui_say("NO NOTE HERE"); return; }
+        if (st->time != ST_NOTE || NO_NOTES(song.sel)) { ui_say("NO NOTE HERE"); return; }
         undo_burst(0x9500u);
         gen_lock();
         for (k = 0; k < st->n && k < 4u; k++)
@@ -1516,6 +1727,11 @@ static void step_key(uint32_t k, int down)
     if (down) {
         uint32_t n = key_note(k);
         step_t *s = cur_step(tr);
+        if (IS_LOOP(t)) {                        /* the loop: a white key the slice (of the cursor's bar) */
+            if (key_black(k))
+                return;
+            n = (cur_idx(tr) / 16u * 16u + key_place(k)) % smp_slices(tr->s.smp);
+        }
         ui.keynote[k] = (uint8_t)n;
         ui.keytrk[k] = (uint8_t)t;
         ev_push(EV_ON, t, n, 100);
@@ -1584,6 +1800,7 @@ static void ui_input(void)
             if (p & (1u << B_OCTUP)) {
                 if (sv == SV_UNDO) undo_do(0);
                 else if (sv == SV_SOUND) { if (ui.sact) sound_load(ui.sslot); else sound_save(ui.sslot); }
+                else if (sv == SV_SAMPLES) smp_action();
                 else { if (ui.sact) song_load(ui.gslot); else song_save(ui.gslot); }
             }
             if (p & (1u << B_OCTDN))
@@ -1731,6 +1948,11 @@ static void ui_input(void)
         if (IS_DRUM(t)) {
             if (!key_black(k) && key_place(k) < NLANE)
                 ev_push(EV_ON, t, 1u << key_place(k), 110);
+            continue;
+        }
+        if (IS_LOOP(t)) {                        /* the loop: the white keys its first 16 slices */
+            if (!key_black(k))
+                ev_push(EV_ON, t, key_place(k) % smp_slices(trk[t].s.smp), 110);
             continue;
         }
         ui.keynote[k] = (uint8_t)key_note(k);
@@ -1923,27 +2145,29 @@ static void g_steps(const track_t *t, int32_t y0, int32_t rows)   /* the pattern
             cv_rrect(x, y, 12, 12, 2, c, T_SURF);
         }
 }
-static void g_overview(void)                     /* HOME: the four tracks, their bar playing */
+static void g_overview(void)                     /* HOME: the six tracks, their bar playing */
 {
     uint32_t i, s;
     for (i = 0; i < NTRK; i++) {
         const track_t *t = &trk[i];
         uint32_t len = clamp(t->len, 1, NSTEP), cur = song.step % len, base = cur / 16u * 16u;
-        int32_t y = 6 + (int32_t)i * 29;
-        uint16_t c = t->mute ? T_DIM : TRK_COL[i];
+        int32_t y = 3 + (int32_t)i * 19;
+        uint16_t c = t->mute ? T_DIM : TRK_COL[i], bg = i == song.sel ? T_RAISE : T_SURF;
+        const char *en = t->mute ? "MUTED" : t->seq_off ? "SEQ OFF" : ENGINE_NAME[t->s.engine % E_N];
+        if (t->s.engine == E_SAMPLE && !t->mute)
+            en = smp_dir[t->s.smp % NSMP].used ? smp_dir[t->s.smp % NSMP].name : IS_LOOP(i) ? "NO LOOP" : "NO SAMPLE";
         if (i == song.sel)
-            cv_rrect(6, y - 2, 228, 28, 3, T_RAISE, T_SURF);
-        cv_rect(8, y, 3, 24, c);
-        g_label(15, y + 1, TYPE_NAME[t->type % TY_N], t->mute ? T_DIM : T_TEXT);
-        cv_text_r(230, y + 1, &AF_S, t->mute ? "MUTED" : t->seq_off ? "SEQ OFF" : ENGINE_NAME[t->s.engine % E_N], c,
-                  i == song.sel ? T_RAISE : T_SURF);
+            cv_rrect(6, y - 1, 228, 19, 3, T_RAISE, T_SURF);
+        cv_rect(8, y + 1, 3, 15, c);
+        cv_text_fit(15, y, &AF_S, TYPE_NAME[t->type % TY_N], t->mute ? T_DIM : T_TEXT, bg, 52);
         for (s = 0; s < 16u; s++) {
             const step_t *st = &t->step[(base + s) % NSTEP];
             uint16_t sc = st->time == ST_NOTE ? c : st->time == ST_TIE ? ux_mix(T_SURF, c, 40) : T_LINE;
             if (song.playing && s == cur % 16u)
                 sc = st->time == ST_NOTE ? T_TEXT : T_ACCENT;
-            cv_rect(15 + (int32_t)s * 13, y + 16, 11, 7, sc);
+            cv_rect(70 + (int32_t)s * 7, y + 4, 6, 9, sc);
         }
+        cv_text_fit(184, y, &AF_S, en, c, bg, 48);
     }
 }
 static void g_adsr(int32_t a, int32_t d, int32_t s, int32_t r, int32_t y0, int32_t top, uint16_t c, int thick)
@@ -2025,6 +2249,41 @@ static void g_osc(const track_t *t)              /* the engine's pages: what the
     int32_t x, py = 0, k;
     if (s->engine == E_NOISE) {
         g_filter(s);
+        return;
+    }
+    if (s->engine == E_SAMPLE || IS_LOOP(trk_i(t))) {   /* the sample: its peaks; the loop's slices; where it starts */
+        const smp_t *d = &smp_dir[s->smp % NSMP];
+        char b2[24];
+        if (!d->used || !smp_base) {
+            g_label(12, 40, IS_LOOP(trk_i(t)) ? "NO LOOP IN THIS SLOT" : "NO SAMPLE IN THIS SLOT", T_TEXT);
+            g_label(12, 60, "LOAD ONE WITH THE COMPANION APP", T_MID);
+            g_label(12, 74, "(USB): SAVE > SAMPLES ASSIGNS IT", T_MID);
+            return;
+        }
+        for (x = 0; x < 216; x++) {
+            uint32_t a = d->len * (uint32_t)x / 216u, e = d->len * (uint32_t)(x + 1) / 216u, j, st = (e - a) / 24u + 1u;
+            int32_t mx = 0;
+            for (j = a; j < e; j += st) {
+                int32_t v = ULAW[smp_base[d->off + j]];
+                mx = v > mx ? v : -v > mx ? -v : mx;
+            }
+            k = mx * 40 >> 15;
+            cv_rect(11 + x, 52 - k, 1, 2 * k + 1, T_THEME);
+        }
+        if (d->kind == SK_LOOP) {
+            uint32_t sl = smp_slices(s->smp), j;
+            for (j = 0; j <= sl; j += (sl > 32u ? 4u : 1u))
+                cv_rect(11 + (int32_t)(j * 216u / sl), 8, 1, j % 16u ? 4 : 92, j % 16u ? T_MID : T_LINE);
+        } else if (s->sstart) {
+            cv_rect(11 + s->sstart * 216 / 128, 8, 2, 92, T_ACCENT);
+        }
+        str_cpy(b2, d->name, sizeof b2);
+        str_cat(b2, d->kind == SK_LOOP ? "  LOOP " : "  ", sizeof b2);
+        if (d->kind == SK_LOOP) fmt_u(b2 + str_len(b2), d->bars ? d->bars : 1u), str_cat(b2, " BAR", sizeof b2);
+        g_label(12, 104, b2, T_MID);
+        fmt_dec(b2, d->len * 10u / (d->rate ? d->rate : 22050u), 10u);
+        str_cat(b2, " S", sizeof b2);
+        cv_text_r(228, 104, &AF_S, b2, T_MID, T_SURF);
         return;
     }
     if (s->engine == E_ADD) {                    /* the partials: their ratios and levels */
@@ -2169,18 +2428,19 @@ static void g_scale(void)                        /* SCL: the keys F3..G5 with th
     }
     g_label(10, 106, "BARS 1-4", T_MID);
 }
-static void g_mixer(void)                        /* GLO: the four strips, their pans under them */
+static void g_mixer(void)                        /* GLO: the six strips, their pans under them */
 {
     uint32_t i;
     for (i = 0; i < NTRK; i++) {
         const track_t *t = &trk[i];
-        int32_t x = 12 + (int32_t)i * 57, h = t->s.level * 64 / 127;
+        int32_t x = 8 + (int32_t)i * 38, h = t->s.level * 64 / 127;
         uint16_t c = t->mute ? T_DIM : TRK_COL[i], bg = i == song.sel ? T_RAISE : T_BG;
-        cv_rrect(x, 4, 46, 112, 4, bg, T_SURF);
-        cv_rrect(x + 16, 72 - h, 14, h + 2, 3, c, bg);
-        cv_rect(x + 6, 82, 34, 2, T_LINE);
-        cv_rrect(x + 23 + t->s.pan * 17 / 64 - 3, 79, 6, 8, 2, ui.shift ? T_ACCENT : T_MID, bg);
-        cv_text_in(x, 92, 46, &AF_S, t->mute ? "MUTE" : TYPE_NAME[t->type % TY_N], c, bg);
+        int on = (ui.sub[PG_GLO] % 2u == 0u) == (i < 4u);   /* the strips the knobs move now */
+        cv_rrect(x, 4, 35, 112, 4, bg, T_SURF);
+        cv_rrect(x + 11, 72 - h, 13, h + 2, 3, on ? c : ux_mix(bg, c, 45), bg);
+        cv_rect(x + 4, 82, 27, 2, T_LINE);
+        cv_rrect(x + 17 + t->s.pan * 13 / 64 - 3, 79, 6, 8, 2, ui.shift && on ? T_ACCENT : T_MID, bg);
+        cv_text_fit(x + 2, 92, &AF_S, t->mute ? "MUTE" : TYPE_NAME[t->type % TY_N], c, bg, 32);
     }
 }
 static void g_gen(const track_t *t)              /* ARP > GEN: the settings and the track's first bar */
@@ -2273,7 +2533,8 @@ static void g_step(const track_t *t)             /* SEQ > STEP: the cursor's bar
         const step_t *st = &t->step[ci];
         b[0] = 0;
         for (k = 0; st->time == ST_NOTE && k < st->n && k < 3u; k++) {
-            fmt_note(o, st->note[k]);
+            if (IS_LOOP(trk_i(t))) { o[0] = 'S'; fmt_u(o + 1, st->note[k] + 1u); }
+            else fmt_note(o, st->note[k]);
             str_cat(b, o, sizeof b);
             str_cat(b, " ", sizeof b);
         }
@@ -2350,6 +2611,26 @@ static void g_save(void)
         cv_key_hint(30, 64, KC_OCTUP, "UNDO", undo.n_undo != 0, T_SURF);
         cv_key_hint(120, 64, KC_SAVE, "HOLD", 1, T_SURF);
         g_label(30, 92, "SHIFT + SAVE: REDO", T_MID);
+        return;
+    }
+    if (sv == SV_SAMPLES) {                      /* the 8 sample slots: name, kind, length; the space left */
+        for (i = 0; i < NSMP; i++) {
+            const smp_t *d = &smp_dir[i];
+            int32_t x = 8 + (int32_t)(i % 2u) * 114, y = 3 + (int32_t)(i / 2u) * 23;
+            int sel = i == ui.mslot;
+            uint16_t f = sel ? T_THEME : T_RAISE;
+            cv_rrect(x, y, 110, 21, 3, f, T_SURF);
+            fmt_u(b, i + 1u);
+            cv_text_on(x + 3, y + 3, &AF_S, b, sel ? T_INK : T_MID, f);
+            cv_text_fit(x + 14, y + 3, &AF_S, d->used ? d->name : "-", sel ? T_INK : T_TEXT, f, 62);
+            if (d->used)
+                cv_text_r(x + 106, y + 3, &AF_S, d->kind == SK_LOOP ? "LOOP" : "SHOT", sel ? T_INK : T_MID, f);
+        }
+        str_cpy(b, "FREE ", sizeof b);
+        fmt_dec(b + 5, smp_free() * 10u / 22050u, 10u);
+        str_cat(b, " S", sizeof b);
+        cv_key_hint(8, 100, KC_OCTUP, N_MACT[ui.mact % 3u], 1, T_SURF);
+        cv_text_r(228, 102, &AF_S, b, T_MID, T_SURF);
         return;
     }
     if (sv == SV_SOUND) {                        /* 16 cells: the slot's sound type */
@@ -2441,8 +2722,8 @@ static void g_shift(void)                        /* the black keys' functions, t
         cv_text_fit(x + 27, y + 3, &AF_S, A_NAME[CX_KEYS[shift_cx()][i]], CX_KEYS[shift_cx()][i] == A_CLICK && song.click ? T_ACCENT : T_TEXT, T_RAISE, 46);
     }
     g_label(166, 70, "WHITE:", T_MID);
-    g_label(166, 84, "F-B MUTE", T_TEXT);
-    g_label(166, 98, "C-F SOLO", T_TEXT);
+    g_label(166, 84, "F-D MUTE", T_TEXT);
+    g_label(166, 98, "E-B SOLO", T_TEXT);
 }
 static uint32_t graph_sig(void)
 {
@@ -2489,7 +2770,7 @@ static void draw_graph(int force)
             else g_osc(t);
             break;
         }
-        case PG_ENV: if (IS_DRUM(song.sel)) g_osc(t); else g_env(&t->s); break;
+        case PG_ENV: if (USES_DV(song.sel)) g_osc(t); else g_env(&t->s); break;
         case PG_LFO: g_lfo(t); break;
         case PG_FX: g_fx(t); break;
         case PG_SCL: g_scale(); break;

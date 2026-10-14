@@ -36,18 +36,30 @@ with sync_playwright() as p:
     pg.keyboard.press("r"); pg.wait_for_timeout(400)
     if pg.inner_text("#sRec") != "aus": fails.append("REC off: " + pg.inner_text("#sRec"))
     pg.keyboard.down("Shift"); pg.wait_for_timeout(100); pg.keyboard.press("a"); pg.wait_for_timeout(200); pg.keyboard.up("Shift")
-    pg.wait_for_timeout(400)                         # SHIFT + C4: solo track 1
-    if pg.inner_text("#sTracks").count("(stumm)") != 3: fails.append("SHIFT + C4 solo: " + pg.inner_text("#sTracks"))
+    pg.wait_for_timeout(400)                         # SHIFT + C4: track 5 (the kick) muted
+    if pg.inner_text("#sTracks").count("(stumm)") != 1 or "KICK DRUMS (stumm)" not in pg.inner_text("#sTracks"): fails.append("SHIFT + C4 mute: " + pg.inner_text("#sTracks"))
     pg.keyboard.down("Shift"); pg.wait_for_timeout(100); pg.keyboard.press("a"); pg.wait_for_timeout(200); pg.keyboard.up("Shift")
     pg.wait_for_timeout(400)
     if "(stumm)" in pg.inner_text("#sTracks"): fails.append("solo off: " + pg.inner_text("#sTracks"))
     with pg.expect_download(timeout=5000) as dl:     # MIDI export from the dump
         pg.click("#xMidi")
     mid = Path(dl.value.path()).read_bytes()
-    if mid[:4] != b"MThd" or mid.count(b"MTrk") != 5: fails.append(f"MIDI file ({len(mid)} B)")
+    if mid[:4] != b"MThd" or mid.count(b"MTrk") != 7: fails.append(f"MIDI file ({len(mid)} B)")
     pg.click("#uDump")
     pg.wait_for_timeout(500)
-    if "Dump" not in pg.inner_text("#log") or "Version 1" not in pg.inner_text("#log"): fails.append("no dump answer")
+    if "Dump" not in pg.inner_text("#log") or "Version 2" not in pg.inner_text("#log"): fails.append("no dump answer")
+    # a sample: a WAV made here, imported as the loop of track 6
+    import struct, math, tempfile
+    sr, n = 44100, 44100 * 2
+    pcm = b"".join(struct.pack("<h", int(20000 * math.sin(i * 0.05) * (1 if i % 11025 < 2000 else 0))) for i in range(n))
+    wav = b"RIFF" + struct.pack("<I", 36 + len(pcm)) + b"WAVEfmt " + struct.pack("<IHHIIHH", 16, 1, 1, sr, sr * 2, 2, 16) + b"data" + struct.pack("<I", len(pcm)) + pcm
+    wp = Path(tempfile.mkdtemp()) / "break.wav"; wp.write_bytes(wav)
+    pg.set_input_files("#sFile", str(wp)); pg.select_option("#sKind", "1"); pg.click("#sUp")
+    pg.wait_for_function("document.querySelector('#sInfo').innerText.includes('übertragen') || document.querySelector('#sInfo').innerText.includes('Fehler')", timeout=60000)
+    if "übertragen" not in pg.inner_text("#sInfo"): fails.append("sample: " + pg.inner_text("#sInfo"))
+    pg.wait_for_timeout(600)
+    if "BREAK" not in pg.inner_text("#sSlots"): fails.append("slots: " + pg.inner_text("#sSlots"))
+    if "LOOP" not in pg.inner_text("#sTracks"): fails.append("tracks: " + pg.inner_text("#sTracks"))
     pg.keyboard.down("a"); pg.wait_for_timeout(300)
     if not pg.eval_on_selector('.key[data-k="7"]', "e => e.classList.contains('on')"): fails.append("key A not shown")
     pg.keyboard.up("a")

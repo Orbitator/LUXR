@@ -1,7 +1,8 @@
 # ONE CLICK FM-1
 
 Eigene Firmware für den M-VAVE FM-1: der Generator von ONE CLICK SYNTH auf dem Gerät. Ein Knopfdruck erzeugt einen
-ganzen Song – Tonart, Akkordfolge, vier Sounds und vier Spuren (Bass, Akkorde, Lead, Drums), die zueinander passen.
+ganzen Song – Tonart, Akkordfolge und sechs Spuren, die zueinander passen: Bass, Akkorde, Lead, Drums und – wie im
+X-Generator – eine Kick- und eine Loop-Spur, die mit eigenen Samples spielen können.
 
 Status: **v0.2, auf dem Rechner und im Emulator getestet, noch nie auf einem FM-1 gelaufen.**
 
@@ -28,7 +29,7 @@ die Karten zeigen die zweite Reihe (B), und viele Bedienelemente bekommen eine z
 | **SCL** | Seite SCALE | | Taste = Grundton |
 | **GLO** | Seite MIXER | (ist SHIFT) | |
 | **FX · ENV · LFO** | ihre Seiten | | |
-| Tasten | spielen die gewählte Spur; im STEP-Editor / bei Step-Aufnahme: Noten an den Cursor | weiße F3–B3: Mute Spur 1–4, C4–F4: Solo; schwarze: Direktfunktionen (unten) | |
+| Tasten | spielen die gewählte Spur; im STEP-Editor / bei Step-Aufnahme: Noten an den Cursor | weiße F3–D4: Mute Spur 1–6, E4–B4: Solo; schwarze: Direktfunktionen (unten) | |
 
 Die Seiten (Reihe A | Reihe B mit SHIFT):
 
@@ -47,8 +48,8 @@ Die Seiten (Reihe A | Reihe B mit SHIFT):
 | SEQ › EUCLID | Länge, Schläge, Rotation, Lane (Drums) | |
 | SEQ › SEQUENCE | Länge (1–64), Gate, Swing, Verschieben | SEQ an/aus, MASTER, Oktave, Mutate |
 | ARP › GENERATOR | Dichte, Variation, Stil, Lage | Mutate, Instrument-Typ |
-| GLO › MIXER | Pegel der 4 Spuren | Pan der 4 Spuren |
-| SAVE › SOUND / SONG | Platz (16 Sounds / 4 Songs), Speichern/Laden – OCT+ führt aus | |
+| GLO › MIX 1-4 / MIX 5-6 | Pegel der Spuren | Pan der Spuren |
+| SAVE › SOUND / SONG / SAMPLES | Platz (16 Sounds / 4 Songs / 8 Samples), Speichern/Laden bzw. Zuweisen/Löschen – OCT+ führt aus | |
 | MENÜ (HOME halten) | Transpose, Rec-Modus, Metronom (aus / bei Aufnahme / an), MIDI IN (Kanal 1–4 = Spuren / alle Kanäle auf die gewählte Spur), Theme (10 Paletten), Swing, Version | |
 
 **Eigene Noten**
@@ -85,9 +86,22 @@ SHIFT ◂, SHIFT ▸, RHYTHM, NOTES, OSC, FILTER, ENV, OCTAVE (die letzten sechs
 MUTATE es sagt). Schwarze Tasten: COPY, PASTE, DOUBLE (Pattern verdoppeln).
 
 **Instrument-Typen** (ARP halten + weiße Taste, oder SHIFT + ALGORITHM): Bass, Chords, Pad, Atmo, Piano, Guitar, Lead,
-Pluck, Brass, Flute, Drums, Kick, Snare, Perc – jede Spur kann jeder Typ sein.
+Pluck, Brass, Flute, Drums, Kick, Snare, Perc, Loop – jede Spur kann jeder Typ sein.
 
-USB-MIDI: Kanal 1–4 spielt Spur 1–4 (oder im Menü: alle Kanäle die gewählte Spur), Drums nach General-MIDI-Noten.
+**Kick- und Loop-Spur, Samples**
+
+- Spur 5 (KICK) spielt die Kick: die eingebaute Synth-Kick oder einen One-Shot. Spur 6 (LOOP) spielt einen Loop, in
+  16 Slices pro Takt geschnitten; jeder Step spielt einen Slice, so folgt der Loop dem Tempo ohne Tonhöhenänderung
+  (wie in der Web-App). Der Generator macht daraus Varianten (STRAIGHT, SHUFFLE, STUTTER, HALFTIME, Dichte).
+- Samples kommen über die Companion-App (oder im Emulator) auf das Gerät: Datei wählen (WAV, MP3 …), One-Shot oder
+  Loop, Platz 1–8, „zuweisen“ → die Datei wird im Browser auf 22 kHz mono, 8 Bit (µ-law) gewandelt, per USB-SysEx in den
+  Flash geschrieben und der Spur gegeben. Platz insgesamt ca. 11 s (der freie Teil des Flashs neben der App).
+- Am Gerät: EDIT auf Spur 5/6 zeigt das Sample (Wellenform, Slices) mit SAMPLE (Platz), START, TUNE, Pegel, Filter;
+  SAVE › SAMPLES weist ein Sample der gewählten Spur zu, löscht es oder alle.
+- Im STEP-Editor der Loop-Spur ist die Note der Slice (S1 …); die weißen Tasten spielen bzw. setzen die Slices.
+- Eine Sample-Engine für die Synth-Spuren (chromatisch spielen) gibt es bewusst nicht: dafür ist der Speicher zu klein.
+
+USB-MIDI: Kanal 1–6 spielt Spur 1–6 (Loop: ab C2 die Slices) (oder im Menü: alle Kanäle die gewählte Spur), Drums nach General-MIDI-Noten.
 
 Rettungswege (aus Felucca übernommen, nicht entfernen): **OCT− und OCT+ 5 s halten** → UBOOT;
 zwei Abstürze in den ersten 30 s nach dem Einschalten → UBOOT; USB-SysEx `F0 22 24 35 7D F7` → UBOOT;
@@ -101,7 +115,7 @@ Additiv (bis 8 Teiltöne, Orgel/Risset-Glocke/Marimba), Noise (gefiltertes Rausc
 Drums (8 synthetisierte Instrumente). Pro Sound: Amp- und Filter-ADSR, LFO, Dual-Stimme, Pitch/Fine.
 Dazu Delay (1/8 bis 3/4, Feedback) und Reverb (Größe, Dämpfung) und ein Metronom.
 
-Speicher: 16 Sounds, 4 Songs und die Einstellungen liegen im Flash bei 0x97000–0x9D000 (der Bereich, den Felucca
+Speicher: 16 Sounds, 4 Songs, die Einstellungen und die Samples liegen im Flash bei 0x97000–0xE0000 (der Bereich, den Felucca
 für seine Projekte nutzt – wer zwischen Felucca und ONE CLICK wechselt, verliert dort die Daten der anderen Firmware).
 
 Stimmen: 8 Synth-Stimmen für Bass, Akkorde und Lead mit Reserven (Bass 1, Akkorde 4, Lead 1, zwei frei vergeben);

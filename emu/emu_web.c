@@ -56,7 +56,7 @@ static void io_led_button(uint32_t b, int on) { e_led_btn[b % NB] = (uint8_t)on;
 static void io_led_key(uint32_t k, int on) { e_led_key[k % 27u] = (uint8_t)on; }
 
 /* -------------------------------------------------------------- USB MIDI --- */
-static uint8_t e_out[4096];                       /* SysEx the device sent, F0 .. F7, until emu_out_take */
+static uint8_t e_out[8192];                       /* SysEx the device sent, F0 .. F7, until emu_out_take */
 static uint32_t e_out_n;
 static int proto_send(const uint8_t *p, uint32_t n)
 {
@@ -78,7 +78,7 @@ static void midi_in_drain(void)                   /* as oc_main.c: notes on chan
     }
 }
 /* the store: RAM here; the page keeps it in the browser (emu_store, emu_store_gen) */
-static uint8_t e_store[0x6000];
+static uint8_t e_store[0x49000];
 static uint32_t e_store_gen;
 static int io_store_read(uint32_t off, void *d, uint32_t n)
 {
@@ -87,15 +87,26 @@ static int io_store_read(uint32_t off, void *d, uint32_t n)
     memcpy(d, e_store + off, n);
     return 0;
 }
-static int io_store_write(uint32_t off, const void *s, uint32_t n)
+static int io_store_erase(uint32_t off)
 {
-    if ((off & 0xFFFu) || n > 0x1000u || off + 0x1000u > sizeof e_store)
+    if ((off & 0xFFFu) || off + 0x1000u > sizeof e_store)
         return -1;
     memset(e_store + off, 0xFF, 0x1000u);
-    memcpy(e_store + off, s, n);
     e_store_gen++;
     return 0;
 }
+static int io_store_prog(uint32_t off, const void *s, uint32_t n)   /* (NOR: bits only go 1 -> 0) */
+{
+    uint32_t i;
+    const uint8_t *b = s;
+    if (off + n > sizeof e_store)
+        return -1;
+    for (i = 0; i < n; i++)
+        e_store[off + i] &= b[i];
+    e_store_gen++;
+    return 0;
+}
+static const uint8_t *io_store_map(void) { return e_store; }
 static void gen_lock(void) {}                     /* (one thread: the render and the UI never overlap) */
 static void gen_unlock(void) {}
 

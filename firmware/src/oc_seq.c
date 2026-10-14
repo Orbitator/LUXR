@@ -3,7 +3,7 @@
  * (BPM, SWING); each track plays its step (global step % its LEN): NOTE steps start their notes, TIE steps hold the
  * last ones, slides glide into the next note; GATE sets when a note ends. SEQ OFF: the track's pattern rests.
  * Live notes (the keys through a ring from the main loop, MIDI IN from the USB ring) play here too, and when REC is
- * armed while playing they are written into the selected track: on the nearest step (a note in the second half of a
+ * armed while playing they are written into the selected track (the loop track: the slice played): on the nearest step (a note in the second half of a
  * step goes to the next one, which then does not play it again), held notes as ties; OVERDUB adds, REPLACE clears each
  * step of the track as the playhead reaches it in the passes recorded. */
 
@@ -89,7 +89,7 @@ static void rec_note_off(uint32_t t, uint32_t note)
 {
     track_t *tr = &trk[t];
     uint32_t len = clamp(tr->len, 1, NSTEP), at = rec.at[note & 127u], g = song.step, n, i;
-    if (!at || IS_DRUM(t))
+    if (!at || NO_NOTES(t))
         return;
     rec.at[note & 127u] = 0;
     if (song.pos > step_len(g) / 2u)
@@ -129,6 +129,8 @@ static void midi_note(uint32_t st, uint32_t d1, uint32_t d2)
         return;
     if (IS_DRUM(t))
         n = 1u << (d1 >= 36u && d1 < 52u ? (uint32_t)GM[d1 - 36u] : (d1 + 4u) % NLANE);
+    else if (IS_LOOP(t))                         /* the loop: C2 (36) and up play its slices */
+        n = (d1 >= 36u ? d1 - 36u : d1) % smp_slices(trk[t].s.smp);
     if ((st & 0xF0u) == 0x90u && d2)
         live_on(t, n, d2);
     else if ((st & 0xF0u) == 0x80u || (st & 0xF0u) == 0x90u)
@@ -161,9 +163,14 @@ static void track_step(uint32_t t, uint32_t g)
         tr->hold = 0;
         return;
     }
-    if (tr->s.engine == E_DRUM) {
+    if (IS_DRUM(t)) {
         if (s->time == ST_NOTE && s->hit && !tr->mute)
             note_on(t, s->hit, s->vel ? s->vel : 100, s->acc);
+        return;
+    }
+    if (IS_LOOP(t)) {                            /* the loop: a step plays its slice (note[0]) */
+        if (s->time == ST_NOTE && s->n && !tr->mute)
+            note_on(t, s->note[0], s->vel ? s->vel : 100, s->flags & SF_ACC);
         return;
     }
     if (s->time == ST_TIE) {
@@ -202,7 +209,7 @@ static void seq_block(uint32_t n)
 {
     uint32_t t;
     while (ev_r != ev_w) {                        /* the keys */
-        uint32_t e = evq[ev_r % EVQ], ty = e & 0xFFu, tt = (e >> 8) & 3u;
+        uint32_t e = evq[ev_r % EVQ], ty = e & 0xFFu, tt = (e >> 8) & 7u;
         ev_r++;
         if (ty == EV_ON)
             live_on(tt, (e >> 16) & 0xFFu, e >> 24);

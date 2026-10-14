@@ -43,10 +43,10 @@
 #include "fm1_audio.h"
 #include "fm1_adc.h"
 #include "fm1_lcd_hw.h"
-/* this firmware writes the flash to stage an update and to its own store (sounds, songs, settings: 24 KiB at the
- * start of what Felucca uses as its main store; never the stock firmware's areas) */
+/* this firmware writes the flash to stage an update and to its own store (sounds, songs, settings, samples: the
+ * area Felucca uses as its main store, 0x97000..0xE0000; never the stock firmware's areas) */
 #define OC_STORE_LO 0x00097000u
-#define OC_STORE_HI 0x0009D000u
+#define OC_STORE_HI 0x000E0000u
 #define FL_RANGE_OK(off, n) (FL_IN(off, n, FL_OTA_LO, FL_OTA_HI) || FL_IN(off, n, OC_STORE_LO, OC_STORE_HI))
 #include "fm1_flash.h"
 #include "oc_tables.h"

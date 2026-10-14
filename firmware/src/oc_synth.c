@@ -79,7 +79,7 @@ static uint32_t v_age;
  * stored and the keys pressed stay as they are) */
 static int32_t note_shift(uint32_t t)
 {
-    return trk_role(t) == ROLE_DRUM ? 0 : song.transpose + 12 * trk[t % NTRK].octave;
+    return NO_NOTES(t) ? 0 : song.transpose + 12 * trk[t % NTRK].octave;
 }
 static void voice_start(voice_t *v, uint32_t t, uint32_t note, uint32_t vel, uint32_t acc, uint32_t lane, int32_t poff)
 {
@@ -150,14 +150,14 @@ static void steal_count(uint32_t t, const voice_t *v)
  *   6. the quietest voice of a track over its reserve */
 static uint32_t vres(uint32_t t)                 /* a track's reserve by its role */
 {
-    static const uint8_t R[ROLE_N] = {1, 4, 1, 0};
+    static const uint8_t R[ROLE_N] = {1, 4, 1, 0, 0};
     return R[trk_role(t) % ROLE_N];
 }
 static uint8_t alloc_retrig;                     /* the last voice_alloc_ was a retrigger (rule 1) */
 static voice_t *voice_alloc_(uint32_t t, uint32_t note, uint32_t lane)
 {
     voice_t *best = 0, *v;
-    uint32_t i, k, cnt[NTRK] = {0, 0, 0, 0}, drum = trk[t % NTRK].s.engine == E_DRUM;
+    uint32_t i, k, cnt[NTRK] = {0}, drum = trk[t % NTRK].s.engine == E_DRUM;
     for (i = 0; i < NVOICE; i++) {
         v = &voice[i];
         if (v->active && v->trk == t && (drum ? v->lane == lane : v->note == note && !v->gate)) {
@@ -205,12 +205,35 @@ static voice_t *voice_alloc(uint32_t t, uint32_t note, uint32_t lane)
     return v;
 }
 
-/* a note on track t (drums: note = the lane mask, acc the accented lanes) */
+static uint8_t dv_turn[NTRK];
+/* a note on track t (drums: note = the lane mask, acc the accented lanes; the loop: note = the slice) */
 static void note_on(uint32_t t, uint32_t note, uint32_t vel, uint32_t flags)
 {
     track_t *tr = &trk[t];
     voice_t *v;
     uint32_t i;
+    if (USES_DV(t) && tr->s.engine == E_SAMPLE) {   /* the kick's one-shot (any lane hit), the loop's slice `note` */
+        uint32_t k = tr->s.smp % NSMP, sl = smp_slices(k), len = smp_dir[k].len, a, b;
+        if (!smp_dir[k].used || !smp_base || (IS_DRUM(t) && !note))
+            return;
+        dv_turn[t] ^= 1u;                       /* (two voices taking turns: the one before fades out in 3 ms) */
+        v = &dvoice[t][dv_turn[t]];
+        dvoice[t][dv_turn[t] ^ 1u].stage = 3;
+        voice_start(v, t, 60, vel, flags & 1u, 0, 0);
+        v->amp = 32767;
+        if (IS_LOOP(t)) {
+            a = len / sl * (note % sl);
+            b = a + len / sl;
+            v->gate = 1;                        /* (the slice sounds to its end or the next one) */
+        } else {
+            a = len * tr->s.sstart / 128u;
+            b = len;
+            v->gate = 0;
+        }
+        v->ph[0] = a << 12;                     /* position Q12, end */
+        v->ph[1] = b;
+        return;
+    }
     if (tr->s.engine == E_DRUM) {
         for (i = 0; i < NLANE; i++) {
             if (!((note >> i) & 1u))
@@ -342,6 +365,42 @@ static void render_voice(voice_t *v, int32_t *out, uint32_t n)
     uint32_t i, inc;
     int32_t a0 = v->amp, a1, da, f = 0, q = 0, c, x;
 
+    if (s->engine == E_SAMPLE) {                 /* a sample from the store: mu-law, linearly interpolated, through the filter */
+        const smp_t *d = &smp_dir[s->smp % NSMP];
+        const uint8_t *p = smp_base ? smp_base + d->off : 0;
+        uint32_t pos = v->ph[0], end = v->ph[1], step, e;
+        int32_t y, fs, qs;
+        if (!p || !d->used || end > d->len) {
+            v->active = 0;
+            return;
+        }
+        step = (uint32_t)d->rate * 4096u / FS;  /* native speed, Q12 */
+        if (IS_DRUM(v->trk))                    /* the kick: TUNE in semitones (2^(1/12) ~ 1 + 1/17) */
+            step = (uint32_t)((int32_t)step * (100 + clamp(s->dtune, -24, 24) * 6) / 100);
+        fs = SVF_F[clamp(s->cutoff * 2 + tr->k_cut * 2, 0, 255)];
+        qs = 65534 - clamp(s->res + tr->k_res, 0, 127) * 500;
+        e = (uint32_t)clamp(v->amp, 0, 32767);   /* (3: fading out, ~3 ms) */
+        for (i = 0; i < n; i++) {
+            uint32_t idx = pos >> 12, fr = pos & 4095u;
+            if (idx + 1u >= end) {
+                v->active = 0;
+                break;
+            }
+            y = ULAW[p[idx]];
+            y += ((ULAW[p[idx + 1u]] - y) * (int32_t)fr) >> 12;
+            if (s->cutoff < 127 || tr->k_cut < 0)
+                y = svf_lp(v, y >> 1, fs, qs) << 1;
+            out[i] += (((y * (int32_t)e) >> 15) * (v->vel + (v->acc ? 24 : 0))) >> 8;
+            if (v->stage == 3u)
+                e = (e * 31u) >> 5;
+            pos += step;
+        }
+        v->ph[0] = pos;
+        v->amp = (int32_t)e;
+        if (v->stage == 3u && e < 64u)
+            v->active = 0;
+        return;
+    }
     if (s->engine == E_DRUM) {                   /* drums keep their own envelopes */
         static const uint16_t DEC[8] = {9000, 4500, 5200, 1200, 9000, 7000, 900, 5000};   /* ms x 0.1 / ~1/e */
         static const uint16_t F0[8] = {52, 185, 1100, 7000, 6000, 98, 820, 560};

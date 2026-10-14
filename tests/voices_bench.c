@@ -21,7 +21,7 @@ int main(int argc, char **argv)
         printf("\n");
         for (b = 0; b < NTRK; b++) { held += vstat.held[a][b]; tail += vstat.tail[a][b]; }
     }
-    printf("victims:     BASS  CHORDS LEAD   DRUMS\n");
+    printf("victims:     BASS  CHORDS LEAD   DRUMS  KICK   LOOP\n");
     printf("total: held %.1f/min, audible tails %.1f/min, quiet steals %.1f/min\n", held * 60.0 / (songs * sec),
            tail * 60.0 / (songs * sec), vstat.quiet * 60.0 / (songs * sec));
     printf("audible cuts by level (dB):  -36..-30 %u  -30..-24 %u  -24..-18 %u  -18..-12 %u  -12..-6 %u  > -6 %u; above -20 dB: %.1f/min\n",

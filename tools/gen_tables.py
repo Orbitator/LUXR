@@ -44,6 +44,13 @@ def main(path):
     L.append(arr("CUT_HZ", "uint16_t", [round(fcs[min(255, i * 2)]) for i in range(128)]))
     L.append(arr("TIME_MS", "uint16_t", [min(65535, round(t * 1000)) for t in times], 10))
     L.append(arr("LFO_CHZ", "uint16_t", [round(100 * 0.05 * 400 ** (i / 127)) for i in range(128)], 10))
+    # samples: G.711 mu-law decode to Q15
+    def ulaw(b):
+        b = ~b & 0xFF
+        sign, exp, man = b & 0x80, (b >> 4) & 7, b & 15
+        v = (((man << 3) + 0x84) << exp) - 0x84
+        return -v if sign else v
+    L.append(arr("ULAW", "int16_t", [ulaw(b) for b in range(256)], 16))
     open(path, "w").write("\n".join(L) + "\n")
 
 

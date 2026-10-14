@@ -66,7 +66,7 @@ static void str_cpy(char *d, const char *s, unsigned max)
 static void gen_lock(void) {}
 static void gen_unlock(void) {}
 static void midi_in_drain(void) {}
-static uint8_t h_store[0x6000];                    /* the store in RAM (oc_main.c: the flash) */
+static uint8_t h_store[0x49000];                    /* the store in RAM (oc_main.c: the flash) */
 static int h_store_fail;                          /* (the tests: a failing flash) */
 static int io_store_read(uint32_t off, void *d, uint32_t n)
 {
@@ -75,18 +75,28 @@ static int io_store_read(uint32_t off, void *d, uint32_t n)
     memcpy(d, h_store + off, n);
     return 0;
 }
-static int io_store_write(uint32_t off, const void *s, uint32_t n)
+static int io_store_erase(uint32_t off)
 {
-    if (h_store_fail || (off & 0xFFFu) || n > 0x1000u || off + 0x1000u > sizeof h_store)
+    if (h_store_fail || (off & 0xFFFu) || off + 0x1000u > sizeof h_store)
         return -1;
     memset(h_store + off, 0xFF, 0x1000u);
-    memcpy(h_store + off, s, n);
     return 0;
 }
+static int io_store_prog(uint32_t off, const void *s, uint32_t n)   /* (NOR: bits only go 1 -> 0) */
+{
+    uint32_t i;
+    const uint8_t *b = s;
+    if (h_store_fail || off + n > sizeof h_store)
+        return -1;
+    for (i = 0; i < n; i++)
+        h_store[off + i] &= b[i];
+    return 0;
+}
+static const uint8_t *io_store_map(void) { return h_store; }
 static uint32_t h_pressed, h_held, h_keys;
 static int32_t h_enc[NE];
 static uint8_t h_led_btn[NB], h_led_key[27];
-static uint8_t h_sent[4096];
+static uint8_t h_sent[8192];
 static uint32_t h_sent_n;
 static uint32_t io_pressed(void) { uint32_t p = h_pressed; h_pressed = 0; return p; }
 static uint32_t io_held(void) { return h_held; }

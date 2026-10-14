@@ -26,11 +26,11 @@ static void check_parts(const char *where, int key)
     uint32_t i, j, k;
     for (i = 0; i < NTRK; i++) {
         const track_t *t = &trk[i];
-        CHECK((t->s.engine == E_DRUM) == IS_DRUM(i), "%s: track %u (%s) engine %u", where, i, TYPE_NAME[t->type], t->s.engine);
+        CHECK(role_has_engine(trk_role(i), t->s.engine), "%s: track %u (%s) engine %u", where, i, TYPE_NAME[t->type], t->s.engine);
         CHECK(t->len >= 1 && t->len <= NSTEP, "%s: len %u", where, t->len);
         for (j = 0; j < t->len; j++) {
             const step_t *s = &t->step[j];
-            if (s->time != ST_NOTE || IS_DRUM(i)) continue;
+            if (s->time != ST_NOTE || NO_NOTES(i)) continue;
             CHECK(s->n >= 1 && s->n <= 4, "%s: track %u step %u n %u", where, i, j, s->n);
             for (k = 0; key && k < s->n; k++) CHECK(in_key(s->note[k]), "%s: track %u note %u off key", where, i, s->note[k]);
         }
@@ -40,7 +40,7 @@ static uint32_t rhythm_sig(void)
 {
     uint32_t i, j, h = 7;
     for (i = 0; i < NTRK; i++)
-        for (j = 0; j < NSTEP && !IS_DRUM(i); j++)
+        for (j = 0; j < NSTEP && !NO_NOTES(i); j++)
             h = h * 33u + trk[i].step[j].time * 3u + trk[i].step[j].n;
     return h;
 }
@@ -65,6 +65,45 @@ static uint32_t notes_in(const track_t *t)
     for (i = 0; i < t->len; i++)
         n += t->step[i].time == ST_NOTE;
     return n;
+}
+
+static uint8_t ulaw_enc(int32_t x)               /* G.711 */
+{
+    int32_t sign = x < 0 ? 0x80 : 0, e, m;
+    x = x < -32635 ? 32635 : x < 0 ? -x : x;
+    if (x > 32635) x = 32635;
+    x += 0x84;
+    for (e = 7; e > 0 && !(x & (0x4000 >> (7 - e))); e--)
+        ;
+    m = (x >> (e + 3)) & 15;
+    return (uint8_t)~(sign | e << 4 | m);
+}
+static int smp_frame(uint32_t cmd, const uint8_t *raw, uint32_t n)   /* a companion frame; the device's answer code */
+{
+    static uint8_t f[2048];
+    uint32_t w = 4;
+    f[0] = 0x7D; f[1] = 'O'; f[2] = 'C'; f[3] = (uint8_t)cmd;
+    if (raw && n) w += pack7(raw, n, f + 4);
+    h_sent_n = 0;
+    proto_frame(f, w);
+    return h_sent_n >= 8u && h_sent[4] == 0x2F && h_sent[5] == cmd ? h_sent[6] : 99;
+}
+static int smp_upload(uint32_t slot, uint32_t kind, uint32_t bars, uint32_t target, const char *name, const uint8_t *d, uint32_t len)
+{
+    uint8_t h[23] = {(uint8_t)slot, (uint8_t)kind, 60, (uint8_t)bars, 22050 & 255, 22050 >> 8,
+                     (uint8_t)len, (uint8_t)(len >> 8), (uint8_t)(len >> 16), (uint8_t)(len >> 24), (uint8_t)target};
+    uint32_t o;
+    int rc;
+    memcpy(h + 11, name, strlen(name) < 11 ? strlen(name) : 11);
+    if ((rc = smp_frame(0x20, h, 23)) != 0) return 100 + rc;
+    for (o = 0; o < len; o += 256u) {
+        uint8_t c[260];
+        uint32_t n = len - o < 256u ? len - o : 256u;
+        c[0] = (uint8_t)o; c[1] = (uint8_t)(o >> 8); c[2] = (uint8_t)(o >> 16); c[3] = (uint8_t)(o >> 24);
+        memcpy(c + 4, d + o, n);
+        if ((rc = smp_frame(0x21, c, 4 + n)) != 0) return 200 + rc;
+    }
+    return smp_frame(0x22, 0, 0);
 }
 
 int main(void)
@@ -158,6 +197,7 @@ int main(void)
     CHECK(trk[2].type == TY_SNARE, "SHIFT + ALGO: the type before (%s)", TYPE_NAME[trk[2].type]);
     host_hold(B_ARP, 400, white(TY_LEAD)); check_parts("back to LEAD", 1);
     /* SHIFT + PRESETS: the engine; SHIFT + SELECT: swing; SHIFT + OCT: transpose */
+    song.octave = 0;
     { uint32_t e = trk[2].s.engine, sw = song.swing, pg0 = ui.page;
       shift_on(); turn(EN_PRESET, 1); turn(EN_SELECT, 3);
       h_pressed |= 1u << B_OCTUP; h_held |= 1u << B_OCTUP; host_run(30, 0, 0); h_held &= ~(1u << B_OCTUP); host_run(30, 0, 0);
@@ -282,12 +322,37 @@ int main(void)
       host_hold(B_REC, 400, 0); gen_key();
       turn(EN_K2, 1); host_tap(B_OCTUP); CHECK(!strcmp(ui.msg, "SONG LOADED"), "song loaded (%s)", ui.msg);
       CHECK(song.root == root && !memcmp(t0[2].step, trk[2].step, sizeof t0[2].step) && !memcmp(&t0[0].s, &trk[0].s, sizeof(patch_t)), "song back");
-      host_tap(B_SAVE); host_tap(B_SAVE); CHECK(sub_cur(PG_SAVE) == SV_SOUND, "SAVE: SOUND again");
+      host_tap(B_SAVE); host_tap(B_SAVE); host_tap(B_SAVE); CHECK(sub_cur(PG_SAVE) == SV_SOUND, "SAVE: SOUND again");
       gen_sound(&trk[1]); CHECK(ui.sact == 1, "LOAD still");
       host_tap(B_OCTUP); CHECK(!memcmp(&p0, &trk[1].s, sizeof p0), "sound back (%s)", ui.msg);
       song.sel = 3; host_tap(B_OCTUP); CHECK(!strcmp(ui.msg, "NOT A DRUM SOUND"), "no bass on drums (%s)", ui.msg);
       h_store_fail = 1; turn(EN_K2, -1); host_tap(B_OCTUP); CHECK(!strcmp(ui.msg, "SAVE FAILED"), "a failing store (%s)", ui.msg);
       h_store_fail = 0; host_tap(B_OCTDN); CHECK(ui.page == PG_HOME, "OCT-: back"); }
+    /* samples: a kick one-shot and a 2-bar loop uploaded as the companion does, assigned to tracks 5 and 6 */
+    { static uint8_t kick[4410], loop[2 * 2 * 22050 * 60 / 122]; uint32_t n, lp = sizeof loop, i2, on = 0;
+      for (n = 0; n < sizeof kick; n++) kick[n] = ulaw_enc((int32_t)(28000.0 * exp(-n / 900.0) * sin(6.283 * 55.0 * n / 22050.0 * (1.0 + 3.0 * exp(-n / 300.0)))));
+      for (n = 0; n < lp; n++) loop[n] = ulaw_enc(n % 2756u < 300u ? (int32_t)(20000.0 * sin(n * 0.3)) : 0);
+      CHECK(trk[4].type == TY_KICK && trk[5].type == TY_LOOP, "tracks 5 and 6: KICK, LOOP");
+      CHECK(smp_upload(0, SK_ONESHOT, 1, 4, "KICK 909", kick, sizeof kick) == 0, "kick upload");
+      CHECK(smp_upload(1, SK_LOOP, 2, 5, "BREAK", loop, lp) == 0, "loop upload");
+      CHECK(smp_dir[0].used && smp_dir[1].used && smp_dir[1].bars == 2, "the directory");
+      CHECK(trk[4].s.engine == E_SAMPLE && trk[4].s.smp == 0, "kick assigned");
+      CHECK(trk[5].s.engine == E_SAMPLE && trk[5].s.smp == 1 && trk[5].len == 32, "loop assigned: 32 slices (%u)", trk[5].len);
+      for (i2 = 0; i2 < trk[5].len; i2++) CHECK(trk[5].step[i2].time != ST_NOTE || trk[5].step[i2].note[0] < 32, "slice %u", i2);
+      CHECK(smp_frame(0x21, (const uint8_t *)"\0\0\0\0x", 5) == 3, "a chunk with no upload: out of order");
+      { uint32_t big = smp_free() + 1u; uint8_t h[23] = {2, 0, 60, 1, 0x22, 0x56, (uint8_t)big, (uint8_t)(big >> 8), (uint8_t)(big >> 16), 0};
+        CHECK(smp_frame(0x20, h, 23) == 1, "too big: no space"); }
+      peak = 0; seq_play(1); host_run(50, 0, 0);
+      for (n = 0; n < 40; n++) { host_run(25, meter, 0); on |= dvoice[5][0].active | dvoice[5][1].active; }
+      CHECK(on, "the loop plays its slices"); CHECK(peak > 0.02 && peak < 1.0, "loop audio %.3f", peak);
+      seq_play(0); host_run(50, 0, 0);
+      smp_load(); CHECK(smp_dir[1].used && !strcmp(smp_dir[1].name, "BREAK"), "the directory kept");
+      ui.sub[PG_SAVE] = SV_SAMPLES; ui.page = PG_SAVE; ui.mslot = 1; ui.mact = 1; song.sel = 5;
+      host_tap(B_OCTUP); CHECK(!smp_dir[1].used, "SAVE > SAMPLES: DELETE (%s)", ui.msg);
+      CHECK(smp_upload(1, SK_LOOP, 2, 0x7F, "BREAK2", loop, lp) == 0 && smp_dir[1].off == trk[0].len * 0 + smp_dir[1].off, "re-upload");
+      ui.mact = 0; host_tap(B_OCTUP); CHECK(!strcmp(ui.msg, "ASSIGNED") && trk[5].s.smp == 1, "SAVE > SAMPLES: ASSIGN (%s)", ui.msg);
+      song.sel = 1; host_tap(B_OCTUP); CHECK(!strcmp(ui.msg, "LOOPS: LOOP TRACK"), "a loop not on a synth track");
+      ui.page = PG_HOME; }
     /* the MENU (HOME held): a row, its value, kept in the store */
     host_hold(B_HOME, 400, 0); CHECK(ui.page == PG_MENU, "HOME held: MENU");
     turn(EN_PRESET, 4); CHECK(MENU_ROWS[ui.menu_row] == P_THEME, "row THEME");

@@ -84,14 +84,21 @@ static int io_store_read(uint32_t off, void *d, uint32_t n)
         return -1;
     return st_read(OC_STORE_LO + off, d, n);
 }
-static int io_store_write(uint32_t off, const void *s, uint32_t n)
+static int io_store_erase(uint32_t off)           /* the 4 KiB sector at off */
 {
-    int rc;
-    if (!flash_ok || (off & 0xFFFu) || n > 0x1000u || !FL_IN(OC_STORE_LO + off, 0x1000u, OC_STORE_LO, OC_STORE_HI))
+    if (!flash_ok || (off & 0xFFFu) || !FL_IN(OC_STORE_LO + off, 0x1000u, OC_STORE_LO, OC_STORE_HI))
         return -1;
-    if ((rc = st_erase(OC_STORE_LO + off)) != 0)
-        return rc;
+    return st_erase(OC_STORE_LO + off);
+}
+static int io_store_prog(uint32_t off, const void *s, uint32_t n)   /* into erased flash */
+{
+    if (!flash_ok || !FL_IN(OC_STORE_LO + off, n, OC_STORE_LO, OC_STORE_HI))
+        return -1;
     return st_prog(OC_STORE_LO + off, s, n);
+}
+static const uint8_t *io_store_map(void)          /* the store read in place (the plain XIP window: the samples) */
+{
+    return flash_ok ? (const uint8_t *)FL_XIP(OC_STORE_LO) : 0;
 }
 /* the companion's frames (ours: 7D 'O' 'C'); the rest stays for the updater (ota_service) */
 static void proto_service(void)
@@ -149,8 +156,10 @@ static void fm1_main(void)
     f = irq_save();
     flash_ok = FL_FAR(fl_jedec_ram)() == 0x856014u;   /* the expected 1 MiB part (else no update from here) */
     irq_restore(f);
-    if (flash_ok)
+    if (flash_ok) {
         ota_boot_cleanup();                       /* the staging area an update left */
+        fl_plain_window_init();                   /* the data area read in place unencrypted (the samples) */
+    }
     lcd_init();
     palette_set(PAL_AMBER);                       /* (the banners' colours before ui_init) */
     oc_banner("ONE CLICK", "FM-1 " OC_VERSION);

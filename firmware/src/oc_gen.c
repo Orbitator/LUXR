@@ -388,10 +388,40 @@ static void sound_flute(patch_t *p)
     p->dly = (uint8_t)rr(20, 50);
 }
 
+/* the first sample slot of a kind (kind_ok: the one asked is used and of it), 0xFF: none */
+static uint32_t smp_pick(uint32_t want, uint32_t kind)
+{
+    uint32_t k;
+    if (want < NSMP && smp_dir[want].used && smp_dir[want].kind == kind)
+        return want;
+    for (k = 0; k < NSMP; k++)
+        if (smp_dir[k].used && smp_dir[k].kind == kind)
+            return k;
+    return 0xFFu;
+}
+static void sound_sample(patch_t *p, uint32_t slot)   /* the kick's one-shot / the loop as it is */
+{
+    p->engine = E_SAMPLE;
+    p->smp = (uint8_t)(slot % NSMP);
+    p->cutoff = 127;
+    p->level = (uint8_t)rr(96, 108);
+    p->rev = (uint8_t)rr(0, 10);
+    p->ddec = 64;
+    p->dmix = 100;
+}
 static void gen_sound_of(track_t *t, uint32_t type)
 {
-    patch_t *p = &t->s;
-    uint32_t role = TYPE_ROLE[type % TY_N];
+    patch_t *p = &t->s, old = t->s;
+    uint32_t role = TYPE_ROLE[type % TY_N], k;
+    if (type == TY_LOOP || (type == TY_KICK && old.engine == E_SAMPLE)) {   /* the samples assigned stay */
+        k = smp_pick(old.engine == E_SAMPLE ? old.smp : 0xFFu, type == TY_LOOP ? SK_LOOP : SK_ONESHOT);
+        if (k != 0xFFu || type == TY_LOOP) {
+            memset(p, 0, sizeof *p);
+            sound_sample(p, k == 0xFFu ? 0u : k);
+            p->dtune = old.engine == E_SAMPLE ? old.dtune : 0;
+            return;
+        }
+    }
     memset(p, 0, sizeof *p);
     p->lfo_rate = 40;
     p->lfo_wave = LW_SINE;
@@ -453,7 +483,8 @@ static void gen_sound_of(track_t *t, uint32_t type)
 /* the engines a role can have (EDIT held: a white key picks one), and a new sound of engine e for track t's type */
 static const uint8_t ROLE_ENGINES[ROLE_N][6] = {
     {E_ACID, E_SUB, E_FM, E_SAW, E_NOISE, 0xFF}, {E_SAW, E_FM, E_ADD, E_SUB, E_NOISE, 0xFF},
-    {E_SUB, E_FM, E_ADD, E_SAW, E_ACID, E_NOISE}, {E_DRUM, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}};
+    {E_SUB, E_FM, E_ADD, E_SAW, E_ACID, E_NOISE}, {E_DRUM, E_SAMPLE, 0xFF, 0xFF, 0xFF, 0xFF},
+    {E_SAMPLE, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}};
 static int role_has_engine(uint32_t role, uint32_t e)
 {
     uint32_t k;
@@ -465,6 +496,12 @@ static int role_has_engine(uint32_t role, uint32_t e)
 static void gen_sound_engine_of(track_t *t, uint32_t type, uint32_t e)
 {
     uint32_t n, role = TYPE_ROLE[type % TY_N], ty;
+    if (e == E_SAMPLE && role_has_engine(role, e)) {   /* a sample: the one assigned, else the first of its kind */
+        uint32_t k = smp_pick(t->s.engine == E_SAMPLE ? t->s.smp : 0xFFu, role == ROLE_LOOP ? SK_LOOP : SK_ONESHOT);
+        memset(&t->s, 0, sizeof t->s);
+        sound_sample(&t->s, k == 0xFFu ? 0u : k);
+        return;
+    }
     if (!role_has_engine(role, e)) {
         gen_sound_of(t, type);
         return;
@@ -508,8 +545,9 @@ static const char *const STYLE_NAME[ROLE_N][8] = {
     {"AUTO", "HOLD", "STABS", "HALVES", "EUCLID"},
     {"AUTO", "LEGATO", "STACCATO"},
     {"AUTO", "HOUSE", "BREAK", "HALFTIME", "TECHNO", "EUCLID"},
+    {"AUTO", "STRAIGHT", "SHUFFLE", "STUTTER", "HALFTIME"},
 };
-static const uint8_t STYLE_N[ROLE_N] = {8, 5, 3, 6};
+static const uint8_t STYLE_N[ROLE_N] = {8, 5, 3, 6, 5};
 static uint32_t vchance(const track_t *t, uint32_t pct)   /* a chance scaled by VARIATION (64: as given) */
 {
     return chance(pct * t->gen_var / 64u);
@@ -686,6 +724,35 @@ static void pat_drums(track_t *t)
     t->gate = 50;
 }
 
+/* the loop: a step a slice (16 a bar), as the loop was played, then varied: SHUFFLE takes some 16ths from elsewhere,
+ * STUTTER repeats, HALFTIME plays every slice twice; DENSITY leaves steps out (the slice before rings on) */
+static void pat_loop(track_t *t)
+{
+    uint32_t sl = smp_slices(t->s.smp), len = sl > NSTEP ? NSTEP : sl, st = t->gen_style % STYLE_N[ROLE_LOOP], i, x;
+    if (!st)
+        st = 1u + rnd(4);
+    clear_all(t);
+    for (i = 0; i < len; i++) {
+        x = i;
+        if (st == 2u && (i & 3u) >= 2u && vchance(t, 40))
+            x = (i + 4u * (1u + rnd(3))) % sl;
+        else if (st == 3u && (i & 7u) >= 4u && vchance(t, 50))
+            x = i & ~3u;
+        else if (st == 4u)
+            x = (i / 2u + (i / 32u) * 16u) % sl;
+        if (i && vchance(t, 6))
+            x = rnd(sl);
+        if (i % 4u && t->gen_dens < 50u && chance((50u - t->gen_dens) * 2u))
+            continue;
+        t->step[i].time = ST_NOTE;
+        t->step[i].n = 1;
+        t->step[i].note[0] = (uint8_t)x;
+        t->step[i].vel = (uint8_t)(i % 4u ? 92 : 104);
+    }
+    t->len = (uint8_t)(len < 16u ? 16u : len);
+    t->gate = 100;
+}
+
 /* ------------------------------------------------- key, scale, chords --- */
 /* note n of the song's key moved by `shift` scale degrees, in the scale sc (its own degree found first; a note off the
  * scale goes down to the degree under it). Diatonic: C in C major +2 -> E */
@@ -708,7 +775,7 @@ static void song_set_key(uint32_t root, uint32_t sc)
     if (mv < -6) mv += 12;
     gen_lock();
     for (t = 0; t < NTRK; t++)
-        for (i = 0; i < NSTEP && !IS_DRUM(t); i++) {
+        for (i = 0; i < NSTEP && !NO_NOTES(t); i++) {
             step_t *s = &trk[t].step[i];
             for (k = 0; k < s->n && k < 4u; k++) {
                 int32_t n = note_deg_shift(s->note[k], song.root, song.scale, 0);   /* (on the old scale first) */
@@ -734,7 +801,7 @@ static void song_set_prog(uint32_t pi)
         if (sh > 3) sh -= 7;                     /* the nearer way: up 5 degrees is down 2 */
         if (sh < -3) sh += 7;
         for (t = 0; t < NTRK; t++)
-            for (i = 16u * b; i < 16u * b + 16u && !IS_DRUM(t); i++) {
+            for (i = 16u * b; i < 16u * b + 16u && !NO_NOTES(t); i++) {
                 step_t *s = &trk[t].step[i];
                 for (k = 0; k < s->n && k < 4u; k++)
                     s->note[k] = (uint8_t)clamp(note_deg_shift(s->note[k], song.root, song.scale, sh), 12, 120);
@@ -754,9 +821,14 @@ static void gen_pattern_of(track_t *t, uint32_t type)
     if (role == ROLE_BASS) pat_bass(t);
     else if (role == ROLE_CHORD) pat_chords(t);
     else if (role == ROLE_LEAD) pat_lead(t);
+    else if (role == ROLE_LOOP) { pat_loop(t); return; }
     else pat_drums(t);
     t->len = (uint8_t)(role == ROLE_DRUM ? 16u : 64u);
-    if (type == TY_KICK) keep = 1u << LN_KICK | 1u << LN_TOM;   /* the drum types: their lanes of the beat */
+    if (type == TY_KICK) keep = 1u << LN_KICK;   /* the drum types: their lanes of the beat */
+    if (type == TY_DRUMS)                        /* a kick track plays the kick: the kit leaves it out */
+        for (i = 0; i < NTRK; i++)
+            if (trk[i].type == TY_KICK && &trk[i] != t)
+                keep = (uint8_t)~(1u << LN_KICK);
     if (type == TY_SNARE) keep = 1u << LN_SNARE | 1u << LN_CLAP | 1u << LN_RIM;
     if (type == TY_PERC) keep = 1u << LN_HATC | 1u << LN_HATO | 1u << LN_TOM | 1u << LN_RIM | 1u << LN_BELL;
     for (i = 0; keep != 0xFFu && i < NSTEP; i++) {
@@ -983,6 +1055,8 @@ static void euclid_apply(track_t *t, uint32_t hits, uint32_t rot, uint32_t lane)
                 memcpy(s->note, notes[j % nn], 4);
                 s->n = notes[j % nn][4];
                 j++;
+            } else if (IS_LOOP(trk_i(t))) {
+                s->note[0] = (uint8_t)(i % smp_slices(t->s.smp));
             } else {
                 s->note[0] = (uint8_t)near(deg(song.prog[(i / 16u) % 4u]), 48 + 12 * (int32_t)(TYPE_ROLE[t->type % TY_N] != ROLE_BASS));
                 s->n = 1;
@@ -997,12 +1071,12 @@ static void pattern_copy(const track_t *t)
     memcpy(clip.step, t->step, sizeof clip.step);
     clip.len = t->len;
     clip.gate = t->gate;
-    clip.drum = (uint8_t)IS_DRUM(trk_i(t));
+    clip.drum = (uint8_t)trk_role(trk_i(t));
     clip.full = 1;
 }
 static int pattern_paste(track_t *t)              /* 0: nothing copied, or a drum part onto a melodic track (and back) */
 {
-    if (!clip.full || clip.drum != (uint8_t)IS_DRUM(trk_i(t)))
+    if (!clip.full || (clip.drum >= ROLE_DRUM || trk_role(trk_i(t)) >= ROLE_DRUM ? clip.drum != trk_role(trk_i(t)) : 0))
         return 0;
     gen_lock();
     memcpy(t->step, clip.step, sizeof t->step);
@@ -1017,7 +1091,7 @@ static void gen_type(track_t *t, uint32_t type)
 {
     gen_lock();
     track_panic(trk_i(t));
-    if (TYPE_ROLE[type % TY_N] == ROLE_DRUM || TYPE_ROLE[t->type % TY_N] == ROLE_DRUM) {
+    if (TYPE_ROLE[type % TY_N] >= ROLE_DRUM || TYPE_ROLE[t->type % TY_N] >= ROLE_DRUM) {
         uint32_t i;
         for (i = 0; i < NLANE; i++)
             dvoice[trk_i(t)][i].active = 0;
