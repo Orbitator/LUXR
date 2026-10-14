@@ -1,0 +1,280 @@
+<title>LXR Web Drums</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,400..800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a drum-machine bench: transport on top, the 8-lane step grid as the instrument, then the voice editor
+   beside the integration notes for the X-Generator; one column on phones. */
+:root {
+  --bg: #e8ebee; --panel: #f7f8f9; --ink: #14171b; --mute: #5a6370; --line: #cfd5dc; --accent: #2b59c3;
+  --cell: #dde2e7; --on-ink: #ffffff;
+  --v0: #d9480f; --v1: #b7791f; --v2: #2f855a; --v3: #2b59c3; --v4: #805ad5; --v5: #c53075;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #101317; --panel: #181c22; --ink: #e6e9ee; --mute: #8b95a3; --line: #2a3039;
+    --accent: #7aa2ff; --cell: #232931; --on-ink: #0d0f12;
+    --v0: #ff8a5b; --v1: #f2c14e; --v2: #5fd39a; --v3: #7aa2ff; --v4: #b69cff; --v5: #ff7ab8; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #101317; --panel: #181c22; --ink: #e6e9ee; --mute: #8b95a3; --line: #2a3039;
+  --accent: #7aa2ff; --cell: #232931; --on-ink: #0d0f12;
+  --v0: #ff8a5b; --v1: #f2c14e; --v2: #5fd39a; --v3: #7aa2ff; --v4: #b69cff; --v5: #ff7ab8; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--display); }
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 18px; padding-block: 22px 40px;
+        padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: end; justify-content: space-between; }
+h1 { margin: 0; font: 800 clamp(26px, 5vw, 40px)/1 var(--display); font-stretch: 78%; letter-spacing: -0.5px; text-transform: uppercase; text-wrap: balance; }
+h1 span { color: var(--accent); }
+.lede { margin: 6px 0 0; color: var(--mute); max-width: 62ch; }
+h2 { margin: 0; font: 700 13px/1.2 var(--display); font-stretch: 85%; letter-spacing: 1.2px; text-transform: uppercase; color: var(--mute); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 12px; min-width: 0; align-content: start; }
+.transport { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+button { font: 600 14px var(--display); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 7px;
+         padding: 8px 14px; min-height: 40px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); color: var(--on-ink); border-color: transparent; min-width: 96px; }
+.bpm { display: flex; gap: 8px; align-items: center; font: 13px var(--mono); color: var(--mute); }
+.bpm input { width: 120px; accent-color: var(--accent); }
+.bpm output { color: var(--ink); min-width: 3ch; font-variant-numeric: tabular-nums; }
+
+/* the step grid */
+.gridbox { overflow-x: auto; }
+.grid { display: grid; grid-template-columns: 112px repeat(16, minmax(20px, 1fr)); gap: 4px; min-width: 560px; align-items: center; }
+.lane { font: 600 12px var(--mono); display: flex; gap: 6px; align-items: center; background: none; border: 0; min-height: 0;
+        padding: 4px 2px; color: var(--ink); justify-content: flex-start; white-space: nowrap; }
+.lane i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
+.lane small { color: var(--mute); font-weight: 400; }
+.cell { height: 28px; border-radius: 4px; background: var(--cell); border: 0; padding: 0; min-height: 0; max-width: 100%; }
+.cell.beat { box-shadow: inset 0 0 0 1px var(--line); }
+.cell:nth-child(17n+6), .cell:nth-child(17n+10), .cell:nth-child(17n+14) { margin-left: 4px; }
+.cell.on { background: var(--c); }
+.cell.now { outline: 2px solid var(--ink); outline-offset: -2px; }
+
+/* below: editor | integration */
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tabs button { font: 600 12px var(--mono); padding: 6px 10px; min-height: 34px; }
+.tabs button[aria-selected="true"] { background: var(--c); color: var(--on-ink); border-color: transparent; }
+.knobs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 14px; }
+.knob { display: grid; gap: 4px; min-width: 0; }
+.knob label { display: flex; justify-content: space-between; font: 12px var(--mono); color: var(--mute); gap: 6px; }
+.knob label b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.knob input { width: 100%; accent-color: var(--vc, var(--accent)); }
+.row2 { border-top: 1px dashed var(--line); padding-top: 10px; }
+.hint { margin: 0; color: var(--mute); font-size: 13.5px; max-width: 65ch; }
+pre { margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow-x: auto;
+      font: 12px/1.55 var(--mono); max-height: 300px; overflow-y: auto; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.note { font: 12px var(--mono); color: var(--mute); min-height: 1.5em; }
+ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 14px; max-width: 65ch; }
+code { font: 12.5px var(--mono); }
+@media (max-width: 800px) { .cols { grid-template-columns: 1fr; } .knobs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>LXR <span>Web</span> Drums</h1>
+      <p class="lede">Sechs Drum-Stimmen nach dem Vorbild der Sonic Potions LXR, als Web-Audio-Modul für den X-Generator. Dieselben Stimmen und Parameter wie die LXR-Engine der ONE-CLICK-Firmware für den FM-1.</p>
+    </div>
+    <div class="transport">
+      <button class="primary" id="play">▶ Start</button>
+      <label class="bpm">BPM <input type="range" id="bpm" min="70" max="180" value="122"><output id="bpmv">122</output></label>
+      <button id="kit">Neues Kit</button>
+      <button id="pat">Neues Pattern</button>
+    </div>
+  </header>
+
+  <section class="panel" aria-label="Step-Sequencer">
+    <h2>Pattern · ein Takt, 16 Steps</h2>
+    <div class="gridbox"><div class="grid" id="grid"></div></div>
+    <p class="hint">Zelle anklicken setzt oder löscht einen Schlag, der Lane-Name spielt ihn einzeln. CP ist die Snare-Stimme als Clap, CH stoppt OH.</p>
+  </section>
+
+  <div class="cols">
+    <section class="panel" aria-label="Stimmen">
+      <h2>Stimme</h2>
+      <div class="tabs" id="tabs" role="tablist"></div>
+      <div class="knobs" id="knobs"></div>
+      <div class="knobs row2" id="knobs2"></div>
+      <div class="btns"><button id="copyKit">Kit als JSON kopieren</button></div>
+      <div class="note" id="kitNote"></div>
+    </section>
+
+    <section class="panel" aria-label="Einbau in den X-Generator">
+      <h2>Einbau in den X-Generator</h2>
+      <ol>
+        <li><code>lxr-drums.js</code> in die HTML-Datei der App kopieren (oder als Script-Tag einbinden).</li>
+        <li>Beim Start der Audio-Engine eine Instanz an den Master hängen.</li>
+        <li>Im Scheduler für Drum-Spuren mit Engine „LXR“ die Lanes auslösen.</li>
+        <li>Beim WAV-Export eine zweite Instanz im OfflineAudioContext mit demselben Kit anlegen.</li>
+      </ol>
+<pre id="usage">// 2. beim Start
+this.lxr = new LxrDrums(this.ctx, this.master);        // würfelt ein Kit
+
+// 3. im Scheduler (time = Startzeit des Steps)
+if (tr.engine === "LXR") {
+  // Kick-Spur: "BD", Snare-Spur: "SD", Percussion: "TM" / "RS" / "CB" …
+  this.lxr.trigger(tr.lxrLane || "BD", time, tr.vel ?? 0.8, step.accent);
+}
+
+// Sound-Box „neu würfeln“
+this.lxr.randomize();
+this.lxr.set("KICK", "DECAY", 90);                      // 0..127
+
+// 4. WAV-Export (OfflineAudioContext)
+const lxrOff = new LxrDrums(off, master, this.lxr.toJSON());
+lxrOff.trigger("BD", noteStart, tr.vel);</pre>
+      <div class="btns">
+        <button id="copyCode">lxr-drums.js kopieren</button>
+        <button id="saveCode">Als ZIP speichern</button>
+      </div>
+      <div class="note" id="codeNote"></div>
+      <pre id="code" aria-label="Quelltext lxr-drums.js"></pre>
+    </section>
+  </div>
+</div>
+
+<script id="lxr-src">
+/* @lxr-module */
+</script>
+<script>
+"use strict";
+const LANES = LxrDrums.LANES, VOICES = LxrDrums.VOICES, VOICE_OF_LANE = [0, 3, 3, 5, 5, 1, 2, 4];
+const LANE_NAME = ["Kick", "Snare", "Clap", "Hat zu", "Hat offen", "Tom", "Rim", "Becken"];
+const $ = (id) => document.getElementById(id);
+const PATTERNS = [
+  [[0, 4, 8, 12], [4, 12], [], [2, 6, 10, 14], [], [15], [7], []],
+  [[0, 7, 10], [4, 12], [], [0, 2, 4, 6, 8, 10, 12, 14], [14], [], [3, 11], [0]],
+  [[0, 3, 8, 11], [], [4, 12], [1, 2, 5, 6, 9, 10, 13, 14], [], [7, 15], [], [8]],
+  [[0, 6, 10], [8], [], [0, 3, 6, 9, 12, 14], [], [13, 14], [2, 5], []],
+];
+let ac = null, drums = null, playing = false, step = 0, nextT = 0, timer = 0, voice = 0, pi = 0;
+const pattern = LANES.map(() => new Array(16).fill(false));
+const shown = new LxrDrums({ createGain: () => ({ gain: {}, connect() {} }) }, null);   // the kit before audio exists
+
+function loadPattern(k) { pattern.forEach((r, l) => { r.fill(false); PATTERNS[k][l].forEach((s) => r[s] = true); }); }
+function kit() { return drums || shown; }
+function ensureAudio() {
+  if (ac) return;
+  ac = new AudioContext();
+  const comp = ac.createDynamicsCompressor(); comp.threshold.value = -10; comp.ratio.value = 3; comp.connect(ac.destination);
+  drums = new LxrDrums(ac, comp, shown.toJSON());
+}
+function hit(l, t, acc) { ensureAudio(); drums.trigger(l, t ?? ac.currentTime + 0.005, acc ? 1 : 0.8, acc); }
+
+/* the grid */
+const cells = [];
+(function buildGrid() {
+  const g = $("grid");
+  LANES.forEach((ln, l) => {
+    const b = document.createElement("button");
+    b.className = "lane"; b.style.setProperty("--c", `var(--v${VOICE_OF_LANE[l]})`);
+    b.innerHTML = `<i></i>${ln} <small>${LANE_NAME[l]}</small>`;
+    b.title = `${LANE_NAME[l]} anspielen (Stimme ${VOICES[VOICE_OF_LANE[l]]})`;
+    b.onclick = () => { hit(l); selectVoice(VOICE_OF_LANE[l]); };
+    g.append(b);
+    cells[l] = [];
+    for (let s = 0; s < 16; s++) {
+      const c = document.createElement("button");
+      c.className = "cell" + (s % 4 === 0 ? " beat" : "");
+      c.style.setProperty("--c", `var(--v${VOICE_OF_LANE[l]})`);
+      c.setAttribute("aria-label", `${ln} Step ${s + 1}`);
+      c.onclick = () => { pattern[l][s] = !pattern[l][s]; paint(); if (pattern[l][s]) hit(l); };
+      g.append(c); cells[l][s] = c;
+    }
+  });
+})();
+function paint(now = -1) {
+  cells.forEach((row, l) => row.forEach((c, s) => { c.classList.toggle("on", pattern[l][s]); c.classList.toggle("now", s === now); c.setAttribute("aria-pressed", pattern[l][s]); }));
+}
+
+/* the voice editor: eight parameters, the second row under a line */
+function selectVoice(v) {
+  voice = v;
+  [...$("tabs").children].forEach((b, i) => b.setAttribute("aria-selected", i === v));
+  const names = LxrDrums.paramsOf(v);
+  [$("knobs"), $("knobs2")].forEach((box, row) => {
+    box.innerHTML = "";
+    box.style.setProperty("--vc", `var(--v${v})`);
+    for (let k = row * 4; k < row * 4 + 4; k++) {
+      const d = document.createElement("div"), id = `p${k}`;
+      d.className = "knob";
+      const val = kit().get(v, k), isWave = names[k] === "WAVE";
+      const show = (x) => isWave ? ["SINE", "TRI", "SAW", "SQUARE", "NOISE"][Math.min(4, Math.floor(x * 5 / 128))] : x;
+      d.innerHTML = `<label for="${id}">${names[k]} <b id="${id}v">${show(val)}</b></label><input type="range" id="${id}" min="0" max="127" value="${val}">`;
+      d.querySelector("input").oninput = (e) => {
+        const x = +e.target.value; kit().set(v, k, x); if (drums !== kit()) shown.set(v, k, x);
+        $(id + "v").textContent = show(x);
+      };
+      d.querySelector("input").onchange = () => { if (!playing) hit(LANES.findIndex((_, l) => VOICE_OF_LANE[l] === v)); };
+      box.append(d);
+    }
+  });
+}
+VOICES.forEach((n, v) => {
+  const b = document.createElement("button");
+  b.textContent = n; b.setAttribute("role", "tab"); b.style.setProperty("--c", `var(--v${v})`);
+  b.onclick = () => selectVoice(v);
+  $("tabs").append(b);
+});
+
+/* the sequencer: a look-ahead scheduler (25 ms tick, 100 ms ahead) */
+function tick() {
+  const spb = 60 / +$("bpm").value / 4;
+  while (nextT < ac.currentTime + 0.1) {
+    const s = step % 16, swing = s % 2 ? spb * 0.08 : 0;
+    pattern.forEach((r, l) => { if (r[s]) hit(l, nextT + swing, s % 4 === 0); });
+    const at = nextT;
+    setTimeout(() => playing && paint(s), Math.max(0, (at - ac.currentTime) * 1000));
+    nextT += spb; step++;
+  }
+}
+$("play").onclick = async () => {
+  ensureAudio();
+  if (ac.state === "suspended") await ac.resume();
+  playing = !playing;
+  $("play").textContent = playing ? "■ Stopp" : "▶ Start";
+  if (playing) { step = 0; nextT = ac.currentTime + 0.05; tick(); timer = setInterval(tick, 25); }
+  else { clearInterval(timer); paint(); }
+};
+$("bpm").oninput = (e) => { $("bpmv").textContent = e.target.value; };
+$("kit").onclick = () => { kit().randomize(); if (drums) shown.load(drums.toJSON()); selectVoice(voice); $("kitNote").textContent = "Neues Kit gewürfelt."; };
+$("pat").onclick = () => { pi = (pi + 1) % PATTERNS.length; loadPattern(pi); paint(); };
+
+/* copy and save */
+const src = document.getElementById("lxr-src").textContent.replace(/^\s*\n/, "");
+$("code").textContent = src;
+async function copy(text, note, done) {
+  try { await navigator.clipboard.writeText(text); $(note).textContent = done; }
+  catch { const r = document.createRange(); r.selectNodeContents($("code")); getSelection().removeAllRanges(); getSelection().addRange(r); $(note).textContent = "Kopieren nicht erlaubt: der Code ist markiert, mit Strg/Cmd+C kopieren."; }
+}
+$("copyCode").onclick = () => copy(src, "codeNote", "lxr-drums.js in der Zwischenablage.");
+$("copyKit").onclick = () => copy(JSON.stringify(kit().toJSON()), "kitNote", "Kit als JSON in der Zwischenablage (drums.load(…) lädt es).");
+const crcT = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+function zipOne(name, bytes) {
+  let crc = 0xFFFFFFFF; for (let i = 0; i < bytes.length; i++) crc = crcT[(crc ^ bytes[i]) & 255] ^ (crc >>> 8); crc = (crc ^ 0xFFFFFFFF) >>> 0;
+  const nm = new TextEncoder().encode(name), n = bytes.length, lh = 30 + nm.length, ch = 46 + nm.length;
+  const out = new Uint8Array(lh + n + ch + 22), v = new DataView(out.buffer);
+  v.setUint32(0, 0x04034b50, true); v.setUint16(4, 20, true); v.setUint32(14, crc, true); v.setUint32(18, n, true); v.setUint32(22, n, true);
+  v.setUint16(26, nm.length, true); out.set(nm, 30); out.set(bytes, lh);
+  const c = lh + n; v.setUint32(c, 0x02014b50, true); v.setUint16(c + 4, 20, true); v.setUint16(c + 6, 20, true); v.setUint32(c + 16, crc, true);
+  v.setUint32(c + 20, n, true); v.setUint32(c + 24, n, true); v.setUint16(c + 28, nm.length, true); out.set(nm, c + 46);
+  const e = c + ch; v.setUint32(e, 0x06054b50, true); v.setUint16(e + 8, 1, true); v.setUint16(e + 10, 1, true); v.setUint32(e + 12, ch, true); v.setUint32(e + 16, c, true);
+  return out;
+}
+let dl;
+$("saveCode").onclick = async () => {
+  if (dl === undefined) dl = window.claude?.use ? await window.claude.use("downloads").catch(() => null) : null;
+  if (!dl) { $("codeNote").textContent = "Speichern geht hier nicht: bitte „kopieren“ nutzen."; return; }
+  try { await dl.save({ filename: "lxr-drums.zip", data: new Blob([zipOne("lxr-drums.js", new TextEncoder().encode(src))]) }); $("codeNote").textContent = "lxr-drums.zip gespeichert."; }
+  catch (e) { if (e?.code !== "declined") $("codeNote").textContent = `Speichern nicht möglich (${e?.code || "Fehler"}).`; }
+};
+
+loadPattern(0); paint(); selectVoice(0);
+</script>
