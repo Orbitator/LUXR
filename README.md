@@ -28,7 +28,7 @@ die Karten zeigen die zweite Reihe (B), und viele Bedienelemente bekommen eine z
 | **SCL** | Seite SCALE | | Taste = Grundton |
 | **GLO** | Seite MIXER | (ist SHIFT) | |
 | **FX · ENV · LFO** | ihre Seiten | | |
-| Tasten | spielen die gewählte Spur; im STEP-Editor / bei Step-Aufnahme: Noten an den Cursor | weiße F3–B3: Mute Spur 1–4, C4–F4: Solo | |
+| Tasten | spielen die gewählte Spur; im STEP-Editor / bei Step-Aufnahme: Noten an den Cursor | weiße F3–B3: Mute Spur 1–4, C4–F4: Solo; schwarze: Direktfunktionen (unten) | |
 
 Die Seiten (Reihe A | Reihe B mit SHIFT):
 
@@ -62,6 +62,15 @@ Die Seiten (Reihe A | Reihe B mit SHIFT):
   aufgenommen, auf den nächsten 16tel quantisiert, gehaltene Noten als Ties. **Overdub** fügt hinzu, **Replace** (SHIFT +
   REC) leert jeden Step, den der Durchlauf erreicht. Metronom im Menü.
 - Jede Aufnahme und jeder Eingriff kann rückgängig gemacht werden (SAVE halten; 15 Stufen, SHIFT + SAVE = Redo).
+
+**SHIFT + schwarze Tasten** (GLO länger halten zeigt die Übersicht im Display):
+
+| F#3 | G#3 | A#3 | C#4 | D#4 | F#4 | G#4 | A#4 | C#5 | D#5 | F#5 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Undo | Redo | Copy | Paste | Clear | Note ◂ | Note ▸ | neuer Part | neuer Sound | Metronom an/aus | Tap Tempo |
+
+*Note ◂ / ▸* verschiebt im STEP-Editor die Note am Cursor samt ihren Ties um einen Step, an der Nachbarnote vorbei
+(Drums: den Schlag der gewählten Lane); der Cursor geht mit. Auf anderen Seiten verschiebt es den ganzen Part.
 
 **Werkzeuge (SEQ halten + weiße Taste)**, F3 bis G5: SONG (ONE CLICK), TRACK, SOUND, PART, KEY, COOK, CLEAR, REVERSE,
 SHIFT ◂, SHIFT ▸, RHYTHM, NOTES, OSC, FILTER, ENV, OCTAVE (die letzten sechs erneuern nur diesen Teil, so stark wie

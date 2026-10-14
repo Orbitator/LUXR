@@ -59,6 +59,7 @@ int main(int argc, char **argv)
     { uint32_t ly; static const char *const LN[5] = {"", "seq", "scl", "edit", "type"};
       for (ly = 1; ly < 5; ly++) { ui.layer = (uint8_t)ly; snprintf(n, sizeof n, "layer_%s", LN[ly]); shot(n); }
       ui.layer = 0; }
+    h_held = 1u << B_GLO; h_pressed = h_held; host_run(800, 0, 0); shot("shift_map"); h_held = 0; ui.btn_used |= 1u << B_GLO; host_run(30, 0, 0);
     ui.uboot = 3;
     shot("uboot");
     return 0;

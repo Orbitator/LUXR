@@ -1195,11 +1195,109 @@ static void layer_key(uint32_t k)
             pset(P_TYPE, &trk[t], (int32_t)w);
     }
 }
-static void shift_key(uint32_t k)                /* SHIFT + a white key: F3..B3 mute, C4..F4 solo */
+static int step_input(void);
+/* SHIFT + a black key: direct functions, F#3 .. F#5 */
+enum { SB_UNDO, SB_REDO, SB_COPY, SB_PASTE, SB_CLEAR, SB_LEFT, SB_RIGHT, SB_PART, SB_SOUND, SB_CLICK, SB_TAP, SB_N };
+static const char *const SB_NAME[SB_N] = {"UNDO", "REDO", "COPY", "PASTE", "CLEAR", "NOTE <", "NOTE >", "PART",
+                                          "SOUND", "CLICK", "TAP"};
+static uint32_t tap_t[4], tap_n;
+static void tap_tempo(void)                     /* the beat from the last taps (0.3 .. 1 s apart) */
+{
+    uint32_t now = fm1_ms, d;
+    if (tap_n && (now - tap_t[(tap_n - 1u) % 4u] > 1500u))
+        tap_n = 0;
+    tap_t[tap_n % 4u] = now;
+    tap_n++;
+    if (tap_n >= 2u) {
+        uint32_t n = tap_n > 4u ? 3u : tap_n - 1u;
+        d = (now - tap_t[(tap_n - 1u - n) % 4u]) / n;
+        if (d >= 300u && d <= 1000u)
+            song.bpm = (uint8_t)clamp((int32_t)((60000u + d / 2u) / d), 60, 200);
+    }
+    ui_say("TAP");
+}
+/* NOTE < >: the note at the step cursor with its ties (drums: the lane's hit) one step earlier / later, past its
+ * neighbour (a note with its ties, or a rest); the cursor follows. Away from the step editor: the whole part */
+static void note_move(int32_t dir)
+{
+    track_t *t = TSEL;
+    uint32_t len = clamp(t->len, 1, NSTEP), i = cur_idx(t), L, j, M, k;
+    static step_t blk[NSTEP];
+    if (!step_input() && !on_step()) {
+        undo_burst(0x9000u);
+        rotate_steps(t, dir);
+        ui_say(dir < 0 ? "PART <" : "PART >");
+        return;
+    }
+    undo_burst(0x9100u);
+    if (IS_DRUM(song.sel)) {                     /* the lane's hit swaps places with the neighbour step's */
+        step_t *a = &t->step[i], *b = &t->step[(i + len + (uint32_t)dir) % len];
+        uint8_t m = (uint8_t)(1u << ui.lane), ha = a->hit & m, hb = b->hit & m, aa = a->acc & m, ab = b->acc & m;
+        gen_lock();
+        a->hit = (uint8_t)((a->hit & ~m) | hb); b->hit = (uint8_t)((b->hit & ~m) | ha);
+        a->acc = (uint8_t)((a->acc & ~m) | ab); b->acc = (uint8_t)((b->acc & ~m) | aa);
+        a->time = a->hit ? ST_NOTE : ST_REST; b->time = b->hit ? ST_NOTE : ST_REST;
+        a->vel = a->vel ? a->vel : 100; b->vel = b->vel ? b->vel : 100;
+        gen_unlock();
+        ui.cur = (uint8_t)((i + len + (uint32_t)dir) % len);
+        return;
+    }
+    if (t->step[i].time != ST_NOTE) {
+        ui_say("NO NOTE HERE");
+        return;
+    }
+    L = tie_len(t, i);
+    if (L >= len)
+        return;
+    if (dir > 0) {                               /* the block after it: a note with its ties, or one step */
+        j = (i + L) % len;
+        M = t->step[j].time == ST_NOTE ? tie_len(t, j) : 1u;
+        if (L + M > len) M = len - L;
+        for (k = 0; k < M; k++) blk[k] = t->step[(j + k) % len];
+        for (k = 0; k < L; k++) blk[M + k] = t->step[(i + k) % len];
+        gen_lock();
+        for (k = 0; k < L + M; k++) t->step[(i + k) % len] = blk[k];
+        track_panic(song.sel);
+        gen_unlock();
+        ui.cur = (uint8_t)((i + M) % len);
+    } else {                                     /* the block before it: back over ties to its start */
+        M = 1;
+        while (M < len - L && M < 16u && t->step[(i + len - M) % len].time == ST_TIE)
+            M++;
+        j = (i + len - M) % len;
+        for (k = 0; k < L; k++) blk[k] = t->step[(i + k) % len];
+        for (k = 0; k < M; k++) blk[L + k] = t->step[(j + k) % len];
+        gen_lock();
+        for (k = 0; k < L + M; k++) t->step[(j + k) % len] = blk[k];
+        track_panic(song.sel);
+        gen_unlock();
+        ui.cur = (uint8_t)j;
+    }
+    ui.eu_snap = 0;
+}
+static void shift_key(uint32_t k)                /* SHIFT + a white key: F3..B3 mute, C4..F4 solo; black: SB_* */
 {
     uint32_t w = key_place(k), i;
-    if (key_black(k))
+    if (key_black(k)) {
+        switch (w) {
+        case SB_UNDO: undo_do(0); break;
+        case SB_REDO: undo_do(1); break;
+        case SB_COPY: gen_black(GB_COPY); break;
+        case SB_PASTE: gen_black(GB_PASTE); break;
+        case SB_CLEAR: gen_action(GT_CLEAR); break;
+        case SB_LEFT: note_move(-1); break;
+        case SB_RIGHT: note_move(1); break;
+        case SB_PART: gen_action(GT_PART); break;
+        case SB_SOUND: gen_action(GT_SOUND); break;
+        case SB_CLICK:
+            song.click = (uint8_t)(song.click == CLICK_OFF ? CLICK_ON : CLICK_OFF);
+            ui.menu_dirty = 1;
+            ui_say(song.click ? "CLICK ON" : "CLICK OFF");
+            break;
+        case SB_TAP: tap_tempo(); break;
+        }
         return;
+    }
     if (w < NTRK) {
         trk[w].mute ^= 1u;
         ui_say(trk[w].mute ? "MUTED" : "UNMUTED");
@@ -1537,7 +1635,7 @@ static void ui_leds(void)
         else if (ui.layer == LY_SCL)
             on = (k + 5u) % 12u == song.root;
         else if (ui.shift)
-            on = !key_black(k) && ((w < NTRK && !trk[w].mute) || (w >= NTRK && w < 2u * NTRK));
+            on = key_black(k) ? w < SB_N : (w < NTRK && !trk[w].mute) || (w >= NTRK && w < 2u * NTRK);
         else if (on_step() && IS_DRUM(song.sel)) {   /* the lane's hits in the cursor's bar; the cursor blinks */
             uint32_t i = ci / 16u * 16u + w;
             if (key_black(k))
@@ -2196,11 +2294,29 @@ static void g_layer(void)
         cv_text_fit(x + 13, y + 5, &AF_S, nm[i], on[i], T_RAISE, 42);
     }
 }
+static int shift_map(void)                       /* SHIFT held a while, nothing done with it: its keys shown */
+{
+    return ui.shift && !(ui.btn_used & (1u << B_GLO)) && fm1_ms - ui.btn_t0[B_GLO] >= 600u;
+}
+static void g_shift(void)                        /* the black keys' functions, the white keys' mutes */
+{
+    static const char *const BK[SB_N] = {"F#3", "G#3", "A#3", "C#4", "D#4", "F#4", "G#4", "A#4", "C#5", "D#5", "F#5"};
+    uint32_t i;
+    for (i = 0; i < SB_N; i++) {
+        int32_t x = 6 + (int32_t)(i % 3u) * 77, y = 2 + (int32_t)(i / 3u) * 22;
+        cv_rrect(x, y, 74, 20, 3, T_RAISE, T_SURF);
+        cv_text_on(x + 3, y + 3, &AF_S, BK[i], T_MID, T_RAISE);
+        cv_text_fit(x + 27, y + 3, &AF_S, SB_NAME[i], i == SB_CLICK && song.click ? T_ACCENT : T_TEXT, T_RAISE, 46);
+    }
+    g_label(166, 70, "WHITE:", T_MID);
+    g_label(166, 84, "F-B MUTE", T_TEXT);
+    g_label(166, 98, "C-F SOLO", T_TEXT);
+}
 static uint32_t graph_sig(void)
 {
     const track_t *t = TSEL;
     uint32_t h = ui.page * 7u + ui.sub[ui.page] * 131u + song.sel * 977u + ui.layer * 7919u + t->s.engine * 31u +
-                 song.playing * 3u + ui.ev * 2654435761u + rec.rec_writes * 40503u + ui.shift * 17u, i;
+                 song.playing * 3u + (uint32_t)shift_map() * 999u + ui.ev * 2654435761u + rec.rec_writes * 40503u + ui.shift * 17u, i;
     const uint8_t *p = (const uint8_t *)&t->s;
     for (i = 0; i < sizeof(patch_t); i++)
         h = h * 33u + p[i];
@@ -2228,6 +2344,8 @@ static void draw_graph(int force)
     g_box();
     if (ui.layer) {
         g_layer();
+    } else if (shift_map()) {
+        g_shift();
     } else {
         sp = subs_of(ui.page, t, &ns);
         switch (ui.page) {
