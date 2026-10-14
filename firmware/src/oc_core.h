@@ -26,9 +26,14 @@ static const uint8_t TYPE_ROLE[TY_N] = {ROLE_BASS, ROLE_CHORD, ROLE_CHORD, ROLE_
                                         ROLE_LEAD, ROLE_LEAD, ROLE_LEAD, ROLE_LEAD,
                                         ROLE_DRUM, ROLE_DRUM, ROLE_DRUM, ROLE_DRUM, ROLE_LOOP};
 static const uint8_t TYPE_DEFAULT[NTRK] = {TY_BASS, TY_CHORDS, TY_LEAD, TY_DRUMS, TY_KICK, TY_LOOP};   /* the tracks at power-on */
-enum { E_SUB, E_ACID, E_FM, E_SAW, E_ADD, E_NOISE, E_DRUM, E_SAMPLE, E_N };
-static const char *const ENGINE_NAME[E_N] = {"SUBTRACT", "ACID", "FM", "SUPERSAW", "ADDITIVE", "NOISE", "DRUMS", "SAMPLE"};
+enum { E_SUB, E_ACID, E_FM, E_SAW, E_ADD, E_NOISE, E_DRUM, E_SAMPLE, E_LXR, E_N };
+static const char *const ENGINE_NAME[E_N] = {"SUBTRACT", "ACID", "FM", "SUPERSAW", "ADDITIVE", "NOISE", "DRUMS", "SAMPLE", "LXR"};
 enum { LN_KICK, LN_SNARE, LN_CLAP, LN_HATC, LN_HATO, LN_TOM, LN_RIM, LN_BELL };
+/* LXR (a drum synth in the manner of Sonic Potions' LXR, written anew in fixed point): six voices, each lane plays one */
+enum { LX_DRUM1, LX_DRUM2, LX_DRUM3, LX_SNARE, LX_CYMBAL, LX_HIHAT, LX_N };
+enum { LK_DRUM, LK_SNARE, LK_CYMBAL, LK_HIHAT };
+static const uint8_t LX_KIND[LX_N] = {LK_DRUM, LK_DRUM, LK_DRUM, LK_SNARE, LK_CYMBAL, LK_HIHAT};
+static const uint8_t LX_OF_LANE[8] = {LX_DRUM1, LX_SNARE, LX_SNARE, LX_HIHAT, LX_HIHAT, LX_DRUM2, LX_DRUM3, LX_CYMBAL};
 
 enum { ST_REST, ST_NOTE, ST_TIE };
 #define SF_ACC 1u
@@ -67,6 +72,7 @@ typedef struct {                 /* a sound; values 0..127 unless noted */
     int8_t tune, fine;           /* pitch: semitones -24..24, cents -100..100 */
     uint8_t dual, dmix;          /* DUAL: a second voice per note (DU_*), its level */
     uint8_t smp, sstart;         /* SAMPLE (the kick and loop tracks): the slot (smp_dir), the start (0..127 of its length) */
+    uint8_t lx[6][8];            /* LXR: six voices x eight parameters (oc_synth.c LXR_*) */
 } patch_t;
 enum { DU_OFF, DU_UNISON, DU_OCTUP, DU_FIFTH, DU_OCTDN, DU_N };   /* the second voice: detuned, +12, +7, -12 */
 enum { LD_OFF, LD_CUT, LD_PITCH, LD_AMP, LD_PAN, LD_N };

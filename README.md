@@ -88,6 +88,23 @@ MUTATE es sagt). Schwarze Tasten: COPY, PASTE, DOUBLE (Pattern verdoppeln).
 **Instrument-Typen** (ARP halten + weiße Taste, oder SHIFT + ALGORITHM): Bass, Chords, Pad, Atmo, Piano, Guitar, Lead,
 Pluck, Brass, Flute, Drums, Kick, Snare, Perc, Loop – jede Spur kann jeder Typ sein.
 
+**LXR-Drums (wahlweise)**
+
+Auf Drum- und Kick-Spuren ist neben den eingebauten Drums und dem Sample die Engine **LXR** wählbar (EDIT halten +
+zweite weiße Taste, oder SHIFT + PRESETS): sechs Drum-Stimmen nach der Klangarchitektur der Sonic Potions LXR, hier
+neu in Festkomma geschrieben (kein LXR-Code: dessen Lizenz verbietet kommerzielle Nutzung und verträgt sich nicht mit der
+GPL). EDIT blättert durch die sechs Stimmen, je 8 Parameter (4 + 4 mit SHIFT):
+
+| Stimme (Lanes) | Parameter |
+|---|---|
+| KICK (BD), TOM (TM), PERC (RS) | Pitch, Decay, Pitch-Env, Pitch-Decay, Wave (Sinus, Dreieck, Säge, Rechteck, Rauschen), FM, Click, Drive |
+| SNARE (SD, CP als Clap-Bursts) | Pitch, Decay, Noise, Noise-Decay, Tone, Snap, Click, Drive |
+| CYMBAL (CB) | Pitch, Decay, Ratio, FM, Filter (Hochpass), Reso, Noise, Drive |
+| HIHAT (CH, OH: die geschlossene stoppt die offene) | Pitch, Closed-Decay, Open-Decay, FM, Filter, Noise, Click, Drive |
+
+ENV zeigt bei LXR das Kit (Tune, Decay aller Stimmen, Pegel, Pan, Sends). ONE CLICK würfelt bei gewählter LXR ein neues
+LXR-Kit. Rechenzeit: etwa doppelt so viel wie die eingebauten Drums (tests/cpu_bench.c).
+
 **Kick- und Loop-Spur, Samples**
 
 - Spur 5 (KICK) spielt die Kick: die eingebaute Synth-Kick oder einen One-Shot. Spur 6 (LOOP) spielt einen Loop, in

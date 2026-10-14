@@ -409,10 +409,41 @@ static void sound_sample(patch_t *p, uint32_t slot)   /* the kick's one-shot / t
     p->ddec = 64;
     p->dmix = 100;
 }
+/* an LXR kit: each voice from a few designs (kick: 909-ish boom or a short thud; toms; a rim / zap; a snare with its
+ * noise; a metal cymbal; hats) and their ranges */
+static void lxr_kit(patch_t *p, uint32_t type)
+{
+    static const uint8_t K[6][8][2] = {          /* [voice][param]: lo, hi */
+        {{8, 22}, {40, 80}, {40, 110}, {20, 50}, {0, 0}, {0, 30}, {20, 90}, {0, 60}},       /* DRUM 1: the kick */
+        {{30, 60}, {30, 70}, {20, 70}, {25, 60}, {0, 25}, {0, 40}, {0, 50}, {0, 30}},       /* DRUM 2: toms */
+        {{60, 110}, {5, 35}, {0, 90}, {5, 40}, {0, 127}, {0, 90}, {20, 100}, {0, 70}},      /* DRUM 3: rim, zap, perc */
+        {{30, 80}, {25, 60}, {50, 110}, {40, 80}, {40, 110}, {20, 90}, {10, 70}, {0, 50}},  /* SNARE */
+        {{30, 90}, {50, 95}, {10, 110}, {20, 100}, {30, 100}, {10, 70}, {0, 50}, {0, 40}},  /* CYMBAL */
+        {{50, 110}, {5, 30}, {35, 70}, {10, 90}, {50, 120}, {20, 90}, {0, 50}, {0, 30}},    /* HIHAT */
+    };
+    uint32_t v, k;
+    for (v = 0; v < 6u; v++)
+        for (k = 0; k < 8u; k++)
+            p->lx[v][k] = (uint8_t)rr(K[v][k][0], K[v][k][1]);
+    p->lx[LX_DRUM1][4] = 0;                       /* (the kick: a sine) */
+    if (chance(30))
+        p->lx[LX_DRUM2][4] = 26;                  /* (a triangle tom now and then) */
+    p->engine = E_LXR;
+    p->level = (uint8_t)rr(90, 104);
+    p->rev = (uint8_t)rr(4, 16);
+    p->ddec = 64;
+    p->dmix = 100;
+    p->dtune = (int8_t)(type == TY_KICK ? rr(-4, 4) : 0);
+}
 static void gen_sound_of(track_t *t, uint32_t type)
 {
     patch_t *p = &t->s, old = t->s;
     uint32_t role = TYPE_ROLE[type % TY_N], k;
+    if (old.engine == E_LXR && role == ROLE_DRUM) {   /* the LXR chosen stays: a new kit */
+        memset(p, 0, sizeof *p);
+        lxr_kit(p, type);
+        return;
+    }
     if (type == TY_LOOP || (type == TY_KICK && old.engine == E_SAMPLE)) {   /* the samples assigned stay */
         k = smp_pick(old.engine == E_SAMPLE ? old.smp : 0xFFu, type == TY_LOOP ? SK_LOOP : SK_ONESHOT);
         if (k != 0xFFu || type == TY_LOOP) {
@@ -483,7 +514,7 @@ static void gen_sound_of(track_t *t, uint32_t type)
 /* the engines a role can have (EDIT held: a white key picks one), and a new sound of engine e for track t's type */
 static const uint8_t ROLE_ENGINES[ROLE_N][6] = {
     {E_ACID, E_SUB, E_FM, E_SAW, E_NOISE, 0xFF}, {E_SAW, E_FM, E_ADD, E_SUB, E_NOISE, 0xFF},
-    {E_SUB, E_FM, E_ADD, E_SAW, E_ACID, E_NOISE}, {E_DRUM, E_SAMPLE, 0xFF, 0xFF, 0xFF, 0xFF},
+    {E_SUB, E_FM, E_ADD, E_SAW, E_ACID, E_NOISE}, {E_DRUM, E_LXR, E_SAMPLE, 0xFF, 0xFF, 0xFF},
     {E_SAMPLE, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}};
 static int role_has_engine(uint32_t role, uint32_t e)
 {
@@ -496,6 +527,11 @@ static int role_has_engine(uint32_t role, uint32_t e)
 static void gen_sound_engine_of(track_t *t, uint32_t type, uint32_t e)
 {
     uint32_t n, role = TYPE_ROLE[type % TY_N], ty;
+    if (e == E_LXR && role == ROLE_DRUM) {
+        memset(&t->s, 0, sizeof t->s);
+        lxr_kit(&t->s, type);
+        return;
+    }
     if (e == E_SAMPLE && role_has_engine(role, e)) {   /* a sample: the one assigned, else the first of its kind */
         uint32_t k = smp_pick(t->s.engine == E_SAMPLE ? t->s.smp : 0xFFu, role == ROLE_LOOP ? SK_LOOP : SK_ONESHOT);
         memset(&t->s, 0, sizeof t->s);

@@ -9,7 +9,7 @@ int main(void)
     int32_t o[2 * CTL];
     uint32_t b, s, t, k;
     clock_t c;
-    double typ, worst, synth8, drums8;
+    double typ, worst, synth8, drums8, lxr8;
     host_boot(5);
     host_press(B_PLAY);
     c = clock();
@@ -26,9 +26,18 @@ int main(void)
     for (b = 0; b < 44100u * 10u / CTL; b++) { if (b % 344u == 0u) note_on(3, 0xFF, 120, 0); mix_block(o, CTL); }
     worst = secs(c) / 10.0;
     drums8 = worst - synth8;
+    /* the same with the LXR engine on the drums */
+    memset(dvoice, 0, sizeof dvoice);
+    memset(voice, 0, sizeof voice);   /* (the drums alone: no synth voices) */
+    lxr_kit(&trk[3].s, TY_DRUMS);
+    for (k = 0; k < 6; k++) trk[3].s.lx[k][1] = 127;   /* (all long) */
+    c = clock();
+    for (b = 0; b < 44100u * 10u / CTL; b++) { if (b % 344u == 0u) note_on(3, 0xFF, 120, 0); mix_block(o, CTL); }
+    lxr8 = secs(c) / 10.0;
     printf("per second of audio on this computer: typical song %.2f ms, 8 synth voices %.2f ms, + 8 drum lanes %.2f ms (drums %.2f ms)\n",
            typ * 1000, synth8 * 1000, worst * 1000, drums8 * 1000);
     printf("drum lanes add %.0f %% to the synth worst case; a typical song uses %.0f %% of the worst case\n",
            100.0 * drums8 / synth8, 100.0 * typ / worst);
+    printf("LXR drums, 8 lanes: %.2f ms (%.1f x the built-in drums)\n", lxr8 * 1000, lxr8 / drums8);
     return 0;
 }

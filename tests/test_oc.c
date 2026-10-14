@@ -353,6 +353,28 @@ int main(void)
       ui.mact = 0; host_tap(B_OCTUP); CHECK(!strcmp(ui.msg, "ASSIGNED") && trk[5].s.smp == 1, "SAVE > SAMPLES: ASSIGN (%s)", ui.msg);
       song.sel = 1; host_tap(B_OCTUP); CHECK(!strcmp(ui.msg, "LOOPS: LOOP TRACK"), "a loop not on a synth track");
       ui.page = PG_HOME; }
+    /* LXR on the drum track: EDIT held + the second white key; its six voice pages, both rows; it sounds */
+    { uint32_t vx, row2, cc, l;
+      song.sel = 3; open_page(PG_HOME, 0);
+      host_hold(B_EDIT, 400, white(1)); CHECK(trk[3].s.engine == E_LXR, "EDIT + key: LXR (%u)", trk[3].s.engine);
+      for (vx = 0; vx < LX_N; vx++)
+        for (row2 = 0; row2 < 2; row2++) {
+          open_page(PG_EDIT, vx); if (row2) shift_on();
+          for (cc = 0; cc < 4; cc++) {
+            uint32_t id = knob_id(cc); int32_t b0 = pget(id, TSEL), dir = b0 >= pdesc_of(id, TSEL).max ? -1 : 1;
+            CHECK(id == P_LX0 + cc + 4 * row2, "LXR page %u knob %u: %u", vx, cc, id);
+            turn(EN_K1 + cc, dir); turn(EN_K1 + cc, -dir);
+            CHECK(pget(id, TSEL) == b0, "LXR %s %s: %d -> %d", LX_VNAME[vx], PD[id].label ? pdesc_of(id, TSEL).label : "", b0, pget(id, TSEL));
+          }
+          if (row2) shift_off();
+        }
+      peak = 0;
+      for (l = 0; l < NLANE; l++) { note_on(3, 1u << l, 120, 0); host_run(400, meter, 0); }
+      CHECK(peak > 0.05 && peak < 1.0, "LXR lanes: peak %.3f", peak);
+      host_oneclick(); CHECK(trk[3].s.engine == E_LXR, "ONE CLICK keeps the LXR (a new kit)");
+      host_tap(B_PLAY); peak = 0; host_run(2000, meter, 0); host_tap(B_PLAY);
+      CHECK(peak > 0.05 && peak < 1.0, "LXR song: peak %.3f", peak);
+      open_page(PG_HOME, 0); }
     /* the MENU (HOME held): a row, its value, kept in the store */
     host_hold(B_HOME, 400, 0); CHECK(ui.page == PG_MENU, "HOME held: MENU");
     turn(EN_PRESET, 4); CHECK(MENU_ROWS[ui.menu_row] == P_THEME, "row THEME");

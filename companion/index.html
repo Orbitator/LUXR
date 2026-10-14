@@ -104,7 +104,7 @@
    the sample upload with its answers. Protocol: firmware/src/oc_proto.c. */
 const OC = (() => {
   const TYPE = ["BASS", "CHORDS", "PAD", "ATMO", "PIANO", "GUITAR", "LEAD", "PLUCK", "BRASS", "FLUTE", "DRUMS", "KICK", "SNARE", "PERC", "LOOP"];
-  const ENG = ["SUBTRACT", "ACID", "FM", "SUPERSAW", "ADDITIVE", "NOISE", "DRUMS", "SAMPLE"];
+  const ENG = ["SUBTRACT", "ACID", "FM", "SUPERSAW", "ADDITIVE", "NOISE", "DRUMS", "SAMPLE", "LXR"];
   const isDrum = (ty) => ty >= 10 && ty <= 13, isLoop = (ty) => ty === 14;
   function pack7(bytes) {
     const o = [];

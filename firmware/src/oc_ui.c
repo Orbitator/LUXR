@@ -83,6 +83,7 @@ enum {
     P_DLYT, P_DLYFB, P_RSIZE, P_RDAMP,
     P_LV1, P_LV2, P_LV3, P_LV4, P_LV5, P_LV6, P_PN1, P_PN2, P_PN3, P_PN4, P_PN5, P_PN6,
     P_SMP, P_SSTART, P_MSLOT, P_MACT,
+    P_LX0, P_LX1, P_LX2, P_LX3, P_LX4, P_LX5, P_LX6, P_LX7,   /* LXR: the voice of EDIT's page */
     P_RECMODE, P_CLICK, P_MIDIIN, P_THEME, P_VERSION,
     P_SSLOT, P_GSLOT, P_SACT,
     P_COUNT
@@ -109,6 +110,13 @@ static const char *const N_MIDIIN[] = {"CH 1-6", "SELECTED"};
 static const char *const N_MACT[] = {"ASSIGN", "DELETE", "CLEAR ALL"};
 static const char *N_SMP[NSMP];                  /* the slots' names (smp_names) */
 static char smp_txt[NSMP][14];
+static const char *const LX_VNAME[LX_N] = {"KICK", "TOM", "PERC", "SNARE", "CYMBAL", "HIHAT"};
+static const char *const LX_LABEL[4][8] = {
+    {"PITCH", "DECAY", "P.ENV", "P.DECAY", "WAVE", "FM", "CLICK", "DRIVE"},
+    {"PITCH", "DECAY", "NOISE", "N.DECAY", "TONE", "SNAP", "CLICK", "DRIVE"},
+    {"PITCH", "DECAY", "RATIO", "FM", "FILTER", "RESO", "NOISE", "DRIVE"},
+    {"PITCH", "CLOSED", "OPEN", "FM", "FILTER", "NOISE", "CLICK", "DRIVE"}};
+static const char *const N_LXWAVE[] = {"SINE", "TRI", "SAW", "SQUARE", "NOISE"};
 static const char *const N_SACT[] = {"SAVE", "LOAD"};
 static const char *const N_VERSION[] = {OC_VERSION};
 static const char *const N_RN[7] = {"I", "II", "III", "IV", "V", "VI", "VII"};
@@ -676,6 +684,15 @@ static pdesc_t pdesc_of(uint32_t id, const track_t *t)
         d.max = (int16_t)(smp_slices(t->s.smp) - 1u);
         d.label = "SLICE";
     }
+    if (id >= P_LX0 && id <= P_LX7) {            /* LXR: the voice of EDIT's page */
+        uint32_t vx = ui.sub[PG_EDIT] % LX_N, k2 = id - P_LX0;
+        d.label = LX_LABEL[LX_KIND[vx]][k2];
+        d.fmt = FM_PCT;
+        d.min = 0;
+        d.max = 127;
+        if (LX_KIND[vx] == LK_DRUM && k2 == 4u) { d.fmt = FM_NAME; d.max = 4; d.names = N_LXWAVE; }
+        if (k2 == 0u) d.fmt = FM_NUM;
+    }
     if (id == P_SMP)                             /* the slots' names as they are now */
         for (k = 0; k < NSMP; k++) {
             str_cpy(smp_txt[k], smp_dir[k].used ? smp_dir[k].name : "-", sizeof smp_txt[k]);
@@ -777,6 +794,10 @@ static int32_t pget(uint32_t id, const track_t *t)
     case P_LV1: case P_LV2: case P_LV3: case P_LV4: case P_LV5: case P_LV6: return trk[id - P_LV1].s.level;
     case P_PN1: case P_PN2: case P_PN3: case P_PN4: case P_PN5: case P_PN6: return trk[id - P_PN1].s.pan;
     case P_SMP: return s->smp;
+    case P_LX0: case P_LX1: case P_LX2: case P_LX3: case P_LX4: case P_LX5: case P_LX6: case P_LX7: {
+        uint32_t vx = ui.sub[PG_EDIT] % LX_N, k2 = id - P_LX0, x = s->lx[vx][k2];
+        return LX_KIND[vx] == LK_DRUM && k2 == 4u ? (int32_t)(x * 5u / 128u) : (int32_t)x;
+    }
     case P_SSTART: return s->sstart;
     case P_MSLOT: return ui.mslot;
     case P_MACT: return ui.mact;
@@ -994,6 +1015,11 @@ static void pset(uint32_t id, track_t *t, int32_t v)
         break;
     }
     case P_SSTART: s->sstart = (uint8_t)v; break;
+    case P_LX0: case P_LX1: case P_LX2: case P_LX3: case P_LX4: case P_LX5: case P_LX6: case P_LX7: {
+        uint32_t vx = ui.sub[PG_EDIT] % LX_N, k2 = id - P_LX0;
+        s->lx[vx][k2] = (uint8_t)(LX_KIND[vx] == LK_DRUM && k2 == 4u ? v * 26 : v);
+        break;
+    }
     case P_MSLOT: ui.mslot = (uint8_t)v; break;
     case P_MACT: ui.mact = (uint8_t)v; break;
     case P_RECMODE: song.rec_mode = (uint8_t)v; ui.menu_dirty = 1; break;
@@ -1117,6 +1143,10 @@ static const sub_t SUB_SEQ_DRM[] = {{"STEP", {P_SLANE, P_SHIT, P_SVEL, P_SACC, 0
 static const sub_t SUB_GEN[] = {{"GENERATOR", {P_DENS, P_VAR, P_STYLE, P_RANGE, P_MUT, P_TYPE, 0, 0}}};
 static const sub_t SUB_GLO[] = {{"MIX 1-4", {P_LV1, P_LV2, P_LV3, P_LV4, P_PN1, P_PN2, P_PN3, P_PN4}},
                                 {"MIX 5-6", {P_LV5, P_LV6, 0, 0, P_PN5, P_PN6, 0, 0}}};
+#define LXR_SUB(n) {n, {P_LX0, P_LX1, P_LX2, P_LX3, P_LX4, P_LX5, P_LX6, P_LX7}}
+static const sub_t SUB_LXR[LX_N] = {LXR_SUB("KICK"), LXR_SUB("TOM"), LXR_SUB("PERC"), LXR_SUB("SNARE"), LXR_SUB("CYMBAL"),
+                                    LXR_SUB("HIHAT")};
+static const sub_t SUB_LXKIT[] = {{"LXR KIT", {P_DTUNE, P_DDEC, P_LEVEL, P_PAN, P_DLY, P_REV, 0, 0}}};
 static const sub_t SUB_SMP_KICK[] = {{"SAMPLE", {P_SMP, P_SSTART, P_DTUNE, P_LEVEL, P_CUT, P_RES, 0, 0}}};
 static const sub_t SUB_SMP_LOOP[] = {{"LOOP", {P_SMP, P_LEVEL, P_CUT, P_RES, P_PAN, P_DLY, P_REV, 0}}};
 static const sub_t SUB_SEQ_LOOP[] = {{"STEP", {P_SNOTE, P_SVEL, P_STYPE, P_SACC, 0, 0, 0, 0}},
@@ -1135,6 +1165,7 @@ static const sub_t *subs_of(uint32_t pg, const track_t *t, uint32_t *n)
     case PG_EDIT:
         if (e == E_SAMPLE) return IS_LOOP(trk_i(t)) ? SUB_SMP_LOOP : SUB_SMP_KICK;
         if (IS_LOOP(trk_i(t))) return SUB_SMP_LOOP;
+        if (e == E_LXR) { *n = LX_N; return SUB_LXR; }
         if (drum || e == E_DRUM) return SUB_KIT;
         if (e == E_SUB) { *n = NELEM(SUB_SUB); return SUB_SUB; }
         if (e == E_ACID) { *n = NELEM(SUB_ACID); return SUB_ACID; }
@@ -1143,7 +1174,8 @@ static const sub_t *subs_of(uint32_t pg, const track_t *t, uint32_t *n)
         if (e == E_NOISE) { *n = NELEM(SUB_NOISE); return SUB_NOISE; }
         *n = NELEM(SUB_ADD);
         return SUB_ADD;
-    case PG_ENV: return e == E_SAMPLE || IS_LOOP(trk_i(t)) ? (IS_LOOP(trk_i(t)) ? SUB_SMP_LOOP : SUB_SMP_KICK) : drum ? SUB_KIT : SUB_ENV;
+    case PG_ENV: if (e == E_LXR) return SUB_LXKIT;
+        return e == E_SAMPLE || IS_LOOP(trk_i(t)) ? (IS_LOOP(trk_i(t)) ? SUB_SMP_LOOP : SUB_SMP_KICK) : drum ? SUB_KIT : SUB_ENV;
     case PG_LFO: return SUB_LFO;
     case PG_FX: return SUB_FX;
     case PG_SCL: return SUB_SCL;
@@ -1170,7 +1202,7 @@ static const char *const GT_NAME[GT_N] = {"SONG", "TRACK", "SOUND", "PART", "KEY
                                           "SHIFT <", "SHIFT >", "RHYTHM", "NOTES", "OSC", "FILTER", "ENV", "OCTAVE"};
 enum { GB_COPY, GB_PASTE, GB_DOUBLE, GB_N };      /* the black keys */
 static const char *const GB_NAME[GB_N] = {"COPY", "PASTE", "DOUBLE"};
-static const char *const ENGINE_SHORT[E_N] = {"SUB", "ACID", "FM", "SAW", "ADD", "NOISE", "KIT"};
+static const char *const ENGINE_SHORT[E_N] = {"SUB", "ACID", "FM", "SAW", "ADD", "NOISE", "KIT", "SAMPLE", "LXR"};
 static const char W_NOTE[16] = {'F', 'G', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'A', 'B', 'C', 'D', 'E', 'F', 'G'};
 
 static int key_black(uint32_t k) { return (int)((0x54Au >> ((k + 5u) % 12u)) & 1u); }
@@ -2316,11 +2348,11 @@ static void g_osc(const track_t *t)              /* the engine's pages: what the
         g_label(12, 6, "OP 1 SOUNDS", T_MID);
         return;
     }
-    if (s->engine == E_DRUM) {                   /* the kit: its lanes over the bar */
+    if (s->engine == E_DRUM || s->engine == E_LXR) {   /* the kit: its lanes over the bar (LXR: this page's voice lit) */
         static const char *const LN[NLANE] = {"BD", "SD", "CP", "CH", "OH", "TM", "RS", "CB"};
         uint32_t l, i, cur = song.step % 16u;
         for (l = 0; l < NLANE; l++) {
-            g_label(10, 3 + (int32_t)l * 14, LN[l], T_MID);
+            g_label(10, 3 + (int32_t)l * 14, LN[l], s->engine == E_LXR && ui.page == PG_EDIT && LX_OF_LANE[l] == ui.sub[PG_EDIT] % LX_N ? T_ACCENT : T_MID);
             for (i = 0; i < 16u; i++) {
                 const step_t *st = &t->step[i];
                 int on = st->time == ST_NOTE && ((st->hit >> l) & 1u);

@@ -234,7 +234,7 @@ static void note_on(uint32_t t, uint32_t note, uint32_t vel, uint32_t flags)
         v->ph[1] = b;
         return;
     }
-    if (tr->s.engine == E_DRUM) {
+    if (tr->s.engine == E_DRUM || tr->s.engine == E_LXR) {
         for (i = 0; i < NLANE; i++) {
             if (!((note >> i) & 1u))
                 continue;
@@ -244,6 +244,13 @@ static void note_on(uint32_t t, uint32_t note, uint32_t vel, uint32_t flags)
             voice_start(v, t, 60, vel, (flags >> i) & 1u, i, 0);
             v->gate = 0;                        /* one-shot */
             v->pa[3] = 32767;                   /* (the choke fade's level) */
+            if (tr->s.engine == E_LXR) {        /* LXR: its envelopes from the top */
+                v->pa[0] = 32767;
+                v->pa[1] = 32767;
+                v->pa[2] = 32767;
+                v->pa[4] = 32767;
+                v->pa[5] = 32767;
+            }
         }
         return;
     }
@@ -357,6 +364,122 @@ static inline int32_t svf_lp(voice_t *v, int32_t x, int32_t f, int32_t q)
 }
 
 /* --------------------------------------------------------------- engines --- */
+/* LXR: six drum voices in the manner of the Sonic Potions LXR (its published voice architecture; the code is this
+ * firmware's own, fixed point). Parameters 0..127 (patch lx[voice][k]):
+ *   DRUM 1-3  PITCH DECAY P.ENV P.DECAY WAVE (sine tri saw square noise) FM CLICK DRIVE
+ *   SNARE     PITCH DECAY NOISE N.DECAY TONE (the noise's filter) SNAP CLICK DRIVE
+ *   CYMBAL    PITCH DECAY RATIO FM FILTER (high-pass) RESO NOISE DRIVE
+ *   HIHAT     PITCH CLOSED OPEN FM FILTER NOISE CLICK DRIVE
+ * State in the voice: pa[0] amp, pa[1] pitch env, pa[2] click, pa[3] choke, pa[4] noise env, pa[5] snare tone (Q15) */
+static int32_t lx_k(uint32_t idx)                /* a per-sample decay factor (Q16 taken off) for TIME_MS[idx] to -60 dB */
+{
+    uint32_t ns = TIME_MS[idx & 127u] * 44u + 1u;
+    return clamp((int32_t)(452000u / ns), 1, 65535);
+}
+static inline int32_t lx_dec(int32_t e, int32_t k) { return e - (int32_t)(((uint32_t)e * (uint32_t)k) >> 16); }   /* (e <= 32767) */
+static inline int32_t lx_wave(uint32_t w, uint32_t ph, uint32_t *nz)
+{
+    switch (w) {
+    case 1: { int32_t v = (int32_t)(ph >> 15); return v < 65536 ? v - 32768 : 98303 - v; }
+    case 2: return (int32_t)(ph >> 16) - 32768;
+    case 3: return ph & 0x80000000u ? -26000 : 26000;
+    case 4: return (int32_t)(xrand(nz) >> 17) - 16384;
+    default: return sine(ph);
+    }
+}
+static void lxr_render(voice_t *v, const track_t *tr, int32_t *out, uint32_t n)
+{
+    const patch_t *s = &tr->s;
+    uint32_t lane = v->lane & 7u, vx = LX_OF_LANE[lane], kind = LX_KIND[vx], i;
+    const uint8_t *p = s->lx[vx];
+    int32_t tune = clamp(s->dtune, -24, 24) * 16, gain = (v->vel + (v->acc ? 30 : 0)), drive = 16 + p[7] / 4;
+    /* the decays as TIME_MS indices: drums 6 ms .. 3 s, hats 10 .. 150 ms closed / 50 ms .. 1.5 s open, cymbal 0.4 .. 6 s */
+    int32_t ka = lx_k(kind == LK_HIHAT ? (lane == LN_HATO ? 55u + p[2] * 45u / 127u : 30u + p[1] * 40u / 127u)
+                      : kind == LK_CYMBAL ? 80u + p[1] * 40u / 127u : 25u + p[1] * 85u / 127u);
+    int32_t kp = lx_k(kind == LK_SNARE ? 25u : 15u + p[3] * 60u / 127u), kc = lx_k(12), kn = lx_k(30u + p[3] * 70u / 127u);
+    if (kind == LK_SNARE && kn < ka)             /* (the snare: its body lasts as long as the longer of tone and noise; the
+                                                  * tone's own decay then shapes the tone alone) */
+        ka = kn;
+    int32_t kt = lx_k(25u + p[1] * 85u / 127u);
+    uint32_t inc, minc;
+    int32_t f = 0, q = 50000;
+    if (s->ddec && s->ddec != 64)                /* the kit's DECAY knob: all voices longer / shorter */
+        ka = clamp(ka * 64 / s->ddec, 1, 65535);
+    ka = clamp(ka + tr->k_dec * ka / 48, 1, 65535);
+    switch (kind) {
+    case LK_DRUM: inc = pitch_inc((24 + p[0] * 60 / 127) * 16 + tune); break;
+    case LK_SNARE: inc = pitch_inc((43 + p[0] * 26 / 127) * 16 + tune); break;
+    default: inc = pitch_inc((60 + p[0] * 40 / 127) * 16 + tune); break;
+    }
+    minc = kind == LK_CYMBAL ? (inc >> 6) * (64u + p[2]) : inc * 2u;   /* the modulator: x1 .. x3 (cymbal), x2 */
+    if (kind == LK_SNARE) f = SVF_F[clamp(60 + p[4] * 3 / 2 + tr->k_cut, 0, 255)];
+    if (kind >= LK_CYMBAL) {
+        f = SVF_F[clamp(120 + p[4] + tr->k_cut, 0, 255)];
+        q = 65534 - clamp((kind == LK_CYMBAL ? p[5] : 20) + tr->k_res, 0, 127) * 480;
+    }
+    for (i = 0; i < n; i++) {
+        int32_t a = v->pa[0], y, nz = (int32_t)(xrand(&v->noise) >> 17) - 16384;
+        uint32_t tt = v->t++;
+        if (lane == LN_CLAP && tt < 1323u)       /* the clap: three bursts 10 ms apart, then the tail */
+            a = (tt % 441u) < 160u ? 32767 : 6000;
+        switch (kind) {
+        case LK_DRUM: {
+            uint32_t pi = inc + (inc >> 4) * (uint32_t)((v->pa[1] * p[2]) >> 15);
+            int32_t m = p[5] ? (sine(v->ph[1]) * p[5]) >> 4 : 0;
+            v->ph[1] += minc;
+            v->ph[0] += pi;
+            y = lx_wave(p[4] * 5u / 128u, v->ph[0] + ((uint32_t)m << 10), &v->noise);
+            v->pa[1] = lx_dec(v->pa[1], kp);
+            break;
+        }
+        case LK_SNARE: {
+            int32_t tone, nn;
+            v->ph[0] += inc + (inc >> 3) * (uint32_t)((v->pa[1] * p[5]) >> 15);
+            tone = sine(v->ph[0]);
+            nn = nz * 2 - svf_lp(v, nz * 2, f, 40000);   /* the noise above TONE, its band at TONE a little louder */
+            nn = (nn + v->bp) >> 1;
+            y = (((tone * v->pa[5]) >> 15) * (127 - p[2] / 2) >> 7) + (((nn * v->pa[4]) >> 15) * p[2] >> 6);
+            v->pa[5] = lx_dec(v->pa[5], kt);
+            if (lane == LN_CLAP)
+                y = nn;
+            v->pa[1] = lx_dec(v->pa[1], kp);
+            v->pa[4] = lx_dec(v->pa[4], kn);
+            break;
+        }
+        default: {                               /* metal: three squares, the second and third FM'd, high-passed */
+            int32_t m = (int32_t)((v->ph[1] += minc) >> 31) * 2 - 1, x;
+            uint32_t fm = p[3];
+            v->ph[0] += inc + (uint32_t)(m * (int32_t)(fm << 17));
+            v->ph[2] += (inc >> 6) * 87u + (uint32_t)(m * (int32_t)(fm << 16));
+            x = ((int32_t)(v->ph[0] >> 31) + (int32_t)(v->ph[1] >> 31) + (int32_t)(v->ph[2] >> 31)) * 9000 - 13500;
+            x += (nz * (kind == LK_CYMBAL ? p[6] : p[5])) >> 6;
+            y = x - svf_lp(v, x, f, q);
+            break;
+        }
+        }
+        if (v->pa[2] > 64) {                     /* the click: a short noisy transient */
+            int32_t c = kind == LK_CYMBAL ? 0 : p[6];
+            y += (nz * ((v->pa[2] * c) >> 7)) >> 15;
+            v->pa[2] = lx_dec(v->pa[2], kc);
+        }
+        if (p[7])
+            y = sat((y * drive) >> 4);
+        if (v->stage == 3) {                     /* choked (the closed hat over the open): ~3 ms */
+            v->pa[3] -= 248;
+            if (v->pa[3] <= 0) { v->active = 0; break; }
+            a = (a * v->pa[3]) >> 15;
+        }
+        out[i] += (((y * a) >> 15) * gain) >> 7;
+        v->pa[0] = lx_dec(v->pa[0], ka);
+        if (v->pa[0] < 8 && tt > 1400u) {
+            v->active = 0;
+            break;
+        }
+    }
+    v->amp = v->pa[0];
+}
+
+
 /* one voice, n samples, added to out (Q15 x VOICE_FS / 32768 scale); a0 -> a1 the amplitude ramp (Q15) */
 static void render_voice(voice_t *v, int32_t *out, uint32_t n)
 {
@@ -399,6 +522,10 @@ static void render_voice(voice_t *v, int32_t *out, uint32_t n)
         v->amp = (int32_t)e;
         if (v->stage == 3u && e < 64u)
             v->active = 0;
+        return;
+    }
+    if (s->engine == E_LXR) {
+        lxr_render(v, tr, out, n);
         return;
     }
     if (s->engine == E_DRUM) {                   /* drums keep their own envelopes */
