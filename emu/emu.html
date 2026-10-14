@@ -176,7 +176,7 @@ kbd { font: 11px var(--display); border: 1px solid var(--line); border-bottom-wi
         <button id="xMidi" disabled>MIDI-Datei (4 Takte)</button>
         <button id="xWav" disabled>WAV aufnehmen</button>
       </div>
-      <p class="hint" id="xInfo">MIDI: Format 1, 480 PPQN, ein Track je Spur, Drums auf Kanal 10. WAV: 44,1 kHz Stereo, was gerade erklingt.</p>
+      <p class="hint" id="xInfo">MIDI: Format 1, 480 PPQN, ein Track je Spur, Drums auf Kanal 10. WAV: 44,1 kHz Stereo, was gerade erklingt. In claude.ai kommt die Datei als .zip.</p>
       <p class="hint">Gespeicherte Sounds, Songs und Einstellungen bleiben in diesem Browser (der Flash-Speicher des Geräts).</p>
     </div>
     <div class="card wide">
@@ -460,7 +460,28 @@ function toMidi(s, steps = 64) {
   });
   return new Uint8Array([0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 1, 0, chunks.length, (PPQ >> 8) & 255, PPQ & 255, ...chunks.flat()]);
 }
-function download(name, bytes, type) {
+/* a file to the viewer: in claude.ai through the page's downloads capability (MIDI and WAV are not among the types it
+   saves directly, so they go inside a .zip), opened from disk as a plain download */
+const crcT = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+function zipOne(name, bytes) {   // one stored (uncompressed) entry
+  let crc = 0xFFFFFFFF; for (let i = 0; i < bytes.length; i++) crc = crcT[(crc ^ bytes[i]) & 255] ^ (crc >>> 8); crc = (crc ^ 0xFFFFFFFF) >>> 0;
+  const nm = new TextEncoder().encode(name), n = bytes.length, lh = 30 + nm.length, ch = 46 + nm.length;
+  const out = new Uint8Array(lh + n + ch + 22), v = new DataView(out.buffer);
+  v.setUint32(0, 0x04034b50, true); v.setUint16(4, 20, true); v.setUint32(14, crc, true); v.setUint32(18, n, true); v.setUint32(22, n, true);
+  v.setUint16(26, nm.length, true); out.set(nm, 30); out.set(bytes, lh);
+  const c = lh + n; v.setUint32(c, 0x02014b50, true); v.setUint16(c + 4, 20, true); v.setUint16(c + 6, 20, true); v.setUint32(c + 16, crc, true);
+  v.setUint32(c + 20, n, true); v.setUint32(c + 24, n, true); v.setUint16(c + 28, nm.length, true); out.set(nm, c + 46);
+  const e = c + ch; v.setUint32(e, 0x06054b50, true); v.setUint16(e + 8, 1, true); v.setUint16(e + 10, 1, true); v.setUint32(e + 12, ch, true); v.setUint32(e + 16, c, true);
+  return out;
+}
+let dlCap;
+async function download(name, bytes, type) {
+  if (dlCap === undefined) dlCap = window.claude?.use ? await window.claude.use("downloads").catch(() => null) : null;
+  if (dlCap) {
+    try { await dlCap.save({ filename: name.replace(/\.[a-z0-9]+$/i, ".zip"), data: new Blob([zipOne(name, bytes)]) }); }
+    catch (e) { if (e?.code !== "declined") $("xInfo").textContent = `Speichern nicht möglich (${e?.code || "Fehler"}).`; }
+    return;
+  }
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([bytes], { type })); a.download = name;
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
