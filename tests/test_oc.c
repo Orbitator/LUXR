@@ -212,18 +212,28 @@ int main(void)
       st[4].time = ST_NOTE; st[4].n = 1; st[4].note[0] = 60; st[4].vel = 90; st[5].time = ST_TIE;     /* C4, 2 steps */
       st[6].time = ST_NOTE; st[6].n = 1; st[6].note[0] = 64; st[6].vel = 90;                           /* E4, 1 step */
       gen_unlock(); ui.cur = 4;
-      shift_on(); keys_tap(black(SB_RIGHT), 40); shift_off();
+      shift_on(); keys_tap(black(5 + 1), 40); shift_off();
       CHECK(st[4].time == ST_NOTE && st[4].note[0] == 64 && st[5].time == ST_NOTE && st[5].note[0] == 60 && st[6].time == ST_TIE,
             "NOTE >: E4 C4~ (%u %u %u)", st[4].time, st[5].time, st[6].time);
       CHECK(ui.cur == 5, "cursor follows (%u)", ui.cur);
-      shift_on(); keys_tap(black(SB_LEFT), 40); keys_tap(black(SB_LEFT), 40); shift_off();
+      shift_on(); keys_tap(black(5), 40); keys_tap(black(5), 40); shift_off();
       CHECK(st[3].time == ST_NOTE && st[3].note[0] == 60 && st[4].time == ST_TIE && st[5].time == ST_REST && st[6].note[0] == 64,
             "NOTE < <: C4~ at 4, E4 at 6");
       CHECK(ui.page == PG_SEQ, "SHIFT used: no mixer");
-      shift_on(); for (k = 0; k < 4; k++) { keys_tap(black(SB_TAP), 40); host_run(430, 0, 0); } shift_off();
+      shift_on(); keys_tap(black(7), 40); shift_off();      /* STEP: INSERT at the cursor */
+      CHECK(st[3].time == ST_REST && st[4].time == ST_NOTE && st[4].note[0] == 60, "INSERT");
+      shift_on(); keys_tap(black(8), 40); shift_off();      /* DELETE */
+      CHECK(st[3].time == ST_NOTE && st[3].note[0] == 60, "DELETE");
+      { uint8_t r = song.root; open_page(PG_SCL, 0); shift_on(); keys_tap(black(6), 40); shift_off();   /* SCL: ROOT + */
+        CHECK(song.root == (r + 1u) % 12u, "SCL: ROOT +"); }
+      { patch_t p0 = trk[1].s; open_page(PG_ENV, 0); shift_on(); keys_tap(black(2), 40); shift_off();  /* sound: COPY SD */
+        gen_sound(&trk[1]); shift_on(); keys_tap(black(3), 40); shift_off();
+        CHECK(!memcmp(&p0, &trk[1].s, sizeof p0), "COPY SD / PASTE"); }
+      open_page(PG_HOME, 0);
+      shift_on(); for (k = 0; k < 4; k++) { keys_tap(black(10), 40); host_run(430, 0, 0); } shift_off();
       CHECK(song.bpm >= 115 && song.bpm <= 125, "TAP TEMPO: %u BPM", song.bpm);
-      { uint8_t c0 = song.click; shift_on(); keys_tap(black(SB_CLICK), 40); shift_off(); CHECK(song.click != c0, "CLICK toggles");
-        shift_on(); keys_tap(black(SB_CLICK), 40); shift_off(); }
+      { uint8_t c0 = song.click; shift_on(); keys_tap(black(9), 40); shift_off(); CHECK(song.click != c0, "CLICK toggles");
+        shift_on(); keys_tap(black(9), 40); shift_off(); }
       shift_on(); host_run(800, 0, 0); CHECK(shift_map(), "SHIFT held: the key map"); shift_off(); }
     /* step recording: armed while stopped, a key writes and the cursor moves on */
     open_page(PG_HOME, 0); ui.cur = 0;

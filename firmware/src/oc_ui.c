@@ -1196,10 +1196,96 @@ static void layer_key(uint32_t k)
     }
 }
 static int step_input(void);
-/* SHIFT + a black key: direct functions, F#3 .. F#5 */
-enum { SB_UNDO, SB_REDO, SB_COPY, SB_PASTE, SB_CLEAR, SB_LEFT, SB_RIGHT, SB_PART, SB_SOUND, SB_CLICK, SB_TAP, SB_N };
-static const char *const SB_NAME[SB_N] = {"UNDO", "REDO", "COPY", "PASTE", "CLEAR", "NOTE <", "NOTE >", "PART",
-                                          "SOUND", "CLICK", "TAP"};
+/* SHIFT + a black key: direct functions, F#3 .. F#5. F#3 undo and G#3 redo everywhere; the other nine follow the page
+ * shown (CX_*): the step editor's step tools, the sound pages' sound tools, SCL's harmony, the generator, the mixer */
+enum { A_UNDO, A_REDO, A_COPY, A_PASTE, A_CLEAR, A_NLEFT, A_NRIGHT, A_PART, A_SOUND, A_CLICK, A_TAP,
+       A_SCOPY, A_SPASTE, A_SCLEAR, A_SINS, A_SDEL, A_NOCTD, A_NOCTU,
+       A_REV, A_DOUBLE, A_HALF, A_RHYTHM,
+       A_PCOPY, A_PPASTE, A_OSC, A_FILTER, A_ENV, A_SPREV, A_SNEXT, A_LIVE0,
+       A_KEY, A_PROGP, A_PROGN, A_ROOTD, A_ROOTU, A_SCALEP, A_SCALEN, A_TRD, A_TRU,
+       A_TRACK, A_NOTES, A_OCTAVE, A_COOK, A_STYLEP, A_STYLEN,
+       A_ALLON, A_SOLO, A_MUTE, A_LVLD, A_LVLU, A_PANL, A_PANC, A_PANR, A_N };
+static const char *const A_NAME[A_N] = {
+    "UNDO", "REDO", "COPY", "PASTE", "CLEAR", "PART <", "PART >", "NEW PRT", "NEW SND", "CLICK", "TAP",
+    "COPY ST", "PASTE", "CLR ST", "INSERT", "DELETE", "OCT -", "OCT +",
+    "REVERSE", "DOUBLE", "HALF", "RHYTHM",
+    "COPY SD", "PASTE", "OSC", "FILTER", "ENV", "SND <", "SND >", "LIVE 0",
+    "NEW KEY", "CHORD <", "CHORD >", "ROOT -", "ROOT +", "SCALE <", "SCALE >", "TRANS -", "TRANS +",
+    "TRACK", "NOTES", "OCTAVE", "COOK", "STYLE <", "STYLE >",
+    "ALL ON", "SOLO", "MUTE", "LEVEL -", "LEVEL +", "PAN L", "PAN C", "PAN R"};
+enum { CX_DEF, CX_STEP, CX_SEQ, CX_SOUND, CX_SCL, CX_GEN, CX_MIX, CX_N };
+#define SB_N 11u
+static const uint8_t CX_KEYS[CX_N][SB_N] = {
+    {A_UNDO, A_REDO, A_COPY, A_PASTE, A_CLEAR, A_NLEFT, A_NRIGHT, A_PART, A_SOUND, A_CLICK, A_TAP},
+    {A_UNDO, A_REDO, A_SCOPY, A_SPASTE, A_SCLEAR, A_NLEFT, A_NRIGHT, A_SINS, A_SDEL, A_NOCTD, A_NOCTU},
+    {A_UNDO, A_REDO, A_COPY, A_PASTE, A_CLEAR, A_NLEFT, A_NRIGHT, A_REV, A_DOUBLE, A_HALF, A_RHYTHM},
+    {A_UNDO, A_REDO, A_PCOPY, A_PPASTE, A_SOUND, A_OSC, A_FILTER, A_ENV, A_SPREV, A_SNEXT, A_LIVE0},
+    {A_UNDO, A_REDO, A_KEY, A_PROGP, A_PROGN, A_ROOTD, A_ROOTU, A_SCALEP, A_SCALEN, A_TRD, A_TRU},
+    {A_UNDO, A_REDO, A_PART, A_TRACK, A_SOUND, A_RHYTHM, A_NOTES, A_OCTAVE, A_COOK, A_STYLEP, A_STYLEN},
+    {A_UNDO, A_REDO, A_ALLON, A_SOLO, A_MUTE, A_LVLD, A_LVLU, A_PANL, A_PANC, A_PANR, A_CLICK},
+};
+static uint32_t shift_cx(void)
+{
+    switch (ui.page) {
+    case PG_SEQ: return sub_cur(PG_SEQ) == SQ_STEP ? CX_STEP : CX_SEQ;
+    case PG_EDIT: case PG_ENV: case PG_LFO: case PG_FX: return CX_SOUND;
+    case PG_SCL: return CX_SCL;
+    case PG_GEN: return CX_GEN;
+    case PG_GLO: return CX_MIX;
+    default: return CX_DEF;
+    }
+}
+static void sound_browse(int32_t e)              /* PRESETS: back through the track's sounds, on: a new one */
+{
+    uint32_t t = song.sel;
+    if (!hist.n[t])
+        hist_push(t);
+    else
+        hist.p[t][hist.at[t]] = trk[t].s;       /* (the sound as edited: what turning back returns to) */
+    if (e < 0 && hist.at[t] > 0) {
+        hist.at[t]--;
+        set_patch(&trk[t], &hist.p[t][hist.at[t]]);
+        ui_say("SOUND BEFORE");
+    } else if (e > 0 && hist.at[t] + 1u < hist.n[t]) {
+        hist.at[t]++;
+        set_patch(&trk[t], &hist.p[t][hist.at[t]]);
+        ui_say("SOUND AFTER");
+    } else if (e > 0) {
+        gen_sound(&trk[t]);
+        hist_push(t);
+        ui_say("NEW SOUND");
+    } else {
+        ui_say("FIRST SOUND");
+    }
+    ui.sub[PG_EDIT] = 0;
+}
+static struct { step_t s; uint8_t full, drum; } sclip;      /* COPY ST / PASTE (one step) */
+static struct { patch_t p; uint8_t full, drum; } pclip;     /* COPY SD / PASTE (a sound) */
+static void solo_toggle(uint32_t s)              /* the track alone; again: all back */
+{
+    uint32_t i, solo = !trk[s].mute;
+    for (i = 0; i < NTRK; i++)
+        solo &= i == s || trk[i].mute;
+    for (i = 0; i < NTRK; i++)
+        trk[i].mute = (uint8_t)(solo ? 0u : i != s);
+    ui_say(solo ? "ALL ON" : "SOLO");
+}
+static void step_shift(int ins)                  /* INSERT: the steps from the cursor one later (a rest at it); DELETE */
+{
+    track_t *t = TSEL;
+    uint32_t len = clamp(t->len, 1, NSTEP), i = cur_idx(t);
+    undo_burst(0x9200u);
+    gen_lock();
+    if (ins) {
+        mmove(&t->step[i + 1u], &t->step[i], (len - 1u - i) * sizeof(step_t));
+        memset(&t->step[i], 0, sizeof(step_t));
+    } else {
+        mmove(&t->step[i], &t->step[i + 1u], (len - 1u - i) * sizeof(step_t));
+        memset(&t->step[len - 1u], 0, sizeof(step_t));
+    }
+    track_panic(song.sel);
+    gen_unlock();
+}
 static uint32_t tap_t[4], tap_n;
 static void tap_tempo(void)                     /* the beat from the last taps (0.3 .. 1 s apart) */
 {
@@ -1275,39 +1361,102 @@ static void note_move(int32_t dir)
     }
     ui.eu_snap = 0;
 }
-static void shift_key(uint32_t k)                /* SHIFT + a white key: F3..B3 mute, C4..F4 solo; black: SB_* */
+static void shift_action(uint32_t a)
 {
-    uint32_t w = key_place(k), i;
+    track_t *t = TSEL;
+    step_t *st = cur_step(t);
+    uint32_t k;
+    switch (a) {
+    case A_UNDO: undo_do(0); return;
+    case A_REDO: undo_do(1); return;
+    case A_COPY: gen_black(GB_COPY); return;
+    case A_PASTE: gen_black(GB_PASTE); return;
+    case A_CLEAR: gen_action(GT_CLEAR); return;
+    case A_NLEFT: note_move(-1); return;
+    case A_NRIGHT: note_move(1); return;
+    case A_PART: gen_action(GT_PART); return;
+    case A_SOUND: gen_action(GT_SOUND); return;
+    case A_CLICK:
+        song.click = (uint8_t)(song.click == CLICK_OFF ? CLICK_ON : CLICK_OFF);
+        ui.menu_dirty = 1;
+        ui_say(song.click ? "CLICK ON" : "CLICK OFF");
+        return;
+    case A_TAP: tap_tempo(); return;
+    case A_SCOPY: sclip.s = *st; sclip.full = 1; sclip.drum = (uint8_t)IS_DRUM(song.sel); ui_say("STEP COPIED"); return;
+    case A_SPASTE:
+        if (!sclip.full || sclip.drum != (uint8_t)IS_DRUM(song.sel)) { ui_say("NOTHING TO PASTE"); return; }
+        undo_burst(0x9300u);
+        gen_lock(); *st = sclip.s; gen_unlock();
+        break;
+    case A_SCLEAR: undo_burst(0x9400u); gen_lock(); memset(st, 0, sizeof *st); gen_unlock(); break;
+    case A_SINS: step_shift(1); break;
+    case A_SDEL: step_shift(0); break;
+    case A_NOCTD: case A_NOCTU:
+        if (st->time != ST_NOTE || IS_DRUM(song.sel)) { ui_say("NO NOTE HERE"); return; }
+        undo_burst(0x9500u);
+        gen_lock();
+        for (k = 0; k < st->n && k < 4u; k++)
+            st->note[k] = (uint8_t)clamp(st->note[k] + (a == A_NOCTU ? 12 : -12), 12, 120);
+        gen_unlock();
+        break;
+    case A_REV: gen_action(GT_REV); return;
+    case A_DOUBLE: gen_black(GB_DOUBLE); return;
+    case A_HALF:
+        if (t->len < 2u) return;
+        undo_take();
+        gen_lock(); t->len = (uint8_t)(t->len / 2u); gen_unlock();
+        break;
+    case A_RHYTHM: gen_action(GT_RHYTHM); return;
+    case A_PCOPY: pclip.p = t->s; pclip.full = 1; pclip.drum = (uint8_t)IS_DRUM(song.sel); ui_say("SOUND COPIED"); return;
+    case A_PPASTE:
+        if (!pclip.full || pclip.drum != (uint8_t)IS_DRUM(song.sel)) { ui_say("NOTHING TO PASTE"); return; }
+        undo_take();
+        gen_lock(); track_panic(song.sel); gen_unlock();
+        set_patch(t, &pclip.p);
+        hist_push(song.sel);
+        ui.sub[PG_EDIT] = 0;
+        break;
+    case A_OSC: gen_action(GT_OSC); return;
+    case A_FILTER: gen_action(GT_FILTER); return;
+    case A_ENV: gen_action(GT_ENV); return;
+    case A_SPREV: sound_browse(-1); return;
+    case A_SNEXT: sound_browse(1); return;
+    case A_LIVE0: t->k_cut = t->k_res = t->k_dec = 0; t->k_lvl = 8; break;
+    case A_KEY: gen_action(GT_KEY); return;
+    case A_PROGP: case A_PROGN:
+        pset(P_PROG, t, ((int32_t)song.prog_i + (a == A_PROGN ? 1 : -1) + (int32_t)NELEM(PROGS)) % (int32_t)NELEM(PROGS));
+        break;
+    case A_ROOTD: case A_ROOTU: pset(P_ROOT, t, (song.root + (a == A_ROOTU ? 1u : 11u)) % 12u); say_key("KEY: "); return;
+    case A_SCALEP: case A_SCALEN: pset(P_SCALE, t, (song.scale + (a == A_SCALEN ? 1u : SC_N - 1u)) % SC_N); say_key("KEY: "); return;
+    case A_TRD: case A_TRU: pset(P_TRANSP, t, song.transpose + (a == A_TRU ? 1 : -1)); break;
+    case A_TRACK: gen_action(GT_TRACK); return;
+    case A_NOTES: gen_action(GT_NOTES); return;
+    case A_OCTAVE: gen_action(GT_OCTAVE); return;
+    case A_COOK: gen_action(GT_COOK); return;
+    case A_STYLEP: case A_STYLEN: pset(P_STYLE, t, t->gen_style + (a == A_STYLEN ? 1 : -1)); break;
+    case A_ALLON: for (k = 0; k < NTRK; k++) trk[k].mute = 0; break;
+    case A_SOLO: solo_toggle(song.sel); return;
+    case A_MUTE: t->mute ^= 1u; ui_say(t->mute ? "MUTED" : "UNMUTED"); return;
+    case A_LVLD: case A_LVLU: pset(P_LEVEL, t, t->s.level + (a == A_LVLU ? 8 : -8)); break;
+    case A_PANL: pset(P_PAN, t, -40); break;
+    case A_PANC: pset(P_PAN, t, 0); break;
+    case A_PANR: pset(P_PAN, t, 40); break;
+    }
+    ui_say(A_NAME[a % A_N]);
+}
+static void shift_key(uint32_t k)                /* SHIFT + a white key: F3..B3 mute, C4..F4 solo; black: the page's */
+{
+    uint32_t w = key_place(k);
     if (key_black(k)) {
-        switch (w) {
-        case SB_UNDO: undo_do(0); break;
-        case SB_REDO: undo_do(1); break;
-        case SB_COPY: gen_black(GB_COPY); break;
-        case SB_PASTE: gen_black(GB_PASTE); break;
-        case SB_CLEAR: gen_action(GT_CLEAR); break;
-        case SB_LEFT: note_move(-1); break;
-        case SB_RIGHT: note_move(1); break;
-        case SB_PART: gen_action(GT_PART); break;
-        case SB_SOUND: gen_action(GT_SOUND); break;
-        case SB_CLICK:
-            song.click = (uint8_t)(song.click == CLICK_OFF ? CLICK_ON : CLICK_OFF);
-            ui.menu_dirty = 1;
-            ui_say(song.click ? "CLICK ON" : "CLICK OFF");
-            break;
-        case SB_TAP: tap_tempo(); break;
-        }
+        if (w < SB_N)
+            shift_action(CX_KEYS[shift_cx()][w]);
         return;
     }
     if (w < NTRK) {
         trk[w].mute ^= 1u;
         ui_say(trk[w].mute ? "MUTED" : "UNMUTED");
     } else if (w < 2u * NTRK) {
-        uint32_t s = w - NTRK, solo = !trk[s].mute;
-        for (i = 0; i < NTRK; i++)
-            solo &= i == s || trk[i].mute;
-        for (i = 0; i < NTRK; i++)               /* solo again: all back */
-            trk[i].mute = (uint8_t)(solo ? 0u : i != s);
-        ui_say(solo ? "ALL ON" : "SOLO");
+        solo_toggle(w - NTRK);
     }
 }
 /* the step input: on SEQ > STEP (a key: the cursor's step, no advance), or REC armed while stopped (written, then the
@@ -1539,24 +1688,7 @@ static void ui_input(void)
         } else if (ui.page == PG_SAVE && sub_cur(PG_SAVE) != SV_UNDO) {
             knob_turn(0, e);
         } else {                                 /* the track's sounds: back through them, on: a new one */
-            if (!hist.n[t])
-                hist_push(t);
-            else
-                hist.p[t][hist.at[t]] = trk[t].s;   /* (the sound as edited: what turning back returns to) */
-            if (e < 0 && hist.at[t] > 0) {
-                hist.at[t]--;
-                set_patch(&trk[t], &hist.p[t][hist.at[t]]);
-                ui_say("SOUND BEFORE");
-            } else if (e > 0 && hist.at[t] + 1u < hist.n[t]) {
-                hist.at[t]++;
-                set_patch(&trk[t], &hist.p[t][hist.at[t]]);
-                ui_say("SOUND AFTER");
-            } else if (e > 0) {
-                gen_sound(&trk[t]);
-                hist_push(t);
-                ui_say("NEW SOUND");
-            }
-            ui.sub[PG_EDIT] = 0;
+            sound_browse(e);
         }
     }
     for (k = 0; k < 4u; k++)
@@ -2306,7 +2438,7 @@ static void g_shift(void)                        /* the black keys' functions, t
         int32_t x = 6 + (int32_t)(i % 3u) * 77, y = 2 + (int32_t)(i / 3u) * 22;
         cv_rrect(x, y, 74, 20, 3, T_RAISE, T_SURF);
         cv_text_on(x + 3, y + 3, &AF_S, BK[i], T_MID, T_RAISE);
-        cv_text_fit(x + 27, y + 3, &AF_S, SB_NAME[i], i == SB_CLICK && song.click ? T_ACCENT : T_TEXT, T_RAISE, 46);
+        cv_text_fit(x + 27, y + 3, &AF_S, A_NAME[CX_KEYS[shift_cx()][i]], CX_KEYS[shift_cx()][i] == A_CLICK && song.click ? T_ACCENT : T_TEXT, T_RAISE, 46);
     }
     g_label(166, 70, "WHITE:", T_MID);
     g_label(166, 84, "F-B MUTE", T_TEXT);
