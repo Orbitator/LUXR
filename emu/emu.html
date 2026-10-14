@@ -3,12 +3,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@400;600&family=Instrument+Sans:wght@400;600&display=swap">
 <style>
-/* Layout: the instrument as one slab (screen | controls, buttons, keys), the test bench under it; stacks on phones.
+/* Layout: the instrument as the FM-1 lays it out (left: MASTER, SELECT, PRESETS, ALGORITHM, OCT -/+; the screen; right:
+   KNOB 1-4 and the two button rows; the keys under it), the test bench below; stacks on phones.
    The slab is a physical object and keeps its own colours in both themes; the page around it follows the theme. */
 :root {
   --page: #e9ebef; --ink: #1c1f26; --muted: #5d6472; --line: #cfd3db; --card: #f6f7f9;
   --slab: #23262d; --slab-hi: #2e323b; --silk: #c9ccd4; --silk-dim: #8a8f9b; --cap: #3a3f4a; --cap-hi: #4a505d;
-  --amber: #ffaa28; --key-w: #e7e8ec; --key-b: #15171c; --ok: #2f9e5b; --err: #c7364a;
+  --amber: #ffaa28; --key-w: #e7e8ec; --key-b: #15171c; --ok: #2f9e5b; --err: #c7364a; --rec: #ff4a3c;
   --display: "Martian Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
@@ -18,49 +19,53 @@
 :root[data-theme="dark"] { --page: #121419; --ink: #e6e8ee; --muted: #9aa1ae; --line: #2a2e37; --card: #191c22; color-scheme: dark; }
 
 * { box-sizing: border-box; }
-body { background: var(--page); color: var(--ink); font: 15px/1.5 var(--body); }
-.wrap { max-width: 980px; margin: 0 auto; padding-block: 24px 40px;
+body { background: var(--page); color: var(--ink); font: 15px/1.5 var(--body); margin: 0; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 24px 40px;
         padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
         display: grid; gap: 20px; }
 header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
 h1 { margin: 0; font: 600 clamp(22px, 4vw, 30px)/1.1 var(--display); letter-spacing: -0.5px; text-wrap: balance; }
 h1 em { font-style: normal; color: var(--amber); }
-.lede { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
+.lede { margin: 6px 0 0; color: var(--muted); max-width: 66ch; }
 .power { font: 600 14px var(--display); letter-spacing: .5px; text-transform: uppercase; background: var(--amber); color: #1a1205;
          border: 0; border-radius: 999px; padding: 12px 20px; cursor: pointer; min-height: 44px; }
 .power[aria-pressed="true"] { background: var(--slab-hi); color: var(--silk); box-shadow: inset 0 0 0 1px var(--cap-hi); }
 .power:focus-visible, button:focus-visible, .enc:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
 /* the instrument */
-.slab { background: linear-gradient(180deg, var(--slab-hi), var(--slab) 18%); border-radius: 18px; padding: clamp(12px, 2.5vw, 22px);
+.slab { background: linear-gradient(180deg, var(--slab-hi), var(--slab) 18%); border-radius: 18px; padding: clamp(12px, 2.2vw, 22px);
         box-shadow: 0 18px 40px -18px #0009, inset 0 1px 0 #ffffff14; display: grid; gap: 16px; color: var(--silk); }
-.top { display: grid; grid-template-columns: minmax(0, 280px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.top { display: grid; grid-template-columns: 168px minmax(0, 270px) minmax(0, 1fr); gap: 20px; align-items: start; }
 .bezel { background: #08090b; border-radius: 10px; padding: 10px; box-shadow: inset 0 0 0 1px #000, inset 0 2px 8px #000; }
 canvas#lcd { display: block; width: 100%; max-width: 100%; aspect-ratio: 1; image-rendering: pixelated; border-radius: 3px; background: #0e0e12; }
 .silk { font: 400 10px/1.2 var(--display); letter-spacing: .8px; text-transform: uppercase; color: var(--silk-dim); }
-.controls { display: grid; gap: 14px; min-width: 0; }
+.left { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; justify-items: center; }
+.right { display: grid; gap: 14px; min-width: 0; }
 .encrow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.encbox { display: grid; justify-items: center; gap: 6px; text-align: center; min-width: 0; }
-.enc { width: 54px; height: 54px; border-radius: 50%; position: relative; cursor: ns-resize; touch-action: none;
+.encbox { display: grid; justify-items: center; gap: 5px; text-align: center; min-width: 0; }
+.enc { width: 52px; height: 52px; border-radius: 50%; position: relative; cursor: ns-resize; touch-action: none;
        background: radial-gradient(circle at 35% 30%, #5a606d, #2b2f37 70%); box-shadow: 0 3px 6px #0008, inset 0 1px 0 #ffffff22; }
 .enc::after { content: ""; position: absolute; left: 50%; top: 6px; width: 3px; height: 12px; margin-left: -1.5px; border-radius: 2px;
-              background: var(--silk); transform-origin: 50% 21px; transform: rotate(var(--a, 0deg)); }
-.enc.small { width: 44px; height: 44px; }
-.enc.small::after { top: 5px; height: 10px; transform-origin: 50% 17px; }
-.fn { font: 600 11px/1.2 var(--body); color: var(--amber); }
-.master { display: grid; gap: 6px; }
-.master input { width: 100%; accent-color: var(--amber); }
+              background: var(--silk); transform-origin: 50% 20px; transform: rotate(var(--a, 0deg)); }
+.enc.small { width: 46px; height: 46px; }
+.enc.small::after { top: 5px; height: 10px; transform-origin: 50% 18px; }
+.fn { font: 600 10.5px/1.25 var(--body); color: var(--amber); }
+.fn i { font-style: normal; color: var(--silk-dim); font-weight: 400; display: block; }
+.masterbox { display: grid; justify-items: center; gap: 5px; width: 100%; }
+.masterbox input { width: 100%; accent-color: var(--amber); }
 
-.buttons { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
-.btn { display: grid; gap: 4px; justify-items: center; text-align: center; min-width: 0; }
-.btn button { width: 100%; max-width: 74px; min-height: 40px; border: 0; border-radius: 8px; cursor: pointer; position: relative;
+.btnrow { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.btnrow.two { grid-template-columns: repeat(4, minmax(0, 1fr)) 10px repeat(2, minmax(0, 1fr)); }
+.btn { display: grid; gap: 3px; justify-items: center; text-align: center; min-width: 0; align-content: start; }
+.btn button { width: 100%; max-width: 70px; min-height: 38px; border: 0; border-radius: 8px; cursor: pointer; position: relative;
               background: linear-gradient(180deg, var(--cap-hi), var(--cap)); color: var(--silk); font: 600 10px var(--display);
-              letter-spacing: .6px; box-shadow: 0 2px 0 #0007; touch-action: manipulation; }
+              letter-spacing: .6px; box-shadow: 0 2px 0 #0007; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
 .btn button:active, .btn button.down { transform: translateY(1px); box-shadow: 0 1px 0 #0007; }
 .btn button .led { position: absolute; top: 5px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: #0006; }
 .btn button.lit .led { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
-.btn .fn { min-height: 2.4em; }
-.btn .fn.none { color: var(--silk-dim); font-weight: 400; }
+.btn button.recb.lit .led { background: var(--rec); box-shadow: 0 0 6px var(--rec); }
+.oct { display: flex; gap: 8px; grid-column: 1 / -1; width: 100%; }
+.oct .btn { flex: 1; }
 
 .keys { position: relative; height: 112px; user-select: none; touch-action: none; }
 .key { position: absolute; top: 0; border-radius: 0 0 5px 5px; cursor: pointer; }
@@ -73,15 +78,22 @@ canvas#lcd { display: block; width: 100%; max-width: 100%; aspect-ratio: 1; imag
 .key .kl { position: absolute; left: 0; right: 0; bottom: 20px; text-align: center; font: 9px var(--display); color: #747a86; }
 
 /* the bench */
-.bench { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.bench { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; display: grid; gap: 10px; align-content: start; }
+.card.wide { grid-column: 1 / -1; }
 .card h2 { margin: 0; font: 600 12px var(--display); letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
 dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; font-variant-numeric: tabular-nums; }
 dt { color: var(--muted); }
 dd { margin: 0; font-family: var(--display); font-size: 13px; overflow-wrap: anywhere; }
+.map { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 20px; font-size: 13.5px; }
+.map dl { grid-template-columns: 1fr; gap: 2px; align-content: start; }
+.map dd + dt { margin-top: 8px; }
+.map dt { font: 600 12px var(--display); color: var(--ink); }
+.map dd { font: 13px/1.4 var(--body); color: var(--muted); }
 .row { display: flex; flex-wrap: wrap; gap: 8px; }
 .row button { font: 600 13px var(--body); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--page); color: var(--ink); cursor: pointer; min-height: 40px; }
 .row button:disabled { opacity: .45; cursor: default; }
+.row button.recording { border-color: var(--err); color: var(--err); }
 .log { font: 11px/1.45 var(--display); background: var(--page); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
        height: 132px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
 .log b { color: var(--ink); font-weight: 600; }
@@ -92,13 +104,25 @@ dd { margin: 0; font-family: var(--display); font-size: 13px; overflow-wrap: any
 .hint { margin: 0; color: var(--muted); font-size: 13px; }
 kbd { font: 11px var(--display); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--page); }
 
-@media (max-width: 720px) {
+@media (max-width: 980px) {
+  .top { grid-template-columns: 150px minmax(0, 1fr); }
+  .right { grid-column: 1 / -1; }
+  .bench { grid-template-columns: 1fr 1fr; }
+  .map { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 640px) {
   .top { grid-template-columns: 1fr; }
-  .bezel { max-width: 300px; justify-self: center; width: 100%; }
-  .buttons { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .bench { grid-template-columns: 1fr; }
+  .bezel { max-width: 300px; justify-self: center; width: 100%; grid-row: 1; }
+  .left { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .left .masterbox { grid-column: span 2; }
+  .oct { grid-column: span 2; }
+  .btnrow { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .btnrow.two { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .btnrow.two .gap { display: none; }
+  .bench, .map { grid-template-columns: 1fr; }
   .keys { height: 92px; }
   .key .kl { display: none; }
+  .fn i { display: none; }
 }
 </style>
 
@@ -106,22 +130,22 @@ kbd { font: 11px var(--display); border: 1px solid var(--line); border-bottom-wi
   <header>
     <div>
       <h1>ONE CLICK <em>Emulator</em></h1>
-      <p class="lede">Die Firmware-App des FM-1 als WebAssembly, mit nachgebautem Bedienfeld. Klang, Sequencer, Generator,
-      Display und USB-Protokoll laufen aus demselben C-Code wie auf dem Gerät.</p>
+      <p class="lede">Die Firmware-App des FM-1 als WebAssembly, mit dem Bedienfeld wie am Gerät. Klang, Sequencer, Generator,
+      Display, Speicher und USB-Protokoll laufen aus demselben C-Code wie auf dem Gerät.</p>
     </div>
     <button class="power" id="power" aria-pressed="false">Einschalten</button>
   </header>
 
   <section class="slab" aria-label="FM-1 Bedienfeld">
     <div class="top">
+      <div class="left" id="left"></div>
       <div class="bezel"><canvas id="lcd" width="240" height="240" aria-label="Display"></canvas></div>
-      <div class="controls">
-        <div class="encrow" id="encTop"></div>
+      <div class="right">
         <div class="encrow" id="encKnobs"></div>
-        <label class="master"><span class="silk">Master</span><input id="master" type="range" min="0" max="1023" value="760"></label>
+        <div class="btnrow" id="row1"></div>
+        <div class="btnrow two" id="row2"></div>
       </div>
     </div>
-    <div class="buttons" id="buttons"></div>
     <div class="keys" id="keys" aria-label="Tastatur F3 bis G5"></div>
   </section>
 
@@ -133,20 +157,49 @@ kbd { font: 11px var(--display); border: 1px solid var(--line); border-bottom-wi
         <dt>Song</dt><dd id="sSong">–</dd>
         <dt>Tracks</dt><dd id="sTracks">–</dd>
         <dt>Takt / Step</dt><dd id="sStep">–</dd>
+        <dt>Aufnahme</dt><dd id="sRec">–</dd>
         <dt>Stimmen</dt><dd id="sVoices">–</dd>
       </dl>
-      <p class="hint">Computer-Tastatur: <kbd>A</kbd>–<kbd>L</kbd> mit <kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd> <kbd>Y</kbd> <kbd>U</kbd> <kbd>O</kbd> spielen ab C4,
-      <kbd>Leertaste</kbd> Play, <kbd>Enter</kbd> ONE CLICK, <kbd>1</kbd>–<kbd>4</kbd> Track, <kbd>Z</kbd> Undo. Drehregler: ziehen, Mausrad oder Pfeiltasten.</p>
     </div>
     <div class="card">
       <h2>USB · Companion-Protokoll</h2>
       <div class="row">
         <button id="uDump" disabled>Dump anfordern</button>
         <button id="uOne" disabled>ONE CLICK per SysEx</button>
-        <button id="uLead" disabled>Lead neu (02 02)</button>
+        <button id="uLead" disabled>Lead neu</button>
       </div>
       <div class="log" id="log" aria-live="polite">Die Knöpfe senden dieselben SysEx-Rahmen wie die Companion-App an den virtuellen USB-Anschluss.</div>
-      <p class="hint">Nicht simuliert: der JieLi-Prozessor und seine Rechenzeit, Booten, Update, UBOOT, Flash.</p>
+    </div>
+    <div class="card">
+      <h2>Export</h2>
+      <div class="row">
+        <button id="xMidi" disabled>MIDI-Datei (4 Takte)</button>
+        <button id="xWav" disabled>WAV aufnehmen</button>
+      </div>
+      <p class="hint" id="xInfo">MIDI: Format 1, 480 PPQN, ein Track je Spur, Drums auf Kanal 10. WAV: 44,1 kHz Stereo, was gerade erklingt.</p>
+      <p class="hint">Gespeicherte Sounds, Songs und Einstellungen bleiben in diesem Browser (der Flash-Speicher des Geräts).</p>
+    </div>
+    <div class="card wide">
+      <h2>Bedienung</h2>
+      <div class="map">
+        <dl>
+          <dt>SHIFT</dt><dd>GLO halten (<kbd>⇧</kbd>): die zweite Reihe der Knöpfe, ALGORITHM = Instrument-Typ, PRESETS = Engine, SELECT = Swing, OCT ± = Transponieren, PLAY = von vorn, REC = Overdub/Replace, SAVE = Redo, weiße Tasten F3–B3 Mute, C4–F4 Solo</dd>
+          <dt>REC</dt><dd>tippen (<kbd>R</kbd>): Aufnahme scharf — läuft: live in die gewählte Spur; gestoppt: Step-Aufnahme am Cursor. Halten (<kbd>Enter</kbd>): ONE CLICK</dd>
+          <dt>SEQ</dt><dd>STEP-Editor (PRESETS = Cursor, Tasten = Noten/Akkord, Drums: weiße Tasten = Steps, schwarze = Lane), EUCLID, SEQUENCE. Halten + Taste: Werkzeuge (SONG … OCTAVE, schwarz: COPY PASTE DOUBLE)</dd>
+        </dl>
+        <dl>
+          <dt>HOME</dt><dd>Live-Cutoff, Reso, Decay, Pegel · B: Pitch, Fine, Oktave, Transpose. Halten: MENÜ (Transpose, Rec-Modus, Klick, MIDI IN, Theme, Swing)</dd>
+          <dt>EDIT</dt><dd>die Seiten der Engine, FILTER (B: Filter-ADSR), VOICE (Mono, Glide, Dual). Halten + Taste: Engine</dd>
+          <dt>ENV · LFO</dt><dd>Amp-ADSR (B: Filter-ADSR) · Rate, Tiefe, Ziel, Welle</dd>
+        </dl>
+        <dl>
+          <dt>FX · SCL</dt><dd>Pegel, Pan, Delay, Hall (B: Delayzeit, Feedback, Hallgröße, Dämpfung) · Grundton, Skala, Akkorde (halten + Taste: Grundton)</dd>
+          <dt>ARP</dt><dd>Generator: Dichte, Variation, Stil, Lage (B: Mutate, Typ). Halten + weiße Taste: Instrument-Typ</dd>
+          <dt>SAVE</dt><dd>16 Sound- und 4 Song-Plätze, Undo-Seite; OCT+ führt aus, OCT− zurück. Halten (<kbd>Z</kbd>): Undo</dd>
+        </dl>
+      </div>
+      <p class="hint">Computer-Tastatur: <kbd>A</kbd>–<kbd>L</kbd> mit <kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd> <kbd>Y</kbd> <kbd>U</kbd> <kbd>O</kbd> spielen ab C4,
+      <kbd>Leertaste</kbd> Play, <kbd>1</kbd>–<kbd>4</kbd> Track. Drehregler: ziehen, Mausrad oder Pfeiltasten. Nicht simuliert: der JieLi-Prozessor und seine Rechenzeit, Booten, Update, UBOOT.</p>
     </div>
   </section>
 </div>
@@ -154,38 +207,47 @@ kbd { font: 11px var(--display); border: 1px solid var(--line); border-bottom-wi
 <script>
 "use strict";
 const WASM_B64 = "@WASM@";
-const BTN = [ // B_* in firmware order: [silk label, function]
-  ["FX", "Swing"], ["SCL", "Neue Tonart"], ["ENV", ""], ["LFO", ""], ["EDIT", "Sound neu"], ["GLO", "Mute"], ["HOME", "Undo"],
-  ["SAVE", ""], ["ARP", "Track neu"], ["SEQ", "Pattern neu"], ["PLAY", "Start/Stop"], ["REC", "ONE CLICK"], ["OCT−", "Oktave"], ["OCT+", "Oktave"]];
-const ORDER = [11, 10, 4, 8, 9, 1, 6, 5, 0, 12, 13, 2, 3, 7];   // how the buttons sit on the page: the important ones first
-const ENC = [["SELECT", "Tempo"], ["ALGORITHM", "Track"], ["PRESETS", "Track"], ["KNOB 1", "Cutoff"], ["KNOB 2", "Resonanz"], ["KNOB 3", "Decay"], ["KNOB 4", "Pegel"]];
-const ENG = ["SUBTRACT", "ACID", "FM", "SUPERSAW", "ADDITIVE", "DRUMS"], ROLE = ["Bass", "Akkorde", "Lead", "Drums"];
+const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, ARP: 8, SEQ: 9, PLAY: 10, REC: 11, OCTDN: 12, OCTUP: 13 };
+const BTN = [ // B_* in firmware order: [silk, tap, hold]
+  ["FX", "Effekte", ""], ["SCL", "Tonart", "Grundton"], ["ENV", "Hüllkurven", ""], ["LFO", "LFO", ""], ["EDIT", "Engine", "Engine wählen"],
+  ["GLO", "Mixer", "SHIFT"], ["HOME", "Home", "Menü"], ["SAVE", "Speichern", "Undo"], ["ARP", "Generator", "Typ"], ["SEQ", "Step · Euclid", "Werkzeuge"],
+  ["PLAY", "Start/Stop", ""], ["REC", "Aufnahme", "ONE CLICK"], ["OCT−", "Oktave", ""], ["OCT+", "Oktave", ""]];
+const ROW1 = [B.FX, B.SCL, B.ENV, B.LFO, B.EDIT, B.GLO], ROW2 = [B.HOME, B.SAVE, B.ARP, B.SEQ, -1, B.PLAY, B.REC];
+const ENC = [["SELECT", "Tempo"], ["ALGORITHM", "Track"], ["PRESETS", "Sound · Cursor"], ["KNOB 1", ""], ["KNOB 2", ""], ["KNOB 3", ""], ["KNOB 4", ""]];
+const ENG = ["SUBTRACT", "ACID", "FM", "SUPERSAW", "ADDITIVE", "NOISE", "DRUMS"];
+const TYPE = ["BASS", "CHORDS", "PAD", "ATMO", "PIANO", "GUITAR", "LEAD", "PLUCK", "BRASS", "FLUTE", "DRUMS", "KICK", "SNARE", "PERC"];
 const NOTE = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const SCALE = ["Moll", "Dorisch", "Dur", "Mixolydisch", "Harm. Moll", "Phrygisch"];
 const $ = (id) => document.getElementById(id);
 const wasmBytes = Uint8Array.from(atob(WASM_B64), (c) => c.charCodeAt(0));
+const STORE_KEY = "oneclick-fm1-store";
+function storeLoad() { try { const s = localStorage.getItem(STORE_KEY); return s ? Uint8Array.from(atob(s), (c) => c.charCodeAt(0)) : null; } catch { return null; } }
+function storeSave(d) { try { let s = ""; for (let i = 0; i < d.length; i += 8192) s += String.fromCharCode(...d.subarray(i, i + 8192)); localStorage.setItem(STORE_KEY, btoa(s)); } catch {} }
 
 /* ---------------------------------------------------------------- worklet --- */
 const WORKLET = `
 function stateOf(ex) {
   return { playing: ex.emu_playing(), step: ex.emu_step(), voices: ex.emu_voices(), dvoices: ex.emu_dvoices(), cuts: ex.emu_cuts(), sel: ex.emu_sel(), bpm: ex.emu_bpm(),
-           root: ex.emu_root(), scale: ex.emu_scale(), eng: [0, 1, 2, 3].map((t) => ex.emu_engine(t)),
-           mute: [0, 1, 2, 3].map((t) => ex.emu_muted(t)) };
+           root: ex.emu_root(), scale: ex.emu_scale(), eng: [0, 1, 2, 3].map((t) => ex.emu_engine(t)), type: [0, 1, 2, 3].map((t) => ex.emu_type(t)),
+           mute: [0, 1, 2, 3].map((t) => ex.emu_muted(t)), rec: ex.emu_rec() };
 }
 class OneClick extends AudioWorkletProcessor {
   constructor() {
-    super(); this.ex = null; this.q = []; this.nextOk = 0; this.t = 0; this.last = 0;
+    super(); this.ex = null; this.q = []; this.nextOk = 0; this.t = 0; this.last = 0; this.sg = 0; this.wav = null;
     this.port.onmessage = (e) => this.msg(e.data);
   }
   async msg(m) {
     if (m.type === "load") {
       const { instance } = await WebAssembly.instantiate(m.wasm, {});
-      this.ex = instance.exports; this.ex.emu_master(m.master); this.ex.emu_init(m.seed);
+      this.ex = instance.exports;
+      if (m.store) new Uint8Array(this.ex.memory.buffer, this.ex.emu_store(), this.ex.emu_store_len()).set(m.store.subarray(0, this.ex.emu_store_len()));
+      this.ex.emu_master(m.master); this.ex.emu_init(m.seed); this.sg = this.ex.emu_store_gen();
       this.port.postMessage({ type: "ready" });
     } else if (!this.ex) return;
     else if (m.type === "btn" || m.type === "keys") this.q.push(m);
     else if (m.type === "enc") this.ex.emu_enc(m.role, m.n);
     else if (m.type === "master") this.ex.emu_master(m.v);
+    else if (m.type === "wav") this.wav = m.on ? [] : (this.wav && this.port.postMessage({ type: "wav", chunks: this.wav }), null);
     else if (m.type === "sysex") {
       new Uint8Array(this.ex.memory.buffer, this.ex.emu_in_buf(), m.data.length).set(m.data);
       this.port.postMessage({ type: "taken", ours: this.ex.emu_sysex(m.data.length) });
@@ -202,6 +264,7 @@ class OneClick extends AudioWorkletProcessor {
     ex.emu_render(L.length);
     L.set(new Float32Array(ex.memory.buffer, ex.emu_out_l(), L.length));
     R.set(new Float32Array(ex.memory.buffer, ex.emu_out_r(), L.length));
+    if (this.wav) { const c = new Float32Array(L.length * 2); for (let i = 0; i < L.length; i++) { c[2 * i] = L[i]; c[2 * i + 1] = R[i]; } this.wav.push(c); }
     this.t += L.length;
     const n = ex.emu_out_take();
     if (n) this.port.postMessage({ type: "sysex", data: new Uint8Array(ex.memory.buffer, ex.emu_out_buf(), n).slice() });
@@ -210,6 +273,7 @@ class OneClick extends AudioWorkletProcessor {
       const m = { type: "frame", btn: new Uint8Array(ex.memory.buffer, ex.emu_leds_btn(), 14).slice(),
                   key: new Uint8Array(ex.memory.buffer, ex.emu_leds_key(), 27).slice(), st: stateOf(ex) };
       if (ex.emu_dirty()) m.screen = new Uint16Array(ex.memory.buffer, ex.emu_screen(), 57600).slice();
+      if (ex.emu_store_gen() !== this.sg) { this.sg = ex.emu_store_gen(); m.store = new Uint8Array(ex.memory.buffer, ex.emu_store(), ex.emu_store_len()).slice(); }
       this.port.postMessage(m);
     }
     return true;
@@ -230,27 +294,30 @@ function drawScreen(px) {   // RGB565, big endian as the panel takes it
 
 let node = null, ac = null, held = 0, keys = 0, kbKeys = 0, sel = 0;
 const send = (m) => { if (node) node.port.postMessage(m); };
+const setHeld = (b, on) => { held = on ? held | (1 << b) : held & ~(1 << b); btnEls[b]?.classList.toggle("down", on); send({ type: "btn", held }); };
+function holdFor(b, ms) { setHeld(b, true); setTimeout(() => setHeld(b, false), ms); }   // a hold (ONE CLICK, undo)
 
 const btnEls = [];
-for (const b of ORDER) {
-  const [silk, fn] = BTN[b], box = document.createElement("div"), el = document.createElement("button");
+function makeButton(b, parent) {
+  if (b < 0) { const gap = document.createElement("div"); gap.className = "gap"; parent.append(gap); return; }
+  const [silk, tap, hold] = BTN[b], box = document.createElement("div"), el = document.createElement("button");
   box.className = "btn";
   el.innerHTML = `<span class="led"></span>${silk}`;
-  el.setAttribute("aria-label", fn ? `${silk}: ${fn}` : silk);
-  const down = (e) => { e.preventDefault(); el.setPointerCapture?.(e.pointerId); el.classList.add("down"); held |= 1 << b; send({ type: "btn", held }); };
-  const up = () => { el.classList.remove("down"); if (!(held & (1 << b))) return; held &= ~(1 << b); send({ type: "btn", held }); };
+  if (b === B.REC) el.classList.add("recb");
+  el.setAttribute("aria-label", hold ? `${silk}: ${tap}, halten: ${hold}` : `${silk}: ${tap}`);
+  const down = (e) => { e.preventDefault(); el.setPointerCapture?.(e.pointerId); setHeld(b, true); };
+  const up = () => { if (held & (1 << b)) setHeld(b, false); };
   el.addEventListener("pointerdown", down); el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
-  el.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); e.stopPropagation(); if (!e.repeat) { held |= 1 << b; send({ type: "btn", held }); } } });
+  el.addEventListener("contextmenu", (e) => e.preventDefault());
+  el.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); e.stopPropagation(); if (!e.repeat) setHeld(b, true); } });
   el.addEventListener("keyup", (e) => { if (e.key === " " || e.key === "Enter") { e.stopPropagation(); up(); } });
-  const f = document.createElement("span"); f.className = "fn" + (fn ? "" : " none"); f.textContent = fn || "–";
-  box.append(el, f); $("buttons").append(box); btnEls[b] = el;
+  const f = document.createElement("span"); f.className = "fn"; f.innerHTML = tap + (hold ? `<i>halten: ${hold}</i>` : "");
+  box.append(el, f); parent.append(box); btnEls[b] = el;
 }
-function pressMomentary(b) { held |= 1 << b; send({ type: "btn", held }); held &= ~(1 << b); send({ type: "btn", held }); }
-
-ENC.forEach(([silk, fn], role) => {
-  const box = document.createElement("div"), k = document.createElement("div");
+function makeEnc(role, parent) {
+  const [silk, fn] = ENC[role], box = document.createElement("div"), k = document.createElement("div");
   box.className = "encbox"; k.className = "enc" + (role >= 3 ? " small" : ""); k.tabIndex = 0;
-  k.setAttribute("role", "slider"); k.setAttribute("aria-label", `${silk} (${fn})`);
+  k.setAttribute("role", "slider"); k.setAttribute("aria-label", fn ? `${silk} (${fn})` : silk);
   let ang = 0, y0 = 0, acc = 0;
   const turn = (n) => { if (!n) return; ang += n * 18; k.style.setProperty("--a", ang + "deg"); send({ type: "enc", role, n }); };
   k.addEventListener("pointerdown", (e) => { k.setPointerCapture(e.pointerId); y0 = e.clientY; acc = 0; });
@@ -258,9 +325,21 @@ ENC.forEach(([silk, fn], role) => {
   k.addEventListener("wheel", (e) => { e.preventDefault(); turn(e.deltaY < 0 ? 1 : -1); }, { passive: false });
   k.addEventListener("keydown", (e) => { const n = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1 }[e.key]; if (n) { e.preventDefault(); e.stopPropagation(); turn(n); } });
   box.innerHTML = `<span class="silk">${silk}</span>`; box.append(k);
-  const f = document.createElement("span"); f.className = "fn"; f.textContent = fn; box.append(f);
-  (role < 3 ? $("encTop") : $("encKnobs")).append(box);
-});
+  if (fn) { const f = document.createElement("span"); f.className = "fn"; f.textContent = fn; box.append(f); }
+  parent.append(box);
+}
+(function buildPanel() {
+  const left = $("left");
+  const mb = document.createElement("label"); mb.className = "masterbox";
+  mb.innerHTML = `<span class="silk">Master</span><input id="master" type="range" min="0" max="1023" value="760"><span class="fn">Lautstärke</span>`;
+  left.append(mb);
+  makeEnc(0, left); makeEnc(2, left); makeEnc(1, left);
+  const oct = document.createElement("div"); oct.className = "oct"; left.append(oct);
+  makeButton(B.OCTDN, oct); makeButton(B.OCTUP, oct);
+  for (let r = 3; r < 7; r++) makeEnc(r, $("encKnobs"));
+  ROW1.forEach((b) => makeButton(b, $("row1")));
+  ROW2.forEach((b) => makeButton(b, $("row2")));
+})();
 $("master").addEventListener("input", (e) => send({ type: "master", v: +e.target.value }));
 
 /* the keys: 27 from F3, 16 of them white */
@@ -288,62 +367,151 @@ function setKeys() {
   box.addEventListener("pointerup", end); box.addEventListener("pointercancel", end);
 })();
 
-/* the computer keyboard */
+/* the computer keyboard: notes from C4, Shift = SHIFT (GLO held), Space PLAY, R REC, Enter ONE CLICK, Z undo */
 const KB = { a: 7, w: 8, s: 9, e: 10, d: 11, f: 12, t: 13, g: 14, y: 15, h: 16, u: 17, j: 18, k: 19, o: 20, l: 21 };
 document.addEventListener("keydown", (e) => {
   if (e.target.closest("input, .enc") || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.target.closest("button") && (e.key === " " || e.key === "Enter")) return;   /* (that button's own press) */
   const c = e.key.toLowerCase();
+  if (e.key === "Shift") { if (!e.repeat) setHeld(B.GLO, true); return; }
   if (c in KB) { e.preventDefault(); if (!e.repeat) { kbKeys |= 1 << KB[c]; setKeys(); } return; }
   if (e.repeat) return;
-  if (e.key === " ") { e.preventDefault(); pressMomentary(10); }
-  else if (e.key === "Enter") { e.preventDefault(); pressMomentary(11); }
-  else if (c === "z") pressMomentary(6);
+  if (e.key === " ") { e.preventDefault(); holdFor(B.PLAY, 60); }
+  else if (e.key === "Enter") { e.preventDefault(); holdFor(B.REC, 450); }
+  else if (c === "r") holdFor(B.REC, 60);
+  else if (c === "z") holdFor(B.SAVE, 450);
   else if (c >= "1" && c <= "4") send({ type: "enc", role: 1, n: (+c - 1) - sel });
 });
-document.addEventListener("keyup", (e) => { if (e.target.closest("input, .enc")) return; const c = e.key.toLowerCase(); if (c in KB) { kbKeys &= ~(1 << KB[c]); setKeys(); } });
+document.addEventListener("keyup", (e) => {
+  if (e.key === "Shift") { setHeld(B.GLO, false); return; }
+  if (e.target.closest("input, .enc")) return;
+  const c = e.key.toLowerCase(); if (c in KB) { kbKeys &= ~(1 << KB[c]); setKeys(); }
+});
+window.addEventListener("blur", () => { if (held & (1 << B.GLO)) setHeld(B.GLO, false); });
 
 /* -------------------------------------------------------------- the bench --- */
 function showState(st) {
   sel = st.sel;
   $("sSong").textContent = `${NOTE[st.root % 12]} ${SCALE[st.scale] || "?"} · ${st.bpm} BPM`;
-  $("sTracks").textContent = st.eng.map((e, t) => `${t === st.sel ? "▸ " : ""}${ROLE[t]} ${ENG[e] || "?"}${st.mute[t] ? " (stumm)" : ""}`).join(" · ");
+  $("sTracks").textContent = st.eng.map((e, t) => `${t === st.sel ? "▸ " : ""}${TYPE[st.type?.[t]] ?? "?"} ${ENG[e] || "?"}${st.mute[t] ? " (stumm)" : ""}`).join(" · ");
   $("sStep").textContent = st.playing ? `Takt ${Math.floor(st.step / 16) % 4 + 1}, Step ${st.step % 16 + 1}` : "gestoppt";
-  $("sVoices").textContent = `Synth ${st.voices} von 8 · Drums ${st.dvoices ?? 0} von 8 · ${st.cuts ?? 0} hörbare Abschnitte`;
+  $("sRec").textContent = !st.rec ? "aus" : `${st.rec === 2 ? "Replace" : "Overdub"}, ${st.playing ? "live" : "Step-Eingabe"}`;
+  $("sVoices").textContent = `Synth ${st.voices} von 8 · Drums ${st.dvoices ?? 0} · ${st.cuts ?? 0} hörbare Abschnitte`;
 }
 const logEl = $("log");
 function log(html) { logEl.innerHTML += "\n" + html; logEl.scrollTop = logEl.scrollHeight; }
 const hex = (a, max = 18) => Array.from(a.slice(0, max), (v) => v.toString(16).padStart(2, "0")).join(" ") + (a.length > max ? ` … (${a.length} B)` : "");
 function unpack7(d) { const o = []; for (let i = 0; i < d.length;) { const hi = d[i++]; for (let k = 0; k < 7 && i < d.length; k++) o.push(d[i++] | (((hi >> k) & 1) << 7)); } return o; }
 function sendSysex(body, what) { log(`<b>→ ${what}</b>  F0 ${hex(body)} F7`); send({ type: "sysex", data: Uint8Array.from(body) }); }
+
+/* the dump (11): the song as the device has it; MIDI export from it */
+function parseDump(raw) {
+  if (raw[0] !== 1) return null;
+  const ps = raw[1], ss = raw[2]; let n = 3;
+  const s = { root: raw[n++], scale: raw[n++], prog: raw.slice(n, n + 4), bpm: raw[n + 4], playing: raw[n + 5], tracks: [] };
+  n += 6;
+  for (let t = 0; t < 4; t++) {
+    const patch = raw.slice(n, n + ps); n += ps;
+    const len = raw[n++], gate = raw[n++], steps = [];
+    for (let i = 0; i < 64; i++, n += ss) { const b = raw.slice(n, n + ss); steps.push({ note: b.slice(0, 4), n: b[4], time: b[5], flags: b[6], vel: b[7], hit: b[8], acc: b[9] }); }
+    s.tracks.push({ engine: patch[0], len, gate, steps, type: 0, octave: 0 });
+  }
+  if (raw.length >= n + 10) {                 /* (newer dumps: types, octaves, transpose, swing) */
+    for (let t = 0; t < 4; t++) s.tracks[t].type = raw[n + t];
+    for (let t = 0; t < 4; t++) s.tracks[t].octave = (raw[n + 4 + t] << 24) >> 24;
+    s.transpose = (raw[n + 8] << 24) >> 24; s.swing = raw[n + 9];
+  } else { s.tracks.forEach((tr, t) => tr.type = [0, 1, 6, 10][t]); s.transpose = 0; s.swing = 0; }
+  return s;
+}
+function toMidi(s, steps = 64) {
+  const PPQ = 480, S16 = PPQ / 4, DRUM = [36, 38, 39, 42, 46, 45, 37, 56];
+  const vlq = (v) => { const b = [v & 0x7f]; while ((v >>= 7)) b.unshift((v & 0x7f) | 0x80); return b; };
+  const u32 = (v) => [(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255];
+  const text = (type, str) => [0xff, type, ...vlq(str.length), ...Array.from(str, (c) => c.charCodeAt(0) & 0x7f)];
+  const chunk = (ev) => { ev.sort((a, b) => a[0] - b[0] || a[1] - b[1]); const d = []; let last = 0;
+    for (const [t, , bytes] of ev) { d.push(...vlq(t - last), ...bytes); last = t; } d.push(0, 0xff, 0x2f, 0);
+    return [0x4d, 0x54, 0x72, 0x6b, ...u32(d.length), ...d]; };
+  const swing = (g) => g * S16 + (g & 1 ? Math.round(S16 * (s.swing || 0) / 100) : 0);
+  const us = Math.round(60000000 / (s.bpm || 120));
+  const chunks = [chunk([[0, 0, text(3, "ONE CLICK FM-1")], [0, 0, [0xff, 0x51, 3, (us >> 16) & 255, (us >> 8) & 255, us & 255]], [0, 0, [0xff, 0x58, 4, 4, 2, 24, 8]]])];
+  s.tracks.forEach((tr, t) => {
+    const drum = tr.type >= 10, ch = drum ? 9 : t, ev = [[0, 0, text(3, `${t + 1} ${TYPE[tr.type] || "TRACK"}`)]], len = Math.max(1, tr.len);
+    const shift = drum ? 0 : (s.transpose || 0) + 12 * (tr.octave || 0);
+    for (let g = 0; g < steps; g++) {
+      const st = tr.steps[g % len];
+      if (st.time !== 1) continue;
+      const on = swing(g), vel = Math.max(1, Math.min(127, (st.vel || 100) + ((st.flags & 1) ? 15 : 0)));
+      if (drum) {
+        for (let l = 0; l < 8; l++) if ((st.hit >> l) & 1) {
+          const v = (st.acc >> l) & 1 ? 127 : Math.min(st.vel || 100, 120);
+          ev.push([on, 1, [0x90 | ch, DRUM[l], v]], [on + S16 / 2, 0, [0x80 | ch, DRUM[l], 0]]);
+        }
+        continue;
+      }
+      let k = 1; while (k < 16 && k < len && tr.steps[(g + k) % len].time === 2) k++;
+      const slide = (st.flags & 2) && tr.steps[(g + k) % len].time === 1;
+      const off = swing(g + k - 1) + (slide ? S16 : Math.max(10, Math.round(S16 * tr.gate / 100)));
+      for (let i = 0; i < Math.min(4, st.n); i++) {
+        const n = Math.max(0, Math.min(127, st.note[i] + shift));
+        ev.push([on, 1, [0x90 | ch, n, vel]], [Math.min(off, steps * S16), 0, [0x80 | ch, n, 0]]);
+      }
+    }
+    chunks.push(chunk(ev));
+  });
+  return new Uint8Array([0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 1, 0, chunks.length, (PPQ >> 8) & 255, PPQ & 255, ...chunks.flat()]);
+}
+function download(name, bytes, type) {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([bytes], { type })); a.download = name;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+let wantMidi = false, lastSong = null;
 function onSysexOut(d) {
   if (d[4] === 0x11) {
-    const r = unpack7(Array.from(d.slice(5, -1))), ps = r[1], ss = r[2], at = (t) => 11 + t * (ps + 2 + 64 * ss);
-    log(`<b>← Dump</b>  ${d.length} B, Version ${r[0]}: ${NOTE[r[3] % 12]} ${SCALE[r[4]] || "?"}, ${[0, 1, 2, 3].map((t) => ENG[r[at(t)]] || "?").join(" / ")}`);
+    const s = parseDump(unpack7(Array.from(d.slice(5, -1)))); lastSong = s;
+    log(`<b>← Dump</b>  ${d.length} B, Version 1: ${NOTE[s.root % 12]} ${SCALE[s.scale] || "?"}, ${s.tracks.map((tr) => TYPE[tr.type] + " " + (ENG[tr.engine] || "?")).join(" / ")}`);
+    if (wantMidi) { wantMidi = false; download(`oneclick-${NOTE[s.root % 12].replace("#", "is")}-${s.bpm}bpm.mid`, toMidi(s), "audio/midi"); $("xInfo").textContent = "MIDI-Datei erstellt (4 Takte, jede Spur in ihrer Länge wiederholt)."; }
   } else log(`<b>←</b> ${hex(d)}`);
 }
 $("uDump").onclick = () => sendSysex([0x7D, 0x4F, 0x43, 0x10], "Dump anfordern");
 $("uOne").onclick = () => sendSysex([0x7D, 0x4F, 0x43, 0x01], "ONE CLICK");
-$("uLead").onclick = () => sendSysex([0x7D, 0x4F, 0x43, 0x02, 0x02], "Lead neu");
+$("uLead").onclick = () => sendSysex([0x7D, 0x4F, 0x43, 0x02, 0x02], "Track 3 neu");
+$("xMidi").onclick = () => { wantMidi = true; sendSysex([0x7D, 0x4F, 0x43, 0x10], "Dump für MIDI-Export"); };
+let wavOn = false;
+$("xWav").onclick = () => {
+  wavOn = !wavOn; send({ type: "wav", on: wavOn });
+  $("xWav").textContent = wavOn ? "WAV stoppen und speichern" : "WAV aufnehmen"; $("xWav").classList.toggle("recording", wavOn);
+};
+function saveWav(chunks) {
+  const n = chunks.reduce((a, c) => a + c.length, 0), buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  w(0, "RIFF"); v.setUint32(4, 36 + n * 2, true); w(8, "WAVE"); w(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+  v.setUint16(22, 2, true); v.setUint32(24, 44100, true); v.setUint32(28, 44100 * 4, true); v.setUint16(32, 4, true); v.setUint16(34, 16, true);
+  w(36, "data"); v.setUint32(40, n * 2, true);
+  let o = 44; for (const c of chunks) for (let i = 0; i < c.length; i++, o += 2) v.setInt16(o, Math.max(-32768, Math.min(32767, Math.round(c[i] * 32767))), true);
+  download("oneclick.wav", new Uint8Array(buf), "audio/wav");
+  $("xInfo").textContent = `WAV gespeichert: ${(n / 2 / 44100).toFixed(1)} s.`;
+}
 
 /* ------------------------------------------- the first frame, then power --- */
 (async function previewFrame() {   // the screen as the device starts, before sound is allowed
   try {
     const { instance } = await WebAssembly.instantiate(wasmBytes, {});
-    const ex = instance.exports;
+    const ex = instance.exports, st = storeLoad();
+    if (st) new Uint8Array(ex.memory.buffer, ex.emu_store(), ex.emu_store_len()).set(st.subarray(0, ex.emu_store_len()));
     ex.emu_init(7); ex.emu_render(128);
     drawScreen(new Uint16Array(ex.memory.buffer, ex.emu_screen(), 57600));
     showState({ playing: 0, step: 0, voices: 0, sel: 0, bpm: ex.emu_bpm(), root: ex.emu_root(), scale: ex.emu_scale(),
-                eng: [0, 1, 2, 3].map((t) => ex.emu_engine(t)), mute: [0, 0, 0, 0] });
+                eng: [0, 1, 2, 3].map((t) => ex.emu_engine(t)), type: [0, 1, 2, 3].map((t) => ex.emu_type(t)), mute: [0, 0, 0, 0], rec: 0 });
   } catch (err) { $("sAudio").innerHTML = `<span class="pill err">WebAssembly nicht verfügbar</span>`; }
 })();
 
+const BENCH_BTNS = ["uDump", "uOne", "uLead", "xMidi", "xWav"];
 $("power").onclick = async () => {
   const p = $("power");
   if (ac) {   // off; on again is a fresh start
     const old = ac; ac = null; node = null; await old.close();
     p.textContent = "Einschalten"; p.setAttribute("aria-pressed", "false");
-    $("sAudio").innerHTML = `<span class="pill off">aus</span>`; ["uDump", "uOne", "uLead"].forEach((id) => $(id).disabled = true);
+    $("sAudio").innerHTML = `<span class="pill off">aus</span>`; BENCH_BTNS.forEach((id) => $(id).disabled = true);
     return;
   }
   try {
@@ -356,16 +524,18 @@ $("power").onclick = async () => {
       const m = e.data;
       if (m.type === "ready") {
         $("sAudio").innerHTML = `<span class="pill on">läuft, ${ac.sampleRate} Hz</span>`;
-        ["uDump", "uOne", "uLead"].forEach((id) => $(id).disabled = false);
+        BENCH_BTNS.forEach((id) => $(id).disabled = false);
       } else if (m.type === "frame") {
         if (m.screen) drawScreen(m.screen);
+        if (m.store) storeSave(m.store);
         btnEls.forEach((el, b) => el && el.classList.toggle("lit", !!m.btn[b]));
         keyEls.forEach((el, k) => el.classList.toggle("lit", !!m.key[k]));
         showState(m.st);
       } else if (m.type === "sysex") onSysexOut(m.data);
+      else if (m.type === "wav") saveWav(m.chunks);
       else if (m.type === "taken" && !m.ours) log("Rahmen nicht erkannt");
     };
-    node.port.postMessage({ type: "load", wasm: wasmBytes.buffer.slice(0), seed: (Date.now() >>> 0) | 1, master: +$("master").value });
+    node.port.postMessage({ type: "load", wasm: wasmBytes.buffer.slice(0), seed: (Date.now() >>> 0) | 1, master: +$("master").value, store: storeLoad() });
     p.textContent = "Ausschalten"; p.setAttribute("aria-pressed", "true");
     p.blur();                                     /* (the space bar is PLAY now, not this button) */
   } catch (err) {

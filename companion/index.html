@@ -65,6 +65,7 @@
     <button id="play" disabled>▶ Play</button>
     <button id="newkey" disabled>Neue Tonart</button>
     <button id="undo" disabled>Undo</button>
+    <button id="midi" disabled>MIDI-Datei</button>
     <label>Tempo <input id="bpm" type="range" min="60" max="200" value="122" disabled> <span id="bpmv">122</span></label>
   </div>
 
@@ -77,7 +78,8 @@
 </main>
 <script>
 "use strict";
-const ENG = ["SUBTRACT", "ACID", "FM", "SUPERSAW", "ADDITIVE", "DRUMS"];
+const ENG = ["SUBTRACT", "ACID", "FM", "SUPERSAW", "ADDITIVE", "NOISE", "DRUMS"];
+const TYPE = ["BASS", "CHORDS", "PAD", "ATMO", "PIANO", "GUITAR", "LEAD", "PLUCK", "BRASS", "FLUTE", "DRUMS", "KICK", "SNARE", "PERC"];
 const ROLE = ["BASS", "CHORDS", "LEAD", "DRUMS"], COL = ["--bass", "--chords", "--lead", "--drums"];
 const NOTE = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const SCALE = ["MINOR", "DORIAN", "MAJOR", "MIXOLYD", "HARM MIN", "PHRYGIAN"];
@@ -118,7 +120,11 @@ function parseDump(raw) {
       const b = raw.slice(n, n + ss);
       steps.push({ note: b.slice(0, 4), n: b[4], time: b[5], flags: b[6], vel: b[7], hit: b[8], acc: b[9] });
     }
-    s.tracks.push({ engine: patch[0], patch, len, gate, steps });
+    s.tracks.push({ engine: patch[0], patch, len, gate, steps, type: [0, 1, 6, 10][t], octave: 0 });
+  }
+  if (raw.length >= n + 10) {                 /* (v0.2 dumps: the types, octaves, transpose, swing) */
+    for (let t = 0; t < 4; t++) { s.tracks[t].type = raw[n + t]; s.tracks[t].octave = (raw[n + 4 + t] << 24) >> 24; }
+    s.transpose = (raw[n + 8] << 24) >> 24; s.swing = raw[n + 9];
   }
   return s;
 }
@@ -145,7 +151,7 @@ function render() {
     el.className = "track" + (t === sel ? " sel" : "");
     el.style.setProperty("--c", `var(${COL[t]})`);
     const head = document.createElement("div"); head.className = "thead";
-    head.innerHTML = `<span class="tname">${ROLE[t]}</span><span class="eng">${ENG[tr.engine] || "?"} · ${tr.len} Steps</span>`;
+    head.innerHTML = `<span class="tname">${TYPE[tr.type] || ROLE[t]}</span><span class="eng">${ENG[tr.engine] || "?"} · ${tr.len} Steps</span>`;
     const mk = (label, fn) => { const b = document.createElement("button"); b.textContent = label; b.onclick = fn; head.appendChild(b); };
     mk("Neu", () => { send(0x02, [t]); refresh(); });
     mk("Sound", () => { send(0x03, [t]); refresh(); });
@@ -203,7 +209,56 @@ function onMessage(e) {
   if (d[4] === 0x11) { const s = parseDump(unpack7(d.slice(5, -1))); if (s) { state = s; render(); } }
 }
 function setStatus(txt, cls = "") { const s = $("status"); s.textContent = txt; s.className = "status " + cls; }
-function enable(on) { ["oneclick", "play", "newkey", "undo", "bpm"].forEach(id => $(id).disabled = !on); }
+/* MIDI export (as the emulator's): 4 bars, Format 1, 480 PPQN, a track a part, drums on channel 10 */
+function toMidi(s, steps = 64) {
+  const PPQ = 480, S16 = PPQ / 4, DRUM = [36, 38, 39, 42, 46, 45, 37, 56];
+  const vlq = (v) => { const b = [v & 0x7f]; while ((v >>= 7)) b.unshift((v & 0x7f) | 0x80); return b; };
+  const u32 = (v) => [(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255];
+  const text = (type, str) => [0xff, type, ...vlq(str.length), ...Array.from(str, (c) => c.charCodeAt(0) & 0x7f)];
+  const chunk = (ev) => { ev.sort((a, b) => a[0] - b[0] || a[1] - b[1]); const d = []; let last = 0;
+    for (const [t, , bytes] of ev) { d.push(...vlq(t - last), ...bytes); last = t; } d.push(0, 0xff, 0x2f, 0);
+    return [0x4d, 0x54, 0x72, 0x6b, ...u32(d.length), ...d]; };
+  const swing = (g) => g * S16 + (g & 1 ? Math.round(S16 * (s.swing || 0) / 100) : 0);
+  const us = Math.round(60000000 / (s.bpm || 120));
+  const chunks = [chunk([[0, 0, text(3, "ONE CLICK FM-1")], [0, 0, [0xff, 0x51, 3, (us >> 16) & 255, (us >> 8) & 255, us & 255]], [0, 0, [0xff, 0x58, 4, 4, 2, 24, 8]]])];
+  s.tracks.forEach((tr, t) => {
+    const drum = tr.type >= 10, ch = drum ? 9 : t, ev = [[0, 0, text(3, `${t + 1} ${TYPE[tr.type] || "TRACK"}`)]], len = Math.max(1, tr.len);
+    const shift = drum ? 0 : (s.transpose || 0) + 12 * (tr.octave || 0);
+    for (let g = 0; g < steps; g++) {
+      const st = tr.steps[g % len];
+      if (st.time !== 1) continue;
+      const on = swing(g), vel = Math.max(1, Math.min(127, (st.vel || 100) + ((st.flags & 1) ? 15 : 0)));
+      if (drum) {
+        for (let l = 0; l < 8; l++) if ((st.hit >> l) & 1) {
+          const v = (st.acc >> l) & 1 ? 127 : Math.min(st.vel || 100, 120);
+          ev.push([on, 1, [0x90 | ch, DRUM[l], v]], [on + S16 / 2, 0, [0x80 | ch, DRUM[l], 0]]);
+        }
+        continue;
+      }
+      let k = 1; while (k < 16 && k < len && tr.steps[(g + k) % len].time === 2) k++;
+      const slide = (st.flags & 2) && tr.steps[(g + k) % len].time === 1;
+      const off = swing(g + k - 1) + (slide ? S16 : Math.max(10, Math.round(S16 * tr.gate / 100)));
+      for (let i = 0; i < Math.min(4, st.n); i++) {
+        const n = Math.max(0, Math.min(127, st.note[i] + shift));
+        ev.push([on, 1, [0x90 | ch, n, vel]], [Math.min(off, steps * S16), 0, [0x80 | ch, n, 0]]);
+      }
+    }
+    chunks.push(chunk(ev));
+  });
+  return new Uint8Array([0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 1, 0, chunks.length, (PPQ >> 8) & 255, PPQ & 255, ...chunks.flat()]);
+}
+function download(name, bytes, type) {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([bytes], { type })); a.download = name;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+$("midi").onclick = () => {
+  if (!state) return;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([toMidi(state)], { type: "audio/midi" }));
+  a.download = `oneclick-${NOTE[state.root % 12].replace("#", "is")}-${state.bpm}bpm.mid`;
+  document.body.append(a); a.click(); a.remove();
+};
+function enable(on) { ["oneclick", "play", "newkey", "undo", "bpm", "midi"].forEach(id => $(id).disabled = !on); }
 
 async function connect() {
   if (!navigator.requestMIDIAccess) { setStatus("Web MIDI fehlt: Chrome oder Edge verwenden", "err"); return; }

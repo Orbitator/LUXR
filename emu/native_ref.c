@@ -14,11 +14,12 @@ static void run(double ms, int rec)
     }
 }
 static void press(uint32_t b) { emu_buttons(1u << b); run(20, 0); emu_buttons(0); run(20, 0); }
+static void hold(uint32_t b) { emu_buttons(1u << b); run(400, 0); emu_buttons(0); run(20, 0); }   /* (REC held: ONE CLICK) */
 int main(int argc, char **argv)
 {
     if (argc < 2 || !(f = fopen(argv[1], "wb"))) return 2;
     emu_init(11);
-    run(200, 0); press(B_PLAY); run(3000, 1); press(B_REC); run(3000, 1);
+    run(200, 0); press(B_PLAY); run(3000, 1); hold(B_REC); run(3000, 1);
     fclose(f);
     return 0;
 }

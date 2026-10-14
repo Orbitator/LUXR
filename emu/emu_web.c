@@ -18,6 +18,27 @@
 #include "oc_synth.c"
 #include "oc_seq.c"
 #include "oc_gen.c"
+static uint16_t e_screen[240 * 240];
+static uint32_t e_dirty;
+static void lcd_sync(void) {}
+static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint16_t *px)   /* (big endian, as the panel) */
+{
+    uint32_t i, j;
+    for (j = 0; j < h && y + j < 240u; j++)
+        for (i = 0; i < w && x + i < 240u; i++)
+            e_screen[(y + j) * 240u + x + i] = px[j * w + i];
+    e_dirty = 1;
+}
+static void lcd_fill(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t c)
+{
+    uint32_t i, j;
+    uint16_t s = (uint16_t)((c >> 8) | (c << 8));
+    for (j = y; j < y + h && j < 240u; j++)
+        for (i = x; i < x + w && i < 240u; i++)
+            e_screen[j * 240u + i] = s;
+    e_dirty = 1;
+}
+#include "gfx.c"
 #include "oc_ui.c"
 #include "oc_proto.c"
 
@@ -33,18 +54,6 @@ static uint32_t io_keys(void) { return e_keys; }
 static int32_t io_enc(uint32_t r) { int32_t s = e_enc[r]; e_enc[r] = 0; return s; }
 static void io_led_button(uint32_t b, int on) { e_led_btn[b % NB] = (uint8_t)on; }
 static void io_led_key(uint32_t k, int on) { e_led_key[k % 27u] = (uint8_t)on; }
-
-/* ----------------------------------------------------------- the screen --- */
-static uint16_t e_screen[240 * 240];
-static uint32_t e_dirty;
-static void io_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint16_t *px)
-{
-    uint32_t i, j;
-    for (j = 0; j < h && y + j < 240u; j++)
-        for (i = 0; i < w && x + i < 240u; i++)
-            e_screen[(y + j) * 240u + x + i] = px[j * w + i];   /* (big endian, as the panel takes it) */
-    e_dirty = 1;
-}
 
 /* -------------------------------------------------------------- USB MIDI --- */
 static uint8_t e_out[4096];                       /* SysEx the device sent, F0 .. F7, until emu_out_take */
@@ -64,13 +73,28 @@ static void midi_in_drain(void)                   /* as oc_main.c: notes on chan
 {
     while (mi_r != mi_w) {
         uint32_t m = miq[mi_r++ % MIQ], st = m & 0xFFu, ch = st & 15u, d1 = (m >> 8) & 0x7Fu, d2 = (m >> 16) & 0x7Fu;
-        if (ch >= NTRK)
-            continue;
-        if ((st & 0xF0u) == 0x90u && d2)
-            note_on(ch, trk[ch].s.engine == E_DRUM ? 1u << ((d1 - 36u) & 7u) : d1, d2, 0);
-        else if ((st & 0xF0u) == 0x80u || (st & 0xF0u) == 0x90u)
-            note_off(ch, d1);
+        (void)ch;
+        midi_note(st, d1, d2);
     }
+}
+/* the store: RAM here; the page keeps it in the browser (emu_store, emu_store_gen) */
+static uint8_t e_store[0x6000];
+static uint32_t e_store_gen;
+static int io_store_read(uint32_t off, void *d, uint32_t n)
+{
+    if (off + n > sizeof e_store)
+        return -1;
+    memcpy(d, e_store + off, n);
+    return 0;
+}
+static int io_store_write(uint32_t off, const void *s, uint32_t n)
+{
+    if ((off & 0xFFFu) || n > 0x1000u || off + 0x1000u > sizeof e_store)
+        return -1;
+    memset(e_store + off, 0xFF, 0x1000u);
+    memcpy(e_store + off, s, n);
+    e_store_gen++;
+    return 0;
 }
 static void gen_lock(void) {}                     /* (one thread: the render and the UI never overlap) */
 static void gen_unlock(void) {}
@@ -154,14 +178,21 @@ EXPORT uint32_t emu_root(void) { return song.root; }
 EXPORT uint32_t emu_scale(void) { return song.scale; }
 EXPORT uint32_t emu_engine(uint32_t t) { return trk[t % NTRK].s.engine; }
 EXPORT uint32_t emu_muted(uint32_t t) { return trk[t % NTRK].mute; }
+EXPORT uint32_t emu_type(uint32_t t) { return trk[t % NTRK].type; }
+EXPORT uint32_t emu_rec(void) { return song.rec ? 1u + song.rec_mode : 0u; }   /* 0 off, 1 OVERDUB, 2 REPLACE */
+EXPORT uint32_t emu_page(void) { return ui.page; }
+EXPORT uint32_t emu_shift(void) { return ui.shift; }
 EXPORT uint32_t emu_dvoices(void)                 /* drum lanes sounding (of NLANE) */
 {
     uint32_t i, n = 0;
-    for (i = 0; i < NLANE; i++)
-        n += dvoice[i].active;
+    for (i = 0; i < NTRK * NLANE; i++)
+        n += dvoice[i / NLANE][i % NLANE].active;
     return n;
 }
 /* hearable cuts since the start (oc_synth.c vstat: a voice taken while above about -36 dB) */
+EXPORT uint8_t *emu_store(void) { return e_store; }           /* (the page fills it before emu_init, keeps it after a save) */
+EXPORT uint32_t emu_store_len(void) { return sizeof e_store; }
+EXPORT uint32_t emu_store_gen(void) { return e_store_gen; }
 EXPORT uint32_t emu_cuts(void)
 {
     uint32_t a, b, n = 0;

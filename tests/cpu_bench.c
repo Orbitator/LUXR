@@ -13,7 +13,7 @@ int main(void)
     host_boot(5);
     host_press(B_PLAY);
     c = clock();
-    for (s = 0; s < 30u; s++) { host_press(B_REC); host_run(10000, 0, 0); }
+    for (s = 0; s < 30u; s++) { host_oneclick(); host_run(10000, 0, 0); }
     typ = secs(c) / 300.0;                                   /* per second of audio */
     /* 8 supersaw voices, no drums */
     memset(voice, 0, sizeof voice); memset(dvoice, 0, sizeof dvoice); seq_play(0); host_run(50, 0, 0);

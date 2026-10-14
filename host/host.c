@@ -24,6 +24,41 @@ static uint32_t rng(void)
 #include "oc_synth.c"
 #include "oc_seq.c"
 #include "oc_gen.c"
+static uint16_t screen[240 * 240];
+static void lcd_sync(void) {}
+static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint16_t *px)   /* (panel order: big endian) */
+{
+    uint32_t i, j;
+    for (j = 0; j < h && y + j < 240u; j++)
+        for (i = 0; i < w && x + i < 240u; i++)
+            screen[(y + j) * 240u + x + i] = (uint16_t)((px[j * w + i] >> 8) | (px[j * w + i] << 8));
+}
+static void lcd_fill(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t c)
+{
+    uint32_t i, j;
+    for (j = y; j < y + h && j < 240u; j++)
+        for (i = x; i < x + w && i < 240u; i++)
+            screen[j * 240u + i] = c;
+}
+static unsigned str_len(const char *s)           /* (as firmware/src/libc.c, which the host build leaves out) */
+{
+    unsigned n = 0;
+    while (s[n])
+        n++;
+    return n;
+}
+static void str_cpy(char *d, const char *s, unsigned max)
+{
+    unsigned i = 0;
+    if (!max)
+        return;
+    while (s[i] && i + 1u < max) {
+        d[i] = s[i];
+        i++;
+    }
+    d[i] = 0;
+}
+#include "gfx.c"
 #include "oc_ui.c"
 #include "oc_proto.c"
 
@@ -31,10 +66,26 @@ static uint32_t rng(void)
 static void gen_lock(void) {}
 static void gen_unlock(void) {}
 static void midi_in_drain(void) {}
+static uint8_t h_store[0x6000];                    /* the store in RAM (oc_main.c: the flash) */
+static int h_store_fail;                          /* (the tests: a failing flash) */
+static int io_store_read(uint32_t off, void *d, uint32_t n)
+{
+    if (h_store_fail || off + n > sizeof h_store)
+        return -1;
+    memcpy(d, h_store + off, n);
+    return 0;
+}
+static int io_store_write(uint32_t off, const void *s, uint32_t n)
+{
+    if (h_store_fail || (off & 0xFFFu) || n > 0x1000u || off + 0x1000u > sizeof h_store)
+        return -1;
+    memset(h_store + off, 0xFF, 0x1000u);
+    memcpy(h_store + off, s, n);
+    return 0;
+}
 static uint32_t h_pressed, h_held, h_keys;
 static int32_t h_enc[NE];
 static uint8_t h_led_btn[NB], h_led_key[27];
-static uint16_t screen[240 * 240];
 static uint8_t h_sent[4096];
 static uint32_t h_sent_n;
 static uint32_t io_pressed(void) { uint32_t p = h_pressed; h_pressed = 0; return p; }
@@ -43,13 +94,6 @@ static uint32_t io_keys(void) { return h_keys; }
 static int32_t io_enc(uint32_t r) { int32_t s = h_enc[r]; h_enc[r] = 0; return s; }
 static void io_led_button(uint32_t b, int on) { h_led_btn[b % NB] = (uint8_t)on; }
 static void io_led_key(uint32_t k, int on) { h_led_key[k % 27u] = (uint8_t)on; }
-static void io_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint16_t *px)
-{
-    uint32_t i, j;
-    for (j = 0; j < h && y + j < 240u; j++)
-        for (i = 0; i < w && x + i < 240u; i++)
-            screen[(y + j) * 240u + x + i] = (uint16_t)((px[j * w + i] >> 8) | (px[j * w + i] << 8));
-}
 static int proto_send(const uint8_t *p, uint32_t n)
 {
     if (n > sizeof h_sent)
@@ -85,11 +129,41 @@ static void host_boot(uint32_t seed)
     memset(trk, 0, sizeof trk);
     memset(voice, 0, sizeof voice);
     memset(&song, 0, sizeof song);
+    memset(dvoice, 0, sizeof dvoice);
+    memset(&ui, 0, sizeof ui);
+    memset(&undo, 0, sizeof undo);
+    memset(&hist, 0, sizeof hist);
+    memset(&rec, 0, sizeof rec);
     rng_state = seed ? seed : 1u;
     ui_init();
     ui_draw(1);
 }
-static void host_press(uint32_t b) { h_pressed |= 1u << b; host_frame(); }
+static void host_run(uint32_t ms, void (*fn)(const float *, const float *, void *), void *user);
+/* a button: tapped (down 40 ms, up), or held for ms with keys pressed meanwhile (keys: a mask, 0 none) */
+static void host_tap(uint32_t b)
+{
+    h_pressed |= 1u << b;
+    h_held |= 1u << b;
+    host_run(40, 0, 0);
+    h_held &= ~(1u << b);
+    host_run(30, 0, 0);
+}
+static void host_hold(uint32_t b, uint32_t ms, uint32_t keys)
+{
+    h_pressed |= 1u << b;
+    h_held |= 1u << b;
+    host_run(ms, 0, 0);
+    if (keys) {
+        h_keys = keys;
+        host_run(60, 0, 0);
+        h_keys = 0;
+        host_run(30, 0, 0);
+    }
+    h_held &= ~(1u << b);
+    host_run(30, 0, 0);
+}
+static void host_press(uint32_t b) { host_tap(b); }
+static void host_oneclick(void) { host_hold(B_REC, 400, 0); }   /* (REC held: a new song) */
 
 /* run ms of time, frames every 15 ms; fn(l, r, user) per block */
 static void host_run(uint32_t ms, void (*fn)(const float *, const float *, void *), void *user)

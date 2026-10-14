@@ -30,7 +30,7 @@
 #define FELUCCA_ID "FM-1_810"        /* package identity (tools/build.py: the .fwsc marker string) */
 #endif
 #ifndef OC_VERSION
-#define OC_VERSION "v0.1"
+#define OC_VERSION "v0.2"
 #endif
 
 #include <stdint.h>
@@ -43,16 +43,19 @@
 #include "fm1_audio.h"
 #include "fm1_adc.h"
 #include "fm1_lcd_hw.h"
-/* this firmware writes the flash only to stage an update: never Felucca's or the stock store */
-#define FL_RANGE_OK(off, n) FL_IN(off, n, FL_OTA_LO, FL_OTA_HI)
+/* this firmware writes the flash to stage an update and to its own store (sounds, songs, settings: 24 KiB at the
+ * start of what Felucca uses as its main store; never the stock firmware's areas) */
+#define OC_STORE_LO 0x00097000u
+#define OC_STORE_HI 0x0009D000u
+#define FL_RANGE_OK(off, n) (FL_IN(off, n, FL_OTA_LO, FL_OTA_HI) || FL_IN(off, n, OC_STORE_LO, OC_STORE_HI))
 #include "fm1_flash.h"
 #include "oc_tables.h"
 
 #include "libc.c"
 #include "lcd.c"
+#include "gfx.c"                     /* Felucca's drawing: canvas, anti-aliased text, key hints (build/gen/ui_*.h) */
 #include "oc_core.h"
 #include "panel.c"
-#include "oc_font.c"
 #include "oc_synth.c"
 #include "oc_seq.c"
 #include "oc_gen.c"

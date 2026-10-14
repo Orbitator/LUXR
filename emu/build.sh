@@ -4,7 +4,7 @@
 set -e
 cd "$(dirname "$0")/.."
 mkdir -p build/gen build/emu
-python3 tools/gen_tables.py build/gen/oc_tables.h
+python3 tools/build.py --gen >/dev/null
 clang --target=wasm32 -O2 -std=gnu99 -ffreestanding -nostdlib -fno-builtin -Wall -Wno-unused-function \
     -Ibuild/gen -Ifirmware/src -Wl,--no-entry -Wl,--export-dynamic -Wl,--strip-all -Wl,-z,stack-size=262144 \
     -o build/emu/oneclick.wasm emu/emu_web.c

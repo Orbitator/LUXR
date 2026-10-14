@@ -8,13 +8,13 @@ int main(int argc, char **argv)
     host_boot(3);
     host_press(B_PLAY);
     for (s = 0; s < songs; s++) {
-        host_press(B_REC);
+        host_oneclick();
         host_run(sec * 1000u, 0, 0);
     }
     printf("cuts per minute (taker -> victim), %u songs x %u s\n", songs, sec);
     printf("            held notes cut                  tails cut (still audible)\n");
     for (a = 0; a < NTRK; a++) {
-        printf("%-7s ->", ROLE_NAME[a]);
+        printf("%-7s ->", TYPE_NAME[trk[a].type]);
         for (b = 0; b < NTRK; b++) printf(" %6.1f", vstat.held[a][b] * 60.0 / (songs * sec));
         printf("    ");
         for (b = 0; b < NTRK; b++) printf(" %6.1f", vstat.tail[a][b] * 60.0 / (songs * sec));

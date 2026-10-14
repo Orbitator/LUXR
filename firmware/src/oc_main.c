@@ -59,15 +59,9 @@ static uint32_t io_keys(void) { return fm1_in.notes; }
 static int32_t io_enc(uint32_t role) { return panel_enc(role); }
 static void io_led_button(uint32_t b, int on) { fm1_led_key(panel.btn[b % NB], on); }
 static void io_led_key(uint32_t k, int on) { fm1_led_key(14u + k, on); }
-static void io_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint16_t *px)
-{
-    lcd_sync();
-    lcd_blit(x, y, w, h, px);
-    lcd_sync();                                  /* (the band buffer is drawn again next) */
-}
 static int proto_send(const uint8_t *p, uint32_t n) { return ota_wire_send(p, n); }
 
-/* USB MIDI IN (audio ISR): notes on channels 1..4 play tracks 1..4; clock and the rest ignored */
+/* USB MIDI IN (audio ISR): notes (MIDI IN: channels 1..4 the tracks, or all the selected one); clock and the rest ignored */
 static void midi_in_drain(void)
 {
     if (midi_in_overflow) {
@@ -79,13 +73,25 @@ static void midi_in_drain(void)
         uint32_t pkt = midi_in_q[mi_r % MQ], st = (pkt >> 8) & 0xFFu, ch = st & 15u;
         uint32_t d1 = (pkt >> 16) & 0x7Fu, d2 = (pkt >> 24) & 0x7Fu;
         mi_r++;
-        if (ch >= NTRK)
-            continue;
-        if ((st & 0xF0u) == 0x90u && d2)
-            note_on(ch, trk[ch].s.engine == E_DRUM ? 1u << ((d1 - 36u) & 7u) : d1, d2, 0);
-        else if ((st & 0xF0u) == 0x80u || (st & 0xF0u) == 0x90u)
-            note_off(ch, d1);
+        (void)ch;
+        midi_note(st, d1, d2);                    /* (oc_seq.c: MIDI IN mode, drums, recording) */
     }
+}
+/* the store: OC_STORE_LO.. (oneclick.c), 4 KiB sectors; nothing without the expected flash */
+static int io_store_read(uint32_t off, void *d, uint32_t n)
+{
+    if (!flash_ok || !FL_IN(OC_STORE_LO + off, n, OC_STORE_LO, OC_STORE_HI))
+        return -1;
+    return st_read(OC_STORE_LO + off, d, n);
+}
+static int io_store_write(uint32_t off, const void *s, uint32_t n)
+{
+    int rc;
+    if (!flash_ok || (off & 0xFFFu) || n > 0x1000u || !FL_IN(OC_STORE_LO + off, 0x1000u, OC_STORE_LO, OC_STORE_HI))
+        return -1;
+    if ((rc = st_erase(OC_STORE_LO + off)) != 0)
+        return rc;
+    return st_prog(OC_STORE_LO + off, s, n);
 }
 /* the companion's frames (ours: 7D 'O' 'C'); the rest stays for the updater (ota_service) */
 static void proto_service(void)
@@ -98,20 +104,13 @@ static void proto_service(void)
     }
 }
 
-/* full-screen notices: the fault, UPDATE, UBOOT (straight to the panel) */
+/* full-screen notices: the fault, UPDATE, UBOOT (straight to the panel, gfx.c's one-shot lines) */
 static void oc_banner(const char *a, const char *b)
 {
-    uint32_t i;
-    for (i = 0; i < 6u; i++) {
-        b_begin(BAND_H, C_BG);
-        if (i == 2u)
-            b_text(120 - text_w(a, 3) / 2, 10, a, 3, C_ACC);
-        if (i == 3u && b && b[0])
-            b_text(120 - text_w(b, 2) / 2, 6, b, 2, C_TEXT);
-        lcd_sync();
-        lcd_blit(0, i * BAND_H, 240, BAND_H, band);
-        lcd_sync();
-    }
+    lcd_fill(0, 0, 240, 240, T_BG);
+    draw_text_box(0, 92, 240, &AF_L, a, T_THEME, 1);
+    if (b && b[0])
+        draw_text_box(0, 132, 240, &AF_M, b, T_TEXT, 1);
 }
 static void hexs(char *b, uint32_t v)
 {
@@ -153,7 +152,8 @@ static void fm1_main(void)
     if (flash_ok)
         ota_boot_cleanup();                       /* the staging area an update left */
     lcd_init();
-    oc_banner("ONE CLICK", "FM-1");
+    palette_set(PAL_AMBER);                       /* (the banners' colours before ui_init) */
+    oc_banner("ONE CLICK", "FM-1 " OC_VERSION);
     fm1_input_init();
     fm1_adc_init();
     panel_init();

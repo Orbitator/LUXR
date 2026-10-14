@@ -24,13 +24,27 @@ with sync_playwright() as p:
     if not pg.eval_on_selector('button[aria-label="PLAY: Start/Stop"]', "e => e.classList.contains('lit')"): fails.append("PLAY led")
     before = pg.inner_text("#sSong") + pg.inner_text("#sTracks")
     changed = False
-    for _ in range(4):                               # ONE CLICK (a new song can repeat a key by chance)
-        pg.click('button[aria-label="REC: ONE CLICK"]')
-        pg.wait_for_timeout(500)
+    for _ in range(4):                               # ONE CLICK: REC held (Enter) (a new song can repeat a key by chance)
+        pg.keyboard.press("Enter")
+        pg.wait_for_timeout(900)
         if pg.inner_text("#sSong") + pg.inner_text("#sTracks") != before:
             changed = True
             break
     if not changed: fails.append("ONE CLICK changed nothing")
+    pg.keyboard.press("r"); pg.wait_for_timeout(400)  # REC tapped: armed, live
+    if "Overdub, live" not in pg.inner_text("#sRec"): fails.append("REC tap: " + pg.inner_text("#sRec"))
+    pg.keyboard.press("r"); pg.wait_for_timeout(400)
+    if pg.inner_text("#sRec") != "aus": fails.append("REC off: " + pg.inner_text("#sRec"))
+    pg.keyboard.down("Shift"); pg.wait_for_timeout(100); pg.keyboard.press("a"); pg.wait_for_timeout(200); pg.keyboard.up("Shift")
+    pg.wait_for_timeout(400)                         # SHIFT + C4: solo track 1
+    if pg.inner_text("#sTracks").count("(stumm)") != 3: fails.append("SHIFT + C4 solo: " + pg.inner_text("#sTracks"))
+    pg.keyboard.down("Shift"); pg.wait_for_timeout(100); pg.keyboard.press("a"); pg.wait_for_timeout(200); pg.keyboard.up("Shift")
+    pg.wait_for_timeout(400)
+    if "(stumm)" in pg.inner_text("#sTracks"): fails.append("solo off: " + pg.inner_text("#sTracks"))
+    with pg.expect_download(timeout=5000) as dl:     # MIDI export from the dump
+        pg.click("#xMidi")
+    mid = Path(dl.value.path()).read_bytes()
+    if mid[:4] != b"MThd" or mid.count(b"MTrk") != 5: fails.append(f"MIDI file ({len(mid)} B)")
     pg.click("#uDump")
     pg.wait_for_timeout(500)
     if "Dump" not in pg.inner_text("#log") or "Version 1" not in pg.inner_text("#log"): fails.append("no dump answer")

@@ -3,27 +3,74 @@
 Eigene Firmware für den M-VAVE FM-1: der Generator von ONE CLICK SYNTH auf dem Gerät. Ein Knopfdruck erzeugt einen
 ganzen Song – Tonart, Akkordfolge, vier Sounds und vier Spuren (Bass, Akkorde, Lead, Drums), die zueinander passen.
 
-Status: **v0.1, auf dem Rechner getestet, noch nie auf einem FM-1 gelaufen.**
+Status: **v0.2, auf dem Rechner und im Emulator getestet, noch nie auf einem FM-1 gelaufen.**
 
 ## Bedienung
 
-| Bedienelement | Funktion |
-|---|---|
-| **REC** | ONE CLICK: neuer Song |
-| **ARP** | gewählte Spur neu (Sound und Pattern) |
-| **EDIT** | nur Sound der Spur neu |
-| **SEQ** | nur Pattern der Spur neu |
-| **SCL** | neue Tonart und Akkorde (Sounds bleiben) |
-| **HOME** | Undo / Redo der letzten Generierung |
-| **GLO** | Spur stumm / laut |
-| **PLAY** | Start / Stop |
-| **FX** | Swing 0 / 12 / 25 % |
-| **OCT− / OCT+** | Oktave der Tasten |
-| **SELECT** | Tempo |
-| **ALGORITHM / PRESETS** | Spur wählen |
-| **KNOB 1–4** | Cutoff, Resonanz, Decay, Lautstärke der Spur (live) |
-| Tasten | spielen die gewählte Spur (Drums: weiße Tasten F3–C4 = Instrumente) |
-| USB-MIDI Kanal 1–4 | spielt Spur 1–4 |
+Nach Felucca-Art: eine Taste **tippen** öffnet ihre Seite (beim Loslassen; nochmal tippen = nächste Unterseite, Punkte
+unten rechts), **halten** ruft ihre Haltefunktion auf. **KNOB 1–4** sind die vier Karten der Seite. **GLO halten = SHIFT**:
+die Karten zeigen die zweite Reihe (B), und viele Bedienelemente bekommen eine zweite Funktion.
+
+| Bedienelement | tippen / drehen | mit SHIFT (GLO halten) | halten |
+|---|---|---|---|
+| **SELECT** | Tempo | Swing | |
+| **ALGORITHM** | Spur wählen | Instrument-Typ der Spur | |
+| **PRESETS** | Sound-Verlauf (zurück) / neuer Sound; im STEP-Editor der Cursor; auf SAVE der Platz; im Menü die Zeile | Engine | |
+| **KNOB 1–4** | Reihe A der Seite | Reihe B der Seite | |
+| **PLAY** | Start / Stop | von vorn | |
+| **REC** | Aufnahme scharf / aus | Overdub ↔ Replace | ONE CLICK: neuer Song |
+| **OCT− / OCT+** | Oktave der Tasten (beide: 0); auf SAVE/Menü: OCT+ ausführen, OCT− zurück | Transponieren ±1 | beide 5 s: UBOOT |
+| **SAVE** | Seite SOUND · SONG · UNDO | Redo | Undo |
+| **HOME** | Seite HOME | | MENÜ |
+| **SEQ** | Seite STEP · EUCLID · SEQUENCE | | Werkzeuge auf den Tasten |
+| **EDIT** | Seiten der Engine · FILTER · VOICE | | weiße Taste = Engine |
+| **ARP** | Seite GENERATOR | | weiße Taste = Instrument-Typ |
+| **SCL** | Seite SCALE | | Taste = Grundton |
+| **GLO** | Seite MIXER | (ist SHIFT) | |
+| **FX · ENV · LFO** | ihre Seiten | | |
+| Tasten | spielen die gewählte Spur; im STEP-Editor / bei Step-Aufnahme: Noten an den Cursor | weiße F3–B3: Mute Spur 1–4, C4–F4: Solo | |
+
+Die Seiten (Reihe A | Reihe B mit SHIFT):
+
+| Seite | Reihe A | Reihe B |
+|---|---|---|
+| HOME | Cutoff, Reso, Decay, Pegel (live, nicht im Sound) | Pitch, Fine, Oktave der Spur, Transpose (Drums: Tune, Decay, Kit) |
+| EDIT › OSC / ACID / FM / SAW / ADD / NOISE / KIT | die Parameter der Engine | weitere Parameter der Engine |
+| EDIT › FILTER | Cutoff, Reso, Env-Menge, Keytrack | Filter-ADSR |
+| EDIT › VOICE | Mono/Poly, Glide, Dual (Unison, Oktave hoch/tief, Quinte), Dual-Pegel | Pitch, Fine, Oktave |
+| ENV | Amp-ADSR | Filter-ADSR |
+| LFO | Rate, Tiefe, Ziel (Cutoff, Pitch, Amp, Pan), Welle (Sinus, Dreieck, Säge, Rechteck, S&H) | Pitch, Fine, Glide, Keytrack |
+| FX | Pegel, Pan, Delay-Send, Hall-Send | Delayzeit (1/8 … 3/4), Feedback, Hallgröße, Dämpfung |
+| SCL | Grundton, Skala, Akkordfolge, Oktave der Tasten | Transpose, Swing |
+| SEQ › STEP | Note, Velocity, Länge (Ties), Step-Art (Pause/Note/Tie) | Accent, Slide, Akkord (einzeln, Terz, Dreiklang, Septakkord) |
+| SEQ › STEP (Drums) | Lane, Schlag, Velocity, Accent | |
+| SEQ › EUCLID | Länge, Schläge, Rotation, Lane (Drums) | |
+| SEQ › SEQUENCE | Länge (1–64), Gate, Swing, Verschieben | SEQ an/aus, MASTER, Oktave, Mutate |
+| ARP › GENERATOR | Dichte, Variation, Stil, Lage | Mutate, Instrument-Typ |
+| GLO › MIXER | Pegel der 4 Spuren | Pan der 4 Spuren |
+| SAVE › SOUND / SONG | Platz (16 Sounds / 4 Songs), Speichern/Laden – OCT+ führt aus | |
+| MENÜ (HOME halten) | Transpose, Rec-Modus, Metronom (aus / bei Aufnahme / an), MIDI IN (Kanal 1–4 = Spuren / alle Kanäle auf die gewählte Spur), Theme (10 Paletten), Swing, Version | |
+
+**Eigene Noten**
+
+- *STEP-Editor* (SEQ › STEP): PRESETS bewegt den Cursor, die Tasten schreiben Note oder Akkord (gleichzeitig gedrückte
+  Tasten) an den Cursor, die Knöpfe ändern Note, Velocity, Länge, Accent, Slide, Akkordform. Drums: die 16 weißen Tasten
+  sind die 16 Steps des Takts, die schwarzen Tasten wählen die Lane; die Tasten-LEDs zeigen das Pattern.
+- *Step-Aufnahme*: REC tippen, während gestoppt – jede Taste (oder jeder Akkord) wird an den Cursor geschrieben, danach
+  springt er einen Step weiter; PRESETS vorwärts lässt eine Pause.
+- *Live-Aufnahme*: REC tippen, dann PLAY (oder umgekehrt) – Tasten und USB-MIDI werden in die gewählte Spur
+  aufgenommen, auf den nächsten 16tel quantisiert, gehaltene Noten als Ties. **Overdub** fügt hinzu, **Replace** (SHIFT +
+  REC) leert jeden Step, den der Durchlauf erreicht. Metronom im Menü.
+- Jede Aufnahme und jeder Eingriff kann rückgängig gemacht werden (SAVE halten; 15 Stufen, SHIFT + SAVE = Redo).
+
+**Werkzeuge (SEQ halten + weiße Taste)**, F3 bis G5: SONG (ONE CLICK), TRACK, SOUND, PART, KEY, COOK, CLEAR, REVERSE,
+SHIFT ◂, SHIFT ▸, RHYTHM, NOTES, OSC, FILTER, ENV, OCTAVE (die letzten sechs erneuern nur diesen Teil, so stark wie
+MUTATE es sagt). Schwarze Tasten: COPY, PASTE, DOUBLE (Pattern verdoppeln).
+
+**Instrument-Typen** (ARP halten + weiße Taste, oder SHIFT + ALGORITHM): Bass, Chords, Pad, Atmo, Piano, Guitar, Lead,
+Pluck, Brass, Flute, Drums, Kick, Snare, Perc – jede Spur kann jeder Typ sein.
+
+USB-MIDI: Kanal 1–4 spielt Spur 1–4 (oder im Menü: alle Kanäle die gewählte Spur), Drums nach General-MIDI-Noten.
 
 Rettungswege (aus Felucca übernommen, nicht entfernen): **OCT− und OCT+ 5 s halten** → UBOOT;
 zwei Abstürze in den ersten 30 s nach dem Einschalten → UBOOT; USB-SysEx `F0 22 24 35 7D F7` → UBOOT;
@@ -31,10 +78,14 @@ das M-UPGRADE-Update über USB.
 
 ## Klang
 
-Sechs eigene Engines in Festkomma (der FM-1 hat keine FPU): Subtraktiv (2 Osc + Sub + Noise, SVF),
+Sieben eigene Engines in Festkomma (der FM-1 hat keine FPU): Subtraktiv (2 Osc + Sub + Noise, SVF),
 Acid (TB-303-artig, Sättigung, Accent/Slide), FM (3 Operatoren, 3 Algorithmen), Supersaw (bis 7 Sägezähne),
-Additiv (bis 8 Teiltöne, Orgel/Risset-Glocke/Marimba) und Drums (8 synthetisierte Instrumente).
-Dazu Delay (punktierte Achtel) und Reverb.
+Additiv (bis 8 Teiltöne, Orgel/Risset-Glocke/Marimba), Noise (gefiltertes Rauschen, Tiefpass/Bandpass/Hochpass) und
+Drums (8 synthetisierte Instrumente). Pro Sound: Amp- und Filter-ADSR, LFO, Dual-Stimme, Pitch/Fine.
+Dazu Delay (1/8 bis 3/4, Feedback) und Reverb (Größe, Dämpfung) und ein Metronom.
+
+Speicher: 16 Sounds, 4 Songs und die Einstellungen liegen im Flash bei 0x97000–0x9D000 (der Bereich, den Felucca
+für seine Projekte nutzt – wer zwischen Felucca und ONE CLICK wechselt, verliert dort die Daten der anderen Firmware).
 
 Stimmen: 8 Synth-Stimmen für Bass, Akkorde und Lead mit Reserven (Bass 1, Akkorde 4, Lead 1, zwei frei vergeben);
 eine wiederholte Note übernimmt ihre eigene Stimme. Die Drums haben eine Stimme pro Instrument wie eine Drum-Machine
@@ -64,9 +115,12 @@ tests/run.sh      # Host-Test unter ASan/UBSan, Typprüfung des Firmware-Builds,
 ## Emulator
 
 `emu/build.sh` baut `build/emu/oneclick-emu.html`: die App (Klang, Sequencer, Generator, Display, USB-Protokoll) als
-WebAssembly mit nachgebautem Bedienfeld, eine Datei, die direkt im Browser läuft. Der Ton ist bit-gleich zu einem
-nativen Clang-Build derselben Quellen (`emu/emu_test.mjs`). Nicht simuliert werden der JieLi-Prozessor und seine
-Rechenzeit, Booten, Update, UBOOT und Flash; ob die Engines auf dem Gerät schnell genug sind, zeigt erst die Hardware.
+WebAssembly mit dem Bedienfeld wie am FM-1 (links MASTER, SELECT, PRESETS, ALGORITHM, OCT; Mitte Display; rechts
+KNOB 1–4 und die zwei Tastenreihen; Halten und SHIFT funktionieren, auch über die Computer-Tastatur: ⇧ = SHIFT,
+Enter = ONE CLICK, R = REC, Z = Undo). Gespeichertes bleibt im Browser. Export: MIDI-Datei (aus dem Dump) und WAV.
+Der Ton ist bit-gleich zu einem nativen Clang-Build derselben Quellen (`emu/emu_test.mjs`). Nicht simuliert werden der
+JieLi-Prozessor und seine Rechenzeit, Booten, Update und UBOOT; ob die Engines auf dem Gerät schnell genug sind, zeigt
+erst die Hardware.
 
 Hinweis: Der Generator ruft `rr()` mehrfach in einer Argumentliste auf. Deren Auswertungsreihenfolge ist in C nicht
 festgelegt, deshalb erzeugt ein GCC-Build aus demselben Startwert andere Songs als ein Clang-Build (Gerät, Emulator).

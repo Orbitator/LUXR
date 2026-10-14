@@ -37,7 +37,7 @@ int main(int argc, char **argv)
     host_press(B_PLAY);
     for (i = 0; i < n; i++) {
         if (i)
-            host_press(B_REC);
+            host_oneclick();
         printf("%u: %s %s, %s / %s / %s / %s\n", i + 1, NOTE_NAME[song.root], SCALE_NAME[song.scale],
                ENGINE_NAME[trk[0].s.engine], ENGINE_NAME[trk[1].s.engine], ENGINE_NAME[trk[2].s.engine], ENGINE_NAME[trk[3].s.engine]);
         host_run(sec * 1000u, put, 0);

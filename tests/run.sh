@@ -3,7 +3,7 @@
 set -e
 cd "$(dirname "$0")/.."
 mkdir -p build/gen
-python3 tools/gen_tables.py build/gen/oc_tables.h
+python3 tools/build.py --gen >/dev/null
 CF="-std=gnu99 -Ibuild/gen -Ifirmware/src"
 cc -O1 -g -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -fsanitize=address,undefined -fno-sanitize=shift \
    $CF -o build/test_oc tests/test_oc.c -lm

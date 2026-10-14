@@ -38,6 +38,12 @@ def main(path):
     L.append(arr("ATK_INC", "uint32_t", [max(1, round((1 << 24) * CTL / FS / t)) for t in times], 8))
     # TB-303-ish tanh soft clip, 257 points over -2..2 (Q15 in, Q15 out)
     L.append(arr("TANH", "int16_t", [round(32767 * math.tanh(4 * (i - 128) / 256)) for i in range(257)]))
+    # LFO: rate 0..127 -> phase increment per CTL block, 0.05 .. 20 Hz
+    L.append(arr("LFO_INC", "uint32_t", [round(0.05 * 400 ** (i / 127) * CTL / FS * 2 ** 32) for i in range(128)], 6))
+    # for the screen: cutoff 0..127 in Hz (as the filter maps cutoff * 2), times in ms, LFO rates in 1/100 Hz
+    L.append(arr("CUT_HZ", "uint16_t", [round(fcs[min(255, i * 2)]) for i in range(128)]))
+    L.append(arr("TIME_MS", "uint16_t", [min(65535, round(t * 1000)) for t in times], 10))
+    L.append(arr("LFO_CHZ", "uint16_t", [round(100 * 0.05 * 400 ** (i / 127)) for i in range(128)], 10))
     open(path, "w").write("\n".join(L) + "\n")
 
 

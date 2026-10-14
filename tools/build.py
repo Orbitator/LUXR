@@ -97,7 +97,10 @@ def generate():
     for old in ("felucca_font.h", "felucca_icons.h"):     # headers of the bitmap font and icon atlas
         (GEN / old).unlink(missing_ok=True)
     tools = SRC / "tools"
-    cmds = [[tools / "gen_tables.py", GEN / "oc_tables.h"]]
+    cmds = [[tools / "gen_aa_font.py", GEN / "ui_fonts.h", "--preset", "inter-tight"],
+            [tools / "gen_aa_keycaps.py", GEN / "ui_keycaps.h"],
+            [tools / "gen_ui_palettes.py", GEN / "ui_palettes.h"],
+            [tools / "gen_tables.py", GEN / "oc_tables.h"]]
     procs = [subprocess.Popen([sys.executable, *map(str, c)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                               text=True) for c in cmds]
     failed = []
@@ -330,9 +333,13 @@ def mmio_check():
 def main():
     global PRODUCT, VERSION
     ap = argparse.ArgumentParser()
+    ap.add_argument("--gen", action="store_true", help="only the generated headers (the host tests, the emulator)")
     ap.add_argument("--release", metavar="X.Y", help="release build: identity FM-1_9XY, version string vX.Y")
     ap.add_argument("--sdk", type=Path, help="JieLi AC79 SDK checkout (default: $AC79_SDK)")
     a = ap.parse_args()
+    if a.gen:
+        generate()
+        return
     name = "oneclick.fwsc"
     if a.release:                   # one digit each: the identity has room for two (X.Y.Z and X.Y.Z.W keep X.Y's)
         m = re.fullmatch(r"(\d)\.(\d)(?:\.\d){0,2}(-[A-Za-z0-9]+)?", a.release)

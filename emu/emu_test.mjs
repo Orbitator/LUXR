@@ -19,7 +19,8 @@ function run(ms, rec) {
   }
 }
 function press(b) { e.emu_buttons(1 << b); run(20); e.emu_buttons(0); run(20); }
-run(200); press(B_PLAY); run(3000, true); press(B_REC); run(3000, true);
+function hold(b) { e.emu_buttons(1 << b); run(400); e.emu_buttons(0); run(20); }   // (REC held: ONE CLICK)
+run(200); press(B_PLAY); run(3000, true); hold(B_REC); run(3000, true);
 let pk = 0, nan = 0; for (const x of out) { if (!Number.isFinite(x)) nan++; pk = Math.max(pk, Math.abs(x)); }
 check(nan === 0 && pk > 0.05 && pk < 1, `audio peak ${pk} nan ${nan}`);
 check(e.emu_playing() === 1, "playing");

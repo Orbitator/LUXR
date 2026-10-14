@@ -7,7 +7,8 @@
  *   07 b         tempo (b + 60)                  08     undo / redo
  *   10           dump: the device answers 11 + the packed state: 1, sizeof patch_t, sizeof step_t, root, scale,
  *                prog[4], bpm, playing; then each track: patch_t (engine first), LEN, GATE, 64 x step_t
- *                (step_t: note[4] n time flags vel hit acc)
+ *                (step_t: note[4] n time flags vel hit acc); then each track's TYPE and OCTAVE, the song's TRANSPOSE,
+ *                SWING (readers that know only the tracks stop before them)
  *   12 t h + packed  steps of t, half h (0: steps 1..32, 1: 33..64): LEN, GATE, 32 steps (a frame stays < 640 B)   13 t + packed  the sound of t   14 + packed  root scale prog[4]
  * proto_frame(p, n): one frame without F0 / F7; replies through proto_send. Unknown frames are left alone. */
 
@@ -39,7 +40,7 @@ static uint32_t unpack7(const uint8_t *in, uint32_t n, uint8_t *out, uint32_t ma
 }
 
 #define TRK_WIRE (sizeof(patch_t) + 2u + NSTEP * sizeof(step_t))
-static uint8_t px_raw[11u + NTRK * TRK_WIRE] __attribute__((section(".pool")));
+static uint8_t px_raw[11u + NTRK * TRK_WIRE + 2u * NTRK + 2u] __attribute__((section(".pool")));
 static uint8_t px_wire[sizeof px_raw * 8u / 7u + 16u] __attribute__((section(".pool")));
 
 static void proto_dump(void)
@@ -62,6 +63,12 @@ static void proto_dump(void)
         memcpy(px_raw + n, trk[i].step, sizeof trk[i].step);
         n += sizeof trk[i].step;
     }
+    for (i = 0; i < NTRK; i++)
+        px_raw[n++] = trk[i].type;
+    for (i = 0; i < NTRK; i++)
+        px_raw[n++] = (uint8_t)trk[i].octave;
+    px_raw[n++] = (uint8_t)song.transpose;
+    px_raw[n++] = song.swing;
     px_wire[0] = 0xF0;
     px_wire[1] = 0x7D;
     px_wire[2] = 'O';
@@ -74,7 +81,7 @@ static void proto_dump(void)
 
 static void ui_say(const char *s);
 static void undo_take(void);
-static void undo_swap(void);
+static void undo_do(int redo);
 /* 1 = the frame was ours */
 static int proto_frame(const uint8_t *p, uint32_t n)
 {
@@ -90,7 +97,7 @@ static int proto_frame(const uint8_t *p, uint32_t n)
     case 0x05: undo_take(); gen_key(); break;
     case 0x06: seq_play(n > 4u && p[4]); break;
     case 0x07: if (n > 4u) song.bpm = (uint8_t)clamp(p[4] + 60, 60, 200); break;
-    case 0x08: undo_swap(); break;
+    case 0x08: undo_do(n > 4u && p[4]); break;   /* 0: undo, 1: redo */
     case 0x10: proto_dump(); break;
     case 0x12: {                                  /* steps of t */
         uint32_t h = n > 5u ? p[5] & 1u : 0u, half = NSTEP / 2u * sizeof(step_t);
@@ -106,7 +113,7 @@ static int proto_frame(const uint8_t *p, uint32_t n)
     }
     case 0x13: {                                  /* the sound of t (the engine number checked) */
         k = unpack7(p + 5, n - 5u, px_raw, sizeof(patch_t));
-        if (k == sizeof(patch_t) && px_raw[0] < E_N && (t == ROLE_DRUM) == (px_raw[0] == E_DRUM)) {
+        if (k == sizeof(patch_t) && px_raw[0] < E_N && (uint32_t)IS_DRUM(t) == (uint32_t)(px_raw[0] == E_DRUM)) {
             gen_lock();
             track_panic(t);
             memcpy(&trk[t].s, px_raw, sizeof(patch_t));

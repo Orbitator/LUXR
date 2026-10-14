@@ -71,9 +71,17 @@ static uint32_t pitch_inc(int32_t p16)
 /* a ratio Q4 (16 = 1.0) of an increment (wraps above Nyquist: not reached by the generated sounds) */
 static inline uint32_t inc_ratio(uint32_t inc, uint32_t q4) { return (inc >> 4) * q4; }
 
+static inline int32_t lfo_amt(const track_t *tr, uint32_t d, int32_t range);
+
 /* ----------------------------------------------------------------- voices --- */
 static uint32_t v_age;
-static void voice_start(voice_t *v, uint32_t t, uint32_t note, uint32_t vel, uint32_t acc, uint32_t lane)
+/* what a melodic track's notes are moved by as they play: the song's TRANSPOSE and the track's OCTAVE (the notes
+ * stored and the keys pressed stay as they are) */
+static int32_t note_shift(uint32_t t)
+{
+    return trk_role(t) == ROLE_DRUM ? 0 : song.transpose + 12 * trk[t % NTRK].octave;
+}
+static void voice_start(voice_t *v, uint32_t t, uint32_t note, uint32_t vel, uint32_t acc, uint32_t lane, int32_t poff)
 {
     const patch_t *s = &trk[t].s;
     uint32_t keep = v->active && v->trk == t;   /* a retrigger keeps the phases: no click */
@@ -84,10 +92,12 @@ static void voice_start(voice_t *v, uint32_t t, uint32_t note, uint32_t vel, uin
     v->lane = (uint8_t)lane;
     v->gate = 1;
     v->stage = 1;
-    v->pitch16 = v->pitch_to = (int32_t)note * 16;
+    v->poff = (int16_t)poff;
+    v->pitch16 = v->pitch_to = ((int32_t)note + note_shift(t)) * 16 + poff;
     v->gstep = 0;
     v->env = keep ? v->env : 0;
-    v->fenv = 1 << 24;
+    v->fenv = keep ? v->fenv : 0;
+    v->fstage = 1;
     v->ienv = 32767;
     v->t = 0;
     v->age = ++v_age;
@@ -138,7 +148,11 @@ static void steal_count(uint32_t t, const voice_t *v)
  *   4. any releasing voice, the quietest, if t is under its reserve
  *   5. t's own oldest voice (a held one: t plays more notes than it has)
  *   6. the quietest voice of a track over its reserve */
-static const uint8_t VRES[NTRK] = {1, 4, 1, 0};
+static uint32_t vres(uint32_t t)                 /* a track's reserve by its role */
+{
+    static const uint8_t R[ROLE_N] = {1, 4, 1, 0};
+    return R[trk_role(t) % ROLE_N];
+}
 static uint8_t alloc_retrig;                     /* the last voice_alloc_ was a retrigger (rule 1) */
 static voice_t *voice_alloc_(uint32_t t, uint32_t note, uint32_t lane)
 {
@@ -158,19 +172,19 @@ static voice_t *voice_alloc_(uint32_t t, uint32_t note, uint32_t lane)
     for (i = 0; i < NVOICE; i++)
         cnt[voice[i].trk % NTRK]++;
     for (k = 3; k <= 6; k++) {
-        if (k == 4 && cnt[t] >= VRES[t])
+        if (k == 4 && cnt[t] >= vres(t))
             continue;
         for (i = 0; i < NVOICE; i++) {
             uint32_t vt;
             v = &voice[i];
             vt = v->trk % NTRK;
-            if (k == 3 && (v->gate || (vt != t && cnt[vt] <= VRES[vt])))
+            if (k == 3 && (v->gate || (vt != t && cnt[vt] <= vres(vt))))
                 continue;
             if (k == 4 && v->gate)
                 continue;
             if (k == 5 && vt != t)
                 continue;
-            if (k == 6 && cnt[vt] <= VRES[vt])
+            if (k == 6 && cnt[vt] <= vres(vt))
                 continue;
             if (!best || (k == 5 ? v->age < best->age : v->amp < best->amp))
                 best = v;
@@ -201,20 +215,22 @@ static void note_on(uint32_t t, uint32_t note, uint32_t vel, uint32_t flags)
         for (i = 0; i < NLANE; i++) {
             if (!((note >> i) & 1u))
                 continue;
-            if (i == LN_HATC && dvoice[LN_HATO].active)   /* the closed hat chokes the open one (a 3 ms fade) */
-                dvoice[LN_HATO].stage = 3;
-            v = &dvoice[i];                     /* the lane's voice: a hit again restarts it */
-            voice_start(v, t, 60, vel, (flags >> i) & 1u, i);
+            if (i == LN_HATC && dvoice[t][LN_HATO].active)   /* the closed hat chokes the open one (a 3 ms fade) */
+                dvoice[t][LN_HATO].stage = 3;
+            v = &dvoice[t][i];                  /* the lane's voice: a hit again restarts it */
+            voice_start(v, t, 60, vel, (flags >> i) & 1u, i, 0);
             v->gate = 0;                        /* one-shot */
             v->pa[3] = 32767;                   /* (the choke fade's level) */
         }
         return;
     }
-    if (tr->s.mono) {                           /* one voice: legato / slide glides */
+    if (tr->s.mono) {                           /* one voice (and DUAL's): legato / slide glides */
+        uint32_t found = 0;
         for (i = 0; i < NVOICE; i++) {
             v = &voice[i];
             if (v->active && v->trk == t && v->stage != 3u) {
-                int32_t to = (int32_t)note * 16;
+                int32_t to = ((int32_t)note + note_shift(t)) * 16 + v->poff;
+                found = 1;
                 if ((flags & SF_SLIDE) || tr->s.glide) {
                     uint32_t g = (flags & SF_SLIDE) ? 24u : tr->s.glide;
                     v->pitch_to = to;
@@ -228,16 +244,24 @@ static void note_on(uint32_t t, uint32_t note, uint32_t vel, uint32_t flags)
                 v->vel = (uint8_t)vel;
                 v->acc = (uint8_t)(flags & SF_ACC);
                 v->gate = 1;
-                if (!(flags & SF_SLIDE)) {     /* a new note (not slid): the filter envelope again */
-                    v->fenv = 1 << 24;
+                if (!(flags & SF_SLIDE)) {     /* a new note (not slid): the envelopes again */
+                    v->fstage = 1;
                     v->stage = 1;
                 }
-                return;
             }
         }
+        if (found)
+            return;
     }
     v = voice_alloc(t, note, 0);
-    voice_start(v, t, note, vel, flags & SF_ACC, 0);
+    voice_start(v, t, note, vel, flags & SF_ACC, 0, 0);
+    if (tr->s.dual) {                           /* DUAL: the second voice on the same note */
+        static const int16_t OFF[DU_N] = {0, 2, 192, 112, -192};
+        voice_t *w = voice_alloc(t, note, 0);
+        if (w != v)
+            voice_start(w, t, note, vel * (tr->s.dmix ? tr->s.dmix : 100u) / 127u, flags & SF_ACC, 0,
+                        OFF[tr->s.dual % DU_N]);
+    }
 }
 static void note_off(uint32_t t, uint32_t note)
 {
@@ -246,6 +270,7 @@ static void note_off(uint32_t t, uint32_t note)
         if (voice[i].active && voice[i].trk == t && voice[i].note == note && voice[i].gate) {
             voice[i].gate = 0;
             voice[i].stage = 3;
+            voice[i].fstage = 3;
         }
 }
 static void track_panic(uint32_t t)
@@ -255,7 +280,25 @@ static void track_panic(uint32_t t)
         if (voice[i].trk == t && voice[i].gate) {
             voice[i].gate = 0;
             voice[i].stage = 3;
+            voice[i].fstage = 3;
         }
+}
+
+/* the filter envelope, once a block: Q24 (an ADSR of its own: fatt fdec fsus frel) */
+static void fenv_block(voice_t *v, const patch_t *s, int32_t kdec)
+{
+    int32_t sus = (int32_t)s->fsus << 17;
+    if (v->fstage == 1) {
+        v->fenv += (int32_t)ATK_INC[s->fatt & 127];
+        if (v->fenv >= 1 << 24) {
+            v->fenv = 1 << 24;
+            v->fstage = 2;
+        }
+    } else if (v->fstage == 2) {
+        v->fenv = v->fenv > sus ? sus + mulq16(v->fenv - sus, ENV_K[clamp(s->fdec + kdec, 0, 127)]) : sus;
+    } else {
+        v->fenv = mulq16(v->fenv, ENV_K[s->frel & 127]);
+    }
 }
 
 /* the amp envelope, once a block: Q24 */
@@ -302,9 +345,10 @@ static void render_voice(voice_t *v, int32_t *out, uint32_t n)
     if (s->engine == E_DRUM) {                   /* drums keep their own envelopes */
         static const uint16_t DEC[8] = {9000, 4500, 5200, 1200, 9000, 7000, 900, 5000};   /* ms x 0.1 / ~1/e */
         static const uint16_t F0[8] = {52, 185, 1100, 7000, 6000, 98, 820, 560};
-        uint32_t kit = s->kit & 3u, lane = v->lane & 7u, tune = 100u + kit * 12u - 12u;
+        uint32_t kit = s->kit & 3u, lane = v->lane & 7u,
+                 tune = (100u + kit * 12u - 12u) * (uint32_t)(100 + clamp(s->dtune, -24, 24) * 3) / 100u;
         int32_t vel = (v->vel + (v->acc ? 30 : 0)) * 200;   /* Q15-ish */
-        uint32_t dec = DEC[lane] * (8u + kit) / 8u + 1u, kd = (32767u << 16) / (dec * 4u + 1u);   /* (divisions: */
+        uint32_t dec = DEC[lane] * (8u + kit) / 8u * (32u + (s->ddec ? s->ddec : 64u) / 2u) / 64u + 1u, kd = (32767u << 16) / (dec * 4u + 1u);   /* (divisions: */
         uint32_t ik = pitch_inc(16 * 31) / 100u * tune, f0 = F0[lane] * tune / 100u * 97391u;   /* once a block) */
         for (i = 0; i < n; i++) {
             int32_t e, y = 0, nz = (int32_t)(xrand(&v->noise) >> 17) - 16384;
@@ -373,6 +417,7 @@ static void render_voice(voice_t *v, int32_t *out, uint32_t n)
     }
 
     /* the control block: envelopes, glide, the filter */
+    int32_t pkeep;
     env_block(v, s, tr->k_dec);
     if (v->gstep) {
         v->pitch16 += v->gstep;
@@ -381,13 +426,17 @@ static void render_voice(voice_t *v, int32_t *out, uint32_t n)
             v->gstep = 0;
         }
     }
-    v->fenv = mulq16(v->fenv, ENV_K[clamp(s->fdec + tr->k_dec, 0, 127)]);
-    c = s->cutoff * 2 + tr->k_cut * 2 + ((s->fenv * (v->fenv >> 12)) >> 11) + (v->acc ? 30 : 0) +
+    fenv_block(v, s, tr->k_dec);
+    pkeep = v->pitch16;
+    v->pitch16 += lfo_amt(tr, LD_PITCH, 48) + s->tune * 16 + s->fine * 16 / 100;   /* (vibrato, PITCH, FINE: back after the render) */
+    c = s->cutoff * 2 + tr->k_cut * 2 + lfo_amt(tr, LD_CUT, 120) + ((s->fenv * (v->fenv >> 12)) >> 11) + (v->acc ? 30 : 0) +
         ((int32_t)s->keytrk * (v->pitch16 - 60 * 16) >> 9);
     f = SVF_F[clamp(c, 0, 255)];
     q = 65534 - clamp(s->res + tr->k_res, 0, 127) * 500 - (v->acc ? 3000 : 0);   /* res 127: q ~ 0.06 */
     a1 = ((v->env >> 9) * (v->vel + (v->acc ? 24 : 0))) / 151;
     a1 = clamp(a1, 0, 32767);
+    if (s->lfo_dest == LD_AMP)                   /* tremolo: down from full, never up */
+        a1 = (a1 * (32767 - ((32767 - tr->lfo_v) >> 1) * s->lfo_depth / 127)) >> 15;
     da = (a1 - a0) / (int32_t)n;
     inc = pitch_inc(v->pitch16);
 
@@ -466,6 +515,23 @@ static void render_voice(voice_t *v, int32_t *out, uint32_t n)
         }
         break;
     }
+    case E_NOISE: {                             /* noise through the filter: COLOR (wave1) LP / BP / HP, pitched by
+                                                 * KEYTRK and RESO (high resonance: a whistle on the note) */
+        uint32_t col = s->wave1 % 3u;
+        int32_t k;
+        for (i = 0; i < n; i++) {
+            int32_t nz = (int32_t)(xrand(&v->noise) >> 17) - 16384, hp = 0, y;
+            for (k = 0; k < 2; k++) {
+                v->lp = clamp(v->lp + ((f * v->bp) >> 15), -SVF_LIM, SVF_LIM);
+                hp = clamp(nz - v->lp - ((q * (v->bp >> 1)) >> 14), -SVF_LIM, SVF_LIM);
+                v->bp = clamp(v->bp + ((f * hp) >> 15), -SVF_LIM, SVF_LIM);
+            }
+            y = col == 0u ? v->lp : col == 1u ? v->bp : hp;
+            out[i] += (y * (a0 >> 2)) >> 13;
+            a0 += da;
+        }
+        break;
+    }
     case E_ADD: {                                /* sine partials, the higher ones dying sooner */
         uint32_t k, np = clamp(s->add_n, 1, ADD_N), pi[ADD_N];
         int32_t ag = 2 * 16384 / (int32_t)(np + 1u);
@@ -489,6 +555,7 @@ static void render_voice(voice_t *v, int32_t *out, uint32_t n)
     }
     }
     v->amp = a1;
+    v->pitch16 = pkeep;
 }
 
 /* -------------------------------------------------------------- effects --- */
@@ -506,18 +573,20 @@ static int32_t rv_lp[RV_C], dly_lp;
 static inline int32_t s16(int32_t x) { return clamp(x, -32767, 32767); }
 static void fx_block(int32_t *L, int32_t *R, const int32_t *dsend, const int32_t *rsend, uint32_t n)
 {
-    uint32_t i, k, dt = (uint32_t)(FS * 60u * 3u / (4u * (song.bpm ? song.bpm : 120u)));   /* a dotted 8th */
+    static const uint8_t DIV16[6] = {2, 3, 4, 6, 8, 12};   /* the delay in 16ths: 1/8 3/16 1/4 3/8 1/2 3/4 */
+    uint32_t i, k, dt = (uint32_t)(FS * 15u * DIV16[song.dly_div % 6u] / (song.bpm ? song.bpm : 120u));
+    int32_t dfb = song.dly_fb * 27 / 127, rfb = 22 + song.rev_size * 9 / 127, rd = 1 + song.rev_damp / 43;
     if (dt >= DLY_N)
         dt = DLY_N - 1u;
     for (i = 0; i < n; i++) {
         int32_t d = dly_buf[(dly_w - dt) & (DLY_N - 1u)], r = 0, a, in = rsend[i] >> 2, ap;
         dly_lp += (d - dly_lp) >> 2;             /* darker repeats */
-        dly_buf[dly_w++ & (DLY_N - 1u)] = (int16_t)s16(dsend[i] + ((dly_lp * 13) >> 5));
+        dly_buf[dly_w++ & (DLY_N - 1u)] = (int16_t)s16(dsend[i] + ((dly_lp * dfb) >> 5));   /* FEEDBACK up to 0.85 */
         for (k = 0; k < RV_C; k++) {             /* parallel combs with damping */
             int16_t *b = rv_comb[k];
             int32_t y = b[rv_ci[k]];
-            rv_lp[k] += (y - rv_lp[k]) >> 1;
-            b[rv_ci[k]] = (int16_t)s16(in + ((rv_lp[k] * 27) >> 5));
+            rv_lp[k] += (y - rv_lp[k]) >> rd;    /* DAMP: darker tails */
+            b[rv_ci[k]] = (int16_t)s16(in + ((rv_lp[k] * rfb) >> 5));   /* SIZE: 0.69 .. 0.97 */
             if (++rv_ci[k] >= RV_CLEN[k])
                 rv_ci[k] = 0;
             r += y;
@@ -553,26 +622,62 @@ static void fx_block(int32_t *L, int32_t *R, const int32_t *dsend, const int32_t
 static void seq_block(uint32_t n);               /* oc_seq.c: the steps of this block */
 static int32_t scope[64];
 /* n samples (n <= CTL) of the master into out: stereo interleaved, Q15 */
+/* the tracks' LFOs, once a block: lfo_v Q15 (-32767..32767) */
+static void lfo_block(void)
+{
+    uint32_t t;
+    for (t = 0; t < NTRK; t++) {
+        track_t *tr = &trk[t];
+        const patch_t *s = &tr->s;
+        uint32_t was = tr->lfo_ph, ph;
+        int32_t v;
+        if (s->lfo_dest == LD_OFF || !s->lfo_depth) {
+            tr->lfo_v = 0;
+            continue;
+        }
+        ph = tr->lfo_ph += LFO_INC[s->lfo_rate & 127];
+        switch (s->lfo_wave) {
+        case LW_TRI: v = (int32_t)(ph >> 15); v = v < 65536 ? v - 32768 : 98303 - v; break;
+        case LW_SAW: v = (int32_t)(ph >> 16) - 32768; break;
+        case LW_SQR: v = ph & 0x80000000u ? -32767 : 32767; break;
+        case LW_SH:
+            if (ph < was)                        /* a new cycle: a new value */
+                tr->lfo_sh = (int32_t)(rng() >> 17) - 16384;
+            v = tr->lfo_sh * 2;
+            break;
+        default: v = sine(ph); break;
+        }
+        tr->lfo_v = clamp(v, -32767, 32767);
+    }
+}
+/* the LFO's amount on track t for dest d, scaled to +-range at full depth */
+static inline int32_t lfo_amt(const track_t *tr, uint32_t d, int32_t range)
+{
+    return tr->s.lfo_dest == d ? ((tr->lfo_v >> 7) * tr->s.lfo_depth >> 7) * range >> 8 : 0;
+}
+
 static void mix_block(int32_t *out, uint32_t n)
 {
     int32_t tb[NTRK][CTL], L[CTL], R[CTL], ds[CTL], rs[CTL];
     uint32_t i, t, m = song.master_q12;
     seq_block(n);
+    lfo_block();
     for (t = 0; t < NTRK; t++)
         for (i = 0; i < n; i++)
             tb[t][i] = 0;
     for (i = 0; i < NVOICE; i++)
         if (voice[i].active)
             render_voice(&voice[i], tb[voice[i].trk % NTRK], n);
-    for (i = 0; i < NLANE; i++)
-        if (dvoice[i].active)
-            render_voice(&dvoice[i], tb[dvoice[i].trk % NTRK], n);
+    for (t = 0; t < NTRK; t++)
+        for (i = 0; i < NLANE; i++)
+            if (dvoice[t][i].active)
+                render_voice(&dvoice[t][i], tb[t], n);
     for (i = 0; i < n; i++)
         L[i] = R[i] = ds[i] = rs[i] = 0;
     for (t = 0; t < NTRK; t++) {
         const track_t *tr = &trk[t];
         int32_t g = tr->mute ? 0 : (tr->s.level * tr->k_lvl) >> 3;   /* 0..254, 127 at the default knob */
-        int32_t pl = 64 - tr->s.pan, pr = 64 + tr->s.pan;   /* 0..128 */
+        int32_t pan = clamp(tr->s.pan + lfo_amt(tr, LD_PAN, 64), -64, 64), pl = 64 - pan, pr = 64 + pan;   /* 0..128 */
         int32_t dg = tr->s.dly, rg = tr->s.rev;
         for (i = 0; i < n; i++) {
             int32_t x = (tb[t][i] >> 2) * g >> 4;   /* g 127: x 2 */
@@ -583,6 +688,17 @@ static void mix_block(int32_t *out, uint32_t n)
         }
     }
     fx_block(L, R, ds, rs, n);
+    if (song.playing && (song.click == CLICK_ON || (song.click == CLICK_REC && song.rec))) {   /* the metronome */
+        uint32_t beat = song.step % 4u == 0u, bar = song.step % 16u == 0u, p0 = song.pos >= n ? song.pos - n : 0u;
+        for (i = 0; beat && i < n; i++) {
+            uint32_t p = p0 + i;
+            if (p < 1800u) {
+                int32_t c = (sine(p * (bar ? 146100u : 97400u)) * (int32_t)(1800u - p) / 1800) >> 2;
+                L[i] += c;
+                R[i] += c;
+            }
+        }
+    }
     for (i = 0; i < n; i++) {                    /* DC blocker (~7 Hz) on both sides */
         static int32_t dcl, dcr;
         dcl += (L[i] * 1024 - dcl) >> 10;

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * ONE CLICK FM-1: core types. Four tracks with fixed roles (bass, chords, lead, drums), each a sound (patch_t) and a
- * 64-step pattern; a pool of NVOICE voices shared by the three melodic tracks, one voice per lane for the drums. Everything is fixed point (no FPU on the FM-1). */
+ * ONE CLICK FM-1: core types. Four tracks, each an instrument TYPE (bass, chords, pad, lead, drums, ...: its role in
+ * the music and how its sounds are made), a sound (patch_t) and a 64-step pattern; a pool of NVOICE voices shared by
+ * the melodic tracks, one voice per lane on drum tracks. Everything is fixed point (no FPU on the FM-1). */
 #include <stdint.h>
 
 #define NTRK 4
@@ -15,10 +16,18 @@ enum { B_FX, B_SCL, B_ENV, B_LFO, B_EDIT, B_GLO, B_HOME, B_SAVE, B_ARP, B_SEQ, B
        B_OCTDN, B_OCTUP, NB };
 enum { EN_SELECT, EN_ALGO, EN_PRESET, EN_K1, EN_K2, EN_K3, EN_K4, NE };
 
-enum { ROLE_BASS, ROLE_CHORD, ROLE_LEAD, ROLE_DRUM };
-enum { E_SUB, E_ACID, E_FM, E_SAW, E_ADD, E_DRUM, E_N };
-static const char *const ENGINE_NAME[E_N] = {"SUBTRACT", "ACID", "FM", "SUPERSAW", "ADDITIVE", "DRUMS"};
-static const char *const ROLE_NAME[NTRK] = {"BASS", "CHORDS", "LEAD", "DRUMS"};
+/* the roles in the music (how a part is made) and the instrument types (what the track is: its role and its sounds) */
+enum { ROLE_BASS, ROLE_CHORD, ROLE_LEAD, ROLE_DRUM, ROLE_N };
+enum { TY_BASS, TY_CHORDS, TY_PAD, TY_ATMO, TY_PIANO, TY_GUITAR, TY_LEAD, TY_PLUCK, TY_BRASS, TY_FLUTE,
+       TY_DRUMS, TY_KICK, TY_SNARE, TY_PERC, TY_N };
+static const char *const TYPE_NAME[TY_N] = {"BASS", "CHORDS", "PAD", "ATMO", "PIANO", "GUITAR", "LEAD", "PLUCK",
+                                            "BRASS", "FLUTE", "DRUMS", "KICK", "SNARE", "PERC"};
+static const uint8_t TYPE_ROLE[TY_N] = {ROLE_BASS, ROLE_CHORD, ROLE_CHORD, ROLE_CHORD, ROLE_CHORD, ROLE_CHORD,
+                                        ROLE_LEAD, ROLE_LEAD, ROLE_LEAD, ROLE_LEAD,
+                                        ROLE_DRUM, ROLE_DRUM, ROLE_DRUM, ROLE_DRUM};
+static const uint8_t TYPE_DEFAULT[4] = {TY_BASS, TY_CHORDS, TY_LEAD, TY_DRUMS};   /* the tracks at power-on */
+enum { E_SUB, E_ACID, E_FM, E_SAW, E_ADD, E_NOISE, E_DRUM, E_N };
+static const char *const ENGINE_NAME[E_N] = {"SUBTRACT", "ACID", "FM", "SUPERSAW", "ADDITIVE", "NOISE", "DRUMS"};
 enum { LN_KICK, LN_SNARE, LN_CLAP, LN_HATC, LN_HATO, LN_TOM, LN_RIM, LN_BELL };
 
 enum { ST_REST, ST_NOTE, ST_TIE };
@@ -51,11 +60,22 @@ typedef struct {                 /* a sound; values 0..127 unless noted */
     uint8_t kit;                 /* DRUMS: 0..3 tuning / decay character */
     uint8_t level, dly, rev;
     int8_t pan;                  /* -64..63 */
+    uint8_t lfo_rate, lfo_depth, lfo_dest, lfo_wave;   /* LFO: rate (0.05..20 Hz), depth, LD_*, LW_* */
+    int8_t dtune;                /* DRUMS: tune, -24..24 */
+    uint8_t ddec;                /* DRUMS: decay, 64 = as the kit */
+    uint8_t fatt, fsus, frel;    /* the filter envelope's attack, sustain, release (its decay: fdec) */
+    int8_t tune, fine;           /* pitch: semitones -24..24, cents -100..100 */
+    uint8_t dual, dmix;          /* DUAL: a second voice per note (DU_*), its level */
 } patch_t;
+enum { DU_OFF, DU_UNISON, DU_OCTUP, DU_FIFTH, DU_OCTDN, DU_N };   /* the second voice: detuned, +12, +7, -12 */
+enum { LD_OFF, LD_CUT, LD_PITCH, LD_AMP, LD_PAN, LD_N };
+enum { LW_SINE, LW_TRI, LW_SAW, LW_SQR, LW_SH, LW_N };
 
 typedef struct {
     uint8_t active, trk, note, vel, gate, stage, lane, acc;   /* stage 1 attack 2 decay/sustain 3 release */
     int32_t pitch16, pitch_to, gstep;        /* 1/16 semitones, glide target and step per block */
+    int16_t poff;                /* DUAL's second voice: its offset, 1/16 semitones */
+    uint8_t fstage;              /* the filter envelope: 1 attack, 2 decay / sustain, 3 release */
     uint32_t ph[8];
     int32_t env;                 /* Q24 */
     int32_t amp;                 /* Q15, last block */
@@ -71,8 +91,19 @@ typedef struct {
     step_t step[NSTEP];
     uint8_t len, gate;           /* LEN 1..64 (16ths), GATE % 1..100 */
     uint8_t mute;
+    uint8_t type;                /* TY_* */
+    uint8_t seq_off;             /* SEQ OFF: the pattern does not play (the keys and MIDI still do) */
+    uint8_t master;              /* MASTER: knob changes on this track go to the other tracks too */
+    int8_t octave;               /* the track's octave, -2..+2 (played, not stored in the notes) */
+    uint8_t gen_mut;             /* MUTATE: how much a partial new (sound, notes, rhythm) changes, 0..127 */
+    uint8_t eu_hits, eu_rot, eu_lane;   /* EUCLID: the hits over LEN, the rotation, the drum lane it writes */
     int8_t k_cut, k_res, k_dec;  /* live knob offsets (non-destructive, One Click's CUTOFF slider) */
     uint8_t k_lvl;
+    uint8_t gen_dens, gen_var, gen_style;   /* the generator's settings for this track (ARP page): density, variation,
+                                             * style (0 AUTO, else the role's style + 1) */
+    int8_t gen_range;            /* the part's register, octaves -1..+1 */
+    uint32_t lfo_ph;             /* LFO runtime (audio ISR): phase, value Q15 */
+    int32_t lfo_v, lfo_sh;
     /* sequencer runtime (audio ISR) */
     uint8_t snd[4], nsnd;        /* sounding sequenced notes */
     uint8_t hold;                /* slide / tie: keep them into the next step */
@@ -85,7 +116,14 @@ typedef struct {
     uint8_t swing;               /* 0..50 % */
     uint8_t root, scale;         /* the song's key (scale: SCALES[]) */
     uint8_t prog[4];             /* the chord of each bar: scale degree 0..6 */
+    uint8_t prog_i;              /* which of the generator's progressions (oc_gen.c PROGS) */
     int8_t octave;               /* the keys */
+    int8_t transpose;            /* the song's, -24..+12 (played, not stored in the notes) */
+    uint8_t rec, rec_mode;       /* REC armed (the selected track records); REC_* */
+    uint8_t dly_div, dly_fb, rev_size, rev_damp;   /* the global FX: delay time (DLY_DIVS), feedback, reverb */
+    uint8_t click;               /* the metronome: CLICK_* */
+    uint8_t midi_in;             /* MIDI IN: MI_* */
+    uint8_t theme;               /* the screen's palette (gfx.c UI_PALETTES) */
     uint16_t master_q12;
     uint32_t step, pos;          /* the global 16th, samples into it */
     uint32_t cpu_q8;
@@ -94,8 +132,13 @@ typedef struct {
 static track_t trk[NTRK];
 static song_t song;
 static voice_t voice[NVOICE];
-static voice_t dvoice[NLANE];   /* the drum track's: one per lane, as a drum machine (no stealing) */
+static voice_t dvoice[NTRK][NLANE];   /* drum tracks: one voice per lane, as a drum machine (no stealing) */
+enum { REC_OVERDUB, REC_REPLACE, REC_N };
+enum { CLICK_OFF, CLICK_REC, CLICK_ON, CLICK_N };
+enum { MI_CH14, MI_SEL, MI_N };                /* MIDI IN: channels 1..4 play tracks 1..4 / every channel the selected */
+static uint32_t trk_role(uint32_t t) { return TYPE_ROLE[trk[t % NTRK].type % TY_N]; }
 #define TSEL (&trk[song.sel % NTRK])
+#define IS_DRUM(t) (trk_role(t) == ROLE_DRUM)
 
 /* scales the generator uses: 7-note, semitones above the root */
 enum { SC_MIN, SC_DOR, SC_MAJ, SC_MIX, SC_HARM, SC_PHRY, SC_N };
