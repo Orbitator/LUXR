@@ -14,4 +14,10 @@ clang --target=i686-unknown-none-elf -ffreestanding -fsyntax-only -Wno-unused-fu
 python3 -c "import importlib.util,sys;sys.argv=['x'];s=importlib.util.spec_from_file_location('b','tools/build.py');b=importlib.util.module_from_spec(s);s.loader.exec_module(b);e=b.mmio_check();print('register access:', e or 'hal/ only');sys.exit(1 if e else 0)"
 cc -O2 -w $CF -o build/render_demo host/render_demo.c -lm
 build/render_demo build/demo.wav build/screen.ppm 1 4 16
+# the emulator: wasm without imports, the same samples as a native clang build, the page in headless Chromium
+emu/build.sh
+clang -O2 -ffp-contract=off -w $CF -o build/emu/native_ref emu/native_ref.c
+build/emu/native_ref build/emu/ref.f32
+node emu/emu_test.mjs build/emu/oneclick.wasm build/emu/ref.f32
+if python3 -c "import playwright" 2>/dev/null; then python3 emu/page_test.py build/emu/oneclick-emu.html; fi
 echo "all ok"

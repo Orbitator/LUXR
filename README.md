@@ -56,6 +56,16 @@ Zurück geht es mit M-VAVEs Updater oder dem Felucca-Webinstaller („Return to 
 tests/run.sh      # Host-Test unter ASan/UBSan, Typprüfung des Firmware-Builds, Demo-WAV und Screenshot
 ```
 
+## Emulator
+
+`emu/build.sh` baut `build/emu/oneclick-emu.html`: die App (Klang, Sequencer, Generator, Display, USB-Protokoll) als
+WebAssembly mit nachgebautem Bedienfeld, eine Datei, die direkt im Browser läuft. Der Ton ist bit-gleich zu einem
+nativen Clang-Build derselben Quellen (`emu/emu_test.mjs`). Nicht simuliert werden der JieLi-Prozessor und seine
+Rechenzeit, Booten, Update, UBOOT und Flash; ob die Engines auf dem Gerät schnell genug sind, zeigt erst die Hardware.
+
+Hinweis: Der Generator ruft `rr()` mehrfach in einer Argumentliste auf. Deren Auswertungsreihenfolge ist in C nicht
+festgelegt, deshalb erzeugt ein GCC-Build aus demselben Startwert andere Songs als ein Clang-Build (Gerät, Emulator).
+
 ## Companion-App
 
 `companion/index.html` (Chrome/Edge, Web MIDI): ONE CLICK und alles Weitere vom Browser aus, Pattern-Ansicht und

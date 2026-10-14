@@ -1,0 +1,375 @@
+<title>ONE CLICK Emulator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@400;600&family=Instrument+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: the instrument as one slab (screen | controls, buttons, keys), the test bench under it; stacks on phones.
+   The slab is a physical object and keeps its own colours in both themes; the page around it follows the theme. */
+:root {
+  --page: #e9ebef; --ink: #1c1f26; --muted: #5d6472; --line: #cfd3db; --card: #f6f7f9;
+  --slab: #23262d; --slab-hi: #2e323b; --silk: #c9ccd4; --silk-dim: #8a8f9b; --cap: #3a3f4a; --cap-hi: #4a505d;
+  --amber: #ffaa28; --key-w: #e7e8ec; --key-b: #15171c; --ok: #2f9e5b; --err: #c7364a;
+  --display: "Martian Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #121419; --ink: #e6e8ee; --muted: #9aa1ae; --line: #2a2e37; --card: #191c22; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --page: #121419; --ink: #e6e8ee; --muted: #9aa1ae; --line: #2a2e37; --card: #191c22; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--ink); font: 15px/1.5 var(--body); }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 24px 40px;
+        padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+        display: grid; gap: 20px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
+h1 { margin: 0; font: 600 clamp(22px, 4vw, 30px)/1.1 var(--display); letter-spacing: -0.5px; text-wrap: balance; }
+h1 em { font-style: normal; color: var(--amber); }
+.lede { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
+.power { font: 600 14px var(--display); letter-spacing: .5px; text-transform: uppercase; background: var(--amber); color: #1a1205;
+         border: 0; border-radius: 999px; padding: 12px 20px; cursor: pointer; min-height: 44px; }
+.power[aria-pressed="true"] { background: var(--slab-hi); color: var(--silk); box-shadow: inset 0 0 0 1px var(--cap-hi); }
+.power:focus-visible, button:focus-visible, .enc:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+/* the instrument */
+.slab { background: linear-gradient(180deg, var(--slab-hi), var(--slab) 18%); border-radius: 18px; padding: clamp(12px, 2.5vw, 22px);
+        box-shadow: 0 18px 40px -18px #0009, inset 0 1px 0 #ffffff14; display: grid; gap: 16px; color: var(--silk); }
+.top { display: grid; grid-template-columns: minmax(0, 280px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.bezel { background: #08090b; border-radius: 10px; padding: 10px; box-shadow: inset 0 0 0 1px #000, inset 0 2px 8px #000; }
+canvas#lcd { display: block; width: 100%; max-width: 100%; aspect-ratio: 1; image-rendering: pixelated; border-radius: 3px; background: #0e0e12; }
+.silk { font: 400 10px/1.2 var(--display); letter-spacing: .8px; text-transform: uppercase; color: var(--silk-dim); }
+.controls { display: grid; gap: 14px; min-width: 0; }
+.encrow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.encbox { display: grid; justify-items: center; gap: 6px; text-align: center; min-width: 0; }
+.enc { width: 54px; height: 54px; border-radius: 50%; position: relative; cursor: ns-resize; touch-action: none;
+       background: radial-gradient(circle at 35% 30%, #5a606d, #2b2f37 70%); box-shadow: 0 3px 6px #0008, inset 0 1px 0 #ffffff22; }
+.enc::after { content: ""; position: absolute; left: 50%; top: 6px; width: 3px; height: 12px; margin-left: -1.5px; border-radius: 2px;
+              background: var(--silk); transform-origin: 50% 21px; transform: rotate(var(--a, 0deg)); }
+.enc.small { width: 44px; height: 44px; }
+.enc.small::after { top: 5px; height: 10px; transform-origin: 50% 17px; }
+.fn { font: 600 11px/1.2 var(--body); color: var(--amber); }
+.master { display: grid; gap: 6px; }
+.master input { width: 100%; accent-color: var(--amber); }
+
+.buttons { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+.btn { display: grid; gap: 4px; justify-items: center; text-align: center; min-width: 0; }
+.btn button { width: 100%; max-width: 74px; min-height: 40px; border: 0; border-radius: 8px; cursor: pointer; position: relative;
+              background: linear-gradient(180deg, var(--cap-hi), var(--cap)); color: var(--silk); font: 600 10px var(--display);
+              letter-spacing: .6px; box-shadow: 0 2px 0 #0007; touch-action: manipulation; }
+.btn button:active, .btn button.down { transform: translateY(1px); box-shadow: 0 1px 0 #0007; }
+.btn button .led { position: absolute; top: 5px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: #0006; }
+.btn button.lit .led { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+.btn .fn { min-height: 2.4em; }
+.btn .fn.none { color: var(--silk-dim); font-weight: 400; }
+
+.keys { position: relative; height: 112px; user-select: none; touch-action: none; }
+.key { position: absolute; top: 0; border-radius: 0 0 5px 5px; cursor: pointer; }
+.key.w { background: var(--key-w); height: 100%; box-shadow: inset 0 -4px 0 #b9bcc4, 0 0 0 1px var(--slab); }
+.key.b { background: var(--key-b); height: 62%; z-index: 2; box-shadow: inset 0 -3px 0 #000, 0 0 0 1px #000; }
+.key.on.w { background: #ffd9a0; }
+.key.on.b { background: #6b4a12; }
+.key .kled { position: absolute; left: 50%; bottom: 10px; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; }
+.key.lit .kled { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+.key .kl { position: absolute; left: 0; right: 0; bottom: 20px; text-align: center; font: 9px var(--display); color: #747a86; }
+
+/* the bench */
+.bench { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; display: grid; gap: 10px; align-content: start; }
+.card h2 { margin: 0; font: 600 12px var(--display); letter-spacing: 1px; text-transform: uppercase; color: var(--muted); }
+dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; font-variant-numeric: tabular-nums; }
+dt { color: var(--muted); }
+dd { margin: 0; font-family: var(--display); font-size: 13px; overflow-wrap: anywhere; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+.row button { font: 600 13px var(--body); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--page); color: var(--ink); cursor: pointer; min-height: 40px; }
+.row button:disabled { opacity: .45; cursor: default; }
+.log { font: 11px/1.45 var(--display); background: var(--page); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+       height: 132px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
+.log b { color: var(--ink); font-weight: 600; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font: 600 11px var(--display); }
+.pill.on { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.pill.off { background: color-mix(in srgb, var(--muted) 16%, transparent); color: var(--muted); }
+.pill.err { background: color-mix(in srgb, var(--err) 16%, transparent); color: var(--err); }
+.hint { margin: 0; color: var(--muted); font-size: 13px; }
+kbd { font: 11px var(--display); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--page); }
+
+@media (max-width: 720px) {
+  .top { grid-template-columns: 1fr; }
+  .bezel { max-width: 300px; justify-self: center; width: 100%; }
+  .buttons { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .bench { grid-template-columns: 1fr; }
+  .keys { height: 92px; }
+  .key .kl { display: none; }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>ONE CLICK <em>Emulator</em></h1>
+      <p class="lede">Die Firmware-App des FM-1 als WebAssembly, mit nachgebautem Bedienfeld. Klang, Sequencer, Generator,
+      Display und USB-Protokoll laufen aus demselben C-Code wie auf dem Gerät.</p>
+    </div>
+    <button class="power" id="power" aria-pressed="false">Einschalten</button>
+  </header>
+
+  <section class="slab" aria-label="FM-1 Bedienfeld">
+    <div class="top">
+      <div class="bezel"><canvas id="lcd" width="240" height="240" aria-label="Display"></canvas></div>
+      <div class="controls">
+        <div class="encrow" id="encTop"></div>
+        <div class="encrow" id="encKnobs"></div>
+        <label class="master"><span class="silk">Master</span><input id="master" type="range" min="0" max="1023" value="760"></label>
+      </div>
+    </div>
+    <div class="buttons" id="buttons"></div>
+    <div class="keys" id="keys" aria-label="Tastatur F3 bis G5"></div>
+  </section>
+
+  <section class="bench">
+    <div class="card">
+      <h2>Zustand</h2>
+      <dl>
+        <dt>Audio</dt><dd id="sAudio"><span class="pill off">aus</span></dd>
+        <dt>Song</dt><dd id="sSong">–</dd>
+        <dt>Tracks</dt><dd id="sTracks">–</dd>
+        <dt>Takt / Step</dt><dd id="sStep">–</dd>
+        <dt>Stimmen</dt><dd id="sVoices">–</dd>
+      </dl>
+      <p class="hint">Computer-Tastatur: <kbd>A</kbd>–<kbd>L</kbd> mit <kbd>W</kbd> <kbd>E</kbd> <kbd>T</kbd> <kbd>Y</kbd> <kbd>U</kbd> <kbd>O</kbd> spielen ab C4,
+      <kbd>Leertaste</kbd> Play, <kbd>Enter</kbd> ONE CLICK, <kbd>1</kbd>–<kbd>4</kbd> Track, <kbd>Z</kbd> Undo. Drehregler: ziehen, Mausrad oder Pfeiltasten.</p>
+    </div>
+    <div class="card">
+      <h2>USB · Companion-Protokoll</h2>
+      <div class="row">
+        <button id="uDump" disabled>Dump anfordern</button>
+        <button id="uOne" disabled>ONE CLICK per SysEx</button>
+        <button id="uLead" disabled>Lead neu (02 02)</button>
+      </div>
+      <div class="log" id="log" aria-live="polite">Die Knöpfe senden dieselben SysEx-Rahmen wie die Companion-App an den virtuellen USB-Anschluss.</div>
+      <p class="hint">Nicht simuliert: der JieLi-Prozessor und seine Rechenzeit, Booten, Update, UBOOT, Flash.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+"use strict";
+const WASM_B64 = "@WASM@";
+const BTN = [ // B_* in firmware order: [silk label, function]
+  ["FX", "Swing"], ["SCL", "Neue Tonart"], ["ENV", ""], ["LFO", ""], ["EDIT", "Sound neu"], ["GLO", "Mute"], ["HOME", "Undo"],
+  ["SAVE", ""], ["ARP", "Track neu"], ["SEQ", "Pattern neu"], ["PLAY", "Start/Stop"], ["REC", "ONE CLICK"], ["OCT−", "Oktave"], ["OCT+", "Oktave"]];
+const ORDER = [11, 10, 4, 8, 9, 1, 6, 5, 0, 12, 13, 2, 3, 7];   // how the buttons sit on the page: the important ones first
+const ENC = [["SELECT", "Tempo"], ["ALGORITHM", "Track"], ["PRESETS", "Track"], ["KNOB 1", "Cutoff"], ["KNOB 2", "Resonanz"], ["KNOB 3", "Decay"], ["KNOB 4", "Pegel"]];
+const ENG = ["SUBTRACT", "ACID", "FM", "SUPERSAW", "ADDITIVE", "DRUMS"], ROLE = ["Bass", "Akkorde", "Lead", "Drums"];
+const NOTE = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const SCALE = ["Moll", "Dorisch", "Dur", "Mixolydisch", "Harm. Moll", "Phrygisch"];
+const $ = (id) => document.getElementById(id);
+const wasmBytes = Uint8Array.from(atob(WASM_B64), (c) => c.charCodeAt(0));
+
+/* ---------------------------------------------------------------- worklet --- */
+const WORKLET = `
+function stateOf(ex) {
+  return { playing: ex.emu_playing(), step: ex.emu_step(), voices: ex.emu_voices(), sel: ex.emu_sel(), bpm: ex.emu_bpm(),
+           root: ex.emu_root(), scale: ex.emu_scale(), eng: [0, 1, 2, 3].map((t) => ex.emu_engine(t)),
+           mute: [0, 1, 2, 3].map((t) => ex.emu_muted(t)) };
+}
+class OneClick extends AudioWorkletProcessor {
+  constructor() {
+    super(); this.ex = null; this.q = []; this.nextOk = 0; this.t = 0; this.last = 0;
+    this.port.onmessage = (e) => this.msg(e.data);
+  }
+  async msg(m) {
+    if (m.type === "load") {
+      const { instance } = await WebAssembly.instantiate(m.wasm, {});
+      this.ex = instance.exports; this.ex.emu_master(m.master); this.ex.emu_init(m.seed);
+      this.port.postMessage({ type: "ready" });
+    } else if (!this.ex) return;
+    else if (m.type === "btn" || m.type === "keys") this.q.push(m);
+    else if (m.type === "enc") this.ex.emu_enc(m.role, m.n);
+    else if (m.type === "master") this.ex.emu_master(m.v);
+    else if (m.type === "sysex") {
+      new Uint8Array(this.ex.memory.buffer, this.ex.emu_in_buf(), m.data.length).set(m.data);
+      this.port.postMessage({ type: "taken", ours: this.ex.emu_sysex(m.data.length) });
+    }
+  }
+  process(_, outputs) {
+    const o = outputs[0], L = o[0], R = o[1] || o[0], ex = this.ex;
+    if (!ex) return true;
+    while (this.q.length && this.t >= this.nextOk) {        /* each change held >= 20 ms of device time (a UI frame sees it) */
+      const m = this.q.shift();
+      if (m.type === "btn") ex.emu_buttons(m.held); else ex.emu_keys(m.keys);
+      this.nextOk = this.t + 882;
+    }
+    ex.emu_render(L.length);
+    L.set(new Float32Array(ex.memory.buffer, ex.emu_out_l(), L.length));
+    R.set(new Float32Array(ex.memory.buffer, ex.emu_out_r(), L.length));
+    this.t += L.length;
+    const n = ex.emu_out_take();
+    if (n) this.port.postMessage({ type: "sysex", data: new Uint8Array(ex.memory.buffer, ex.emu_out_buf(), n).slice() });
+    if (this.t - this.last >= 1470) {                       /* about 30 times a second */
+      this.last = this.t;
+      const m = { type: "frame", btn: new Uint8Array(ex.memory.buffer, ex.emu_leds_btn(), 14).slice(),
+                  key: new Uint8Array(ex.memory.buffer, ex.emu_leds_key(), 27).slice(), st: stateOf(ex) };
+      if (ex.emu_dirty()) m.screen = new Uint16Array(ex.memory.buffer, ex.emu_screen(), 57600).slice();
+      this.port.postMessage(m);
+    }
+    return true;
+  }
+}
+registerProcessor("oneclick", OneClick);`;
+
+/* --------------------------------------------------------------- the panel --- */
+const lcd = $("lcd"), g = lcd.getContext("2d"), img = g.createImageData(240, 240);
+function drawScreen(px) {   // RGB565, big endian as the panel takes it
+  const d = img.data;
+  for (let i = 0; i < 57600; i++) {
+    const v = ((px[i] & 0xff) << 8) | (px[i] >> 8);
+    d[i * 4] = (v >> 11) << 3; d[i * 4 + 1] = ((v >> 5) & 63) << 2; d[i * 4 + 2] = (v & 31) << 3; d[i * 4 + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+}
+
+let node = null, ac = null, held = 0, keys = 0, kbKeys = 0, sel = 0;
+const send = (m) => { if (node) node.port.postMessage(m); };
+
+const btnEls = [];
+for (const b of ORDER) {
+  const [silk, fn] = BTN[b], box = document.createElement("div"), el = document.createElement("button");
+  box.className = "btn";
+  el.innerHTML = `<span class="led"></span>${silk}`;
+  el.setAttribute("aria-label", fn ? `${silk}: ${fn}` : silk);
+  const down = (e) => { e.preventDefault(); el.setPointerCapture?.(e.pointerId); el.classList.add("down"); held |= 1 << b; send({ type: "btn", held }); };
+  const up = () => { el.classList.remove("down"); if (!(held & (1 << b))) return; held &= ~(1 << b); send({ type: "btn", held }); };
+  el.addEventListener("pointerdown", down); el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+  el.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); e.stopPropagation(); if (!e.repeat) { held |= 1 << b; send({ type: "btn", held }); } } });
+  el.addEventListener("keyup", (e) => { if (e.key === " " || e.key === "Enter") { e.stopPropagation(); up(); } });
+  const f = document.createElement("span"); f.className = "fn" + (fn ? "" : " none"); f.textContent = fn || "–";
+  box.append(el, f); $("buttons").append(box); btnEls[b] = el;
+}
+function pressMomentary(b) { held |= 1 << b; send({ type: "btn", held }); held &= ~(1 << b); send({ type: "btn", held }); }
+
+ENC.forEach(([silk, fn], role) => {
+  const box = document.createElement("div"), k = document.createElement("div");
+  box.className = "encbox"; k.className = "enc" + (role >= 3 ? " small" : ""); k.tabIndex = 0;
+  k.setAttribute("role", "slider"); k.setAttribute("aria-label", `${silk} (${fn})`);
+  let ang = 0, y0 = 0, acc = 0;
+  const turn = (n) => { if (!n) return; ang += n * 18; k.style.setProperty("--a", ang + "deg"); send({ type: "enc", role, n }); };
+  k.addEventListener("pointerdown", (e) => { k.setPointerCapture(e.pointerId); y0 = e.clientY; acc = 0; });
+  k.addEventListener("pointermove", (e) => { if (!k.hasPointerCapture(e.pointerId)) return; acc += y0 - e.clientY; y0 = e.clientY; const n = Math.trunc(acc / 10); if (n) { acc -= n * 10; turn(n); } });
+  k.addEventListener("wheel", (e) => { e.preventDefault(); turn(e.deltaY < 0 ? 1 : -1); }, { passive: false });
+  k.addEventListener("keydown", (e) => { const n = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1 }[e.key]; if (n) { e.preventDefault(); e.stopPropagation(); turn(n); } });
+  box.innerHTML = `<span class="silk">${silk}</span>`; box.append(k);
+  const f = document.createElement("span"); f.className = "fn"; f.textContent = fn; box.append(f);
+  (role < 3 ? $("encTop") : $("encKnobs")).append(box);
+});
+$("master").addEventListener("input", (e) => send({ type: "master", v: +e.target.value }));
+
+/* the keys: 27 from F3, 16 of them white */
+const isBlack = (k) => (0x54A >> ((k + 5) % 12)) & 1, keyEls = [], pointers = new Map();
+function paintKeys() { keyEls.forEach((el, k) => el.classList.toggle("on", !!((keys >> k) & 1))); }
+function setKeys() {
+  keys = kbKeys;
+  for (const k of pointers.values()) if (k >= 0) keys |= 1 << k;
+  paintKeys(); send({ type: "keys", keys });
+}
+(function buildKeys() {
+  const box = $("keys"); let w = 0;
+  for (let k = 0; k < 27; k++) {
+    const el = document.createElement("div"); el.className = "key " + (isBlack(k) ? "b" : "w");
+    if (isBlack(k)) { el.style.left = `${(w / 16 - 0.3 / 16) * 100}%`; el.style.width = `${(0.6 / 16) * 100}%`; }
+    else { el.style.left = `${(w / 16) * 100}%`; el.style.width = `${100 / 16}%`; w++; }
+    const n = 53 + k;
+    el.innerHTML = `<span class="kled"></span>` + (!isBlack(k) && n % 12 === 0 ? `<span class="kl">C${Math.floor(n / 12) - 1}</span>` : "");
+    el.dataset.k = k; box.append(el); keyEls[k] = el;
+  }
+  const keyAt = (x, y) => { const el = document.elementFromPoint(x, y)?.closest(".key"); return el ? +el.dataset.k : -1; };
+  box.addEventListener("pointerdown", (e) => { e.preventDefault(); box.setPointerCapture(e.pointerId); pointers.set(e.pointerId, keyAt(e.clientX, e.clientY)); setKeys(); });
+  box.addEventListener("pointermove", (e) => { if (!pointers.has(e.pointerId)) return; const k = keyAt(e.clientX, e.clientY); if (k !== pointers.get(e.pointerId)) { pointers.set(e.pointerId, k); setKeys(); } });
+  const end = (e) => { pointers.delete(e.pointerId); setKeys(); };
+  box.addEventListener("pointerup", end); box.addEventListener("pointercancel", end);
+})();
+
+/* the computer keyboard */
+const KB = { a: 7, w: 8, s: 9, e: 10, d: 11, f: 12, t: 13, g: 14, y: 15, h: 16, u: 17, j: 18, k: 19, o: 20, l: 21 };
+document.addEventListener("keydown", (e) => {
+  if (e.target.closest("input, .enc") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target.closest("button") && (e.key === " " || e.key === "Enter")) return;   /* (that button's own press) */
+  const c = e.key.toLowerCase();
+  if (c in KB) { e.preventDefault(); if (!e.repeat) { kbKeys |= 1 << KB[c]; setKeys(); } return; }
+  if (e.repeat) return;
+  if (e.key === " ") { e.preventDefault(); pressMomentary(10); }
+  else if (e.key === "Enter") { e.preventDefault(); pressMomentary(11); }
+  else if (c === "z") pressMomentary(6);
+  else if (c >= "1" && c <= "4") send({ type: "enc", role: 1, n: (+c - 1) - sel });
+});
+document.addEventListener("keyup", (e) => { if (e.target.closest("input, .enc")) return; const c = e.key.toLowerCase(); if (c in KB) { kbKeys &= ~(1 << KB[c]); setKeys(); } });
+
+/* -------------------------------------------------------------- the bench --- */
+function showState(st) {
+  sel = st.sel;
+  $("sSong").textContent = `${NOTE[st.root % 12]} ${SCALE[st.scale] || "?"} · ${st.bpm} BPM`;
+  $("sTracks").textContent = st.eng.map((e, t) => `${t === st.sel ? "▸ " : ""}${ROLE[t]} ${ENG[e] || "?"}${st.mute[t] ? " (stumm)" : ""}`).join(" · ");
+  $("sStep").textContent = st.playing ? `Takt ${Math.floor(st.step / 16) % 4 + 1}, Step ${st.step % 16 + 1}` : "gestoppt";
+  $("sVoices").textContent = `${st.voices} von 8`;
+}
+const logEl = $("log");
+function log(html) { logEl.innerHTML += "\n" + html; logEl.scrollTop = logEl.scrollHeight; }
+const hex = (a, max = 18) => Array.from(a.slice(0, max), (v) => v.toString(16).padStart(2, "0")).join(" ") + (a.length > max ? ` … (${a.length} B)` : "");
+function unpack7(d) { const o = []; for (let i = 0; i < d.length;) { const hi = d[i++]; for (let k = 0; k < 7 && i < d.length; k++) o.push(d[i++] | (((hi >> k) & 1) << 7)); } return o; }
+function sendSysex(body, what) { log(`<b>→ ${what}</b>  F0 ${hex(body)} F7`); send({ type: "sysex", data: Uint8Array.from(body) }); }
+function onSysexOut(d) {
+  if (d[4] === 0x11) {
+    const r = unpack7(Array.from(d.slice(5, -1))), ps = r[1], ss = r[2], at = (t) => 11 + t * (ps + 2 + 64 * ss);
+    log(`<b>← Dump</b>  ${d.length} B, Version ${r[0]}: ${NOTE[r[3] % 12]} ${SCALE[r[4]] || "?"}, ${[0, 1, 2, 3].map((t) => ENG[r[at(t)]] || "?").join(" / ")}`);
+  } else log(`<b>←</b> ${hex(d)}`);
+}
+$("uDump").onclick = () => sendSysex([0x7D, 0x4F, 0x43, 0x10], "Dump anfordern");
+$("uOne").onclick = () => sendSysex([0x7D, 0x4F, 0x43, 0x01], "ONE CLICK");
+$("uLead").onclick = () => sendSysex([0x7D, 0x4F, 0x43, 0x02, 0x02], "Lead neu");
+
+/* ------------------------------------------- the first frame, then power --- */
+(async function previewFrame() {   // the screen as the device starts, before sound is allowed
+  try {
+    const { instance } = await WebAssembly.instantiate(wasmBytes, {});
+    const ex = instance.exports;
+    ex.emu_init(7); ex.emu_render(128);
+    drawScreen(new Uint16Array(ex.memory.buffer, ex.emu_screen(), 57600));
+    showState({ playing: 0, step: 0, voices: 0, sel: 0, bpm: ex.emu_bpm(), root: ex.emu_root(), scale: ex.emu_scale(),
+                eng: [0, 1, 2, 3].map((t) => ex.emu_engine(t)), mute: [0, 0, 0, 0] });
+  } catch (err) { $("sAudio").innerHTML = `<span class="pill err">WebAssembly nicht verfügbar</span>`; }
+})();
+
+$("power").onclick = async () => {
+  const p = $("power");
+  if (ac) {   // off; on again is a fresh start
+    const old = ac; ac = null; node = null; await old.close();
+    p.textContent = "Einschalten"; p.setAttribute("aria-pressed", "false");
+    $("sAudio").innerHTML = `<span class="pill off">aus</span>`; ["uDump", "uOne", "uLead"].forEach((id) => $(id).disabled = true);
+    return;
+  }
+  try {
+    ac = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" });
+    try { await ac.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" }))); }
+    catch { await ac.audioWorklet.addModule("data:text/javascript," + encodeURIComponent(WORKLET)); }   /* (opened from disk) */
+    node = new AudioWorkletNode(ac, "oneclick", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+    node.connect(ac.destination);
+    node.port.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === "ready") {
+        $("sAudio").innerHTML = `<span class="pill on">läuft, ${ac.sampleRate} Hz</span>`;
+        ["uDump", "uOne", "uLead"].forEach((id) => $(id).disabled = false);
+      } else if (m.type === "frame") {
+        if (m.screen) drawScreen(m.screen);
+        btnEls.forEach((el, b) => el && el.classList.toggle("lit", !!m.btn[b]));
+        keyEls.forEach((el, k) => el.classList.toggle("lit", !!m.key[k]));
+        showState(m.st);
+      } else if (m.type === "sysex") onSysexOut(m.data);
+      else if (m.type === "taken" && !m.ours) log("Rahmen nicht erkannt");
+    };
+    node.port.postMessage({ type: "load", wasm: wasmBytes.buffer.slice(0), seed: (Date.now() >>> 0) | 1, master: +$("master").value });
+    p.textContent = "Ausschalten"; p.setAttribute("aria-pressed", "true");
+    p.blur();                                     /* (the space bar is PLAY now, not this button) */
+  } catch (err) {
+    $("sAudio").innerHTML = `<span class="pill err">Audio nicht verfügbar: ${err.message}</span>`; ac = null; node = null;
+  }
+};
+</script>
