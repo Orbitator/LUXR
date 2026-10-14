@@ -63,14 +63,22 @@ Die Seiten (Reihe A | Reihe B mit SHIFT):
   REC) leert jeden Step, den der Durchlauf erreicht. Metronom im Menü.
 - Jede Aufnahme und jeder Eingriff kann rückgängig gemacht werden (SAVE halten; 15 Stufen, SHIFT + SAVE = Redo).
 
-**SHIFT + schwarze Tasten** (GLO länger halten zeigt die Übersicht im Display):
+**SHIFT + schwarze Tasten** – F#3 Undo und G#3 Redo immer, die anderen neun je nach Seite (GLO länger halten zeigt
+die aktuelle Belegung im Display):
 
-| F#3 | G#3 | A#3 | C#4 | D#4 | F#4 | G#4 | A#4 | C#5 | D#5 | F#5 |
-|---|---|---|---|---|---|---|---|---|---|---|
-| Undo | Redo | Copy | Paste | Clear | Note ◂ | Note ▸ | neuer Part | neuer Sound | Metronom an/aus | Tap Tempo |
+| Seite | A#3 | C#4 | D#4 | F#4 | G#4 | A#4 | C#5 | D#5 | F#5 |
+|---|---|---|---|---|---|---|---|---|---|
+| HOME, SAVE, Menü | Copy | Paste | Clear | Part ◂ | Part ▸ | neuer Part | neuer Sound | Metronom | Tap Tempo |
+| SEQ › STEP | Step kopieren | Step einfügen | Step leeren | Note ◂ | Note ▸ | Insert | Delete | Oktave − | Oktave + |
+| SEQ › EUCLID / SEQUENCE | Copy | Paste | Clear | Part ◂ | Part ▸ | Reverse | Double | Half | Rhythm |
+| EDIT, ENV, LFO, FX | Sound kopieren | Sound einfügen | neuer Sound | Osc | Filter | Env | Sound ◂ | Sound ▸ | Live-Regler 0 |
+| SCL | neue Tonart | Akkorde ◂ | Akkorde ▸ | Grundton − | Grundton + | Skala ◂ | Skala ▸ | Transp. − | Transp. + |
+| ARP (Generator) | neuer Part | neuer Track | neuer Sound | Rhythm | Notes | Octave | Cook | Stil ◂ | Stil ▸ |
+| GLO (Mixer) | alle an | Solo | Mute | Pegel − | Pegel + | Pan L | Pan C | Pan R | Metronom |
 
 *Note ◂ / ▸* verschiebt im STEP-Editor die Note am Cursor samt ihren Ties um einen Step, an der Nachbarnote vorbei
-(Drums: den Schlag der gewählten Lane); der Cursor geht mit. Auf anderen Seiten verschiebt es den ganzen Part.
+(Drums: den Schlag der gewählten Lane); der Cursor geht mit. *Insert / Delete* fügen am Cursor eine Pause ein bzw.
+entfernen den Step (der Rest rückt nach).
 
 **Werkzeuge (SEQ halten + weiße Taste)**, F3 bis G5: SONG (ONE CLICK), TRACK, SOUND, PART, KEY, COOK, CLEAR, REVERSE,
 SHIFT ◂, SHIFT ▸, RHYTHM, NOTES, OSC, FILTER, ENV, OCTAVE (die letzten sechs erneuern nur diesen Teil, so stark wie
