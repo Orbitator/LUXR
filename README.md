@@ -104,8 +104,8 @@ Workflow (`.github/workflows/build.yml`) sie bei jedem Push auf `main` und legt 
 `luxr-fwsc` ab (Actions › build › der Lauf › Artifacts).
 
 **Installieren:** die Update-Seite **https://orbitator.github.io/LUXR/** in Chrome oder Edge öffnen, FM-1 per USB
-verbinden, „Verbinden“ (Chrome fragt nach der MIDI-Erlaubnis), die entpackte `luxr.fwsc` wählen, „Installieren“. Die
-Seite enthält nur den Installer (`web/make_luxr_admin.py`), keine Firmware. Im Claude-Artefakt „Firmware-Werkstatt“ geht
+verbinden, „Verbinden“ (Chrome fragt nach der MIDI-Erlaubnis), „Installieren“. Die Firmware des letzten Builds liegt
+neben der Seite und ist schon geladen (wie bei ONE CLICK); eine eigene `luxr.fwsc` kann trotzdem gewählt werden. Im Claude-Artefakt „Firmware-Werkstatt“ geht
 das nicht: Artefakt-Seiten bekommen kein Web MIDI.
 
 Tests auf dem Rechner: `tests/run.sh` (oder nur `cc … tests/test_lx.c && build/test_lx build/lx`: Klang, Sequencer,
@@ -120,5 +120,6 @@ Der Code dieser Firmware ist GPL-3.0 wie der Rest des Repositorys. **Die Transie
 aus der Firmware der Sonic Potions LXR (© 2013 Julian Schmidt), deren Lizenz die kommerzielle Nutzung verbietet und mit
 der GPL nicht verträglich ist. Deshalb liegen sie nicht im Repository, sondern werden beim Bauen geholt. Ein damit
 gebautes `luxr.fwsc` ist nur für den **persönlichen, nicht-kommerziellen Gebrauch** – nicht verkaufen und nicht als
-GPL-Firmware weitergeben. Ohne Samples (Sample-Layer auf OFF/SNAP) wäre die Firmware reines GPL; das ist hier nicht
+reine GPL-Firmware weitergeben. Die Update-Seite auf GitHub Pages bietet sie kostenlos und zusammen mit dem vollständigen
+Quelltext an (das verlangt die LXR-Lizenz); der Hinweis gilt auch für jede dort geladene Kopie. Ohne Samples (Sample-Layer auf OFF/SNAP) wäre die Firmware reines GPL; das ist hier nicht
 vorgesehen, weil der Sample-Layer ausdrücklich die Original-Samples nutzen soll.

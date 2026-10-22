@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# Build LUXR (JieLi toolchain + AC79 SDK): build/luxr.fwsc as the artifact luxr-fwsc, not published (its sample layer is
-# the Sonic Potions LXR's transient samples, whose licence is not the GPL: README.md). From main GitHub Pages gets the
-# update page alone (web/make_luxr_admin.py): https://<user>.github.io/LUXR/, the viewer picks luxr.fwsc there.
+# Build LUXR (JieLi toolchain + AC79 SDK): build/luxr.fwsc as the artifact luxr-fwsc; from main also GitHub Pages:
+# the update page (web/make_luxr_admin.py) with luxr.fwsc next to it, loaded at once: https://<user>.github.io/LUXR/
+# (the sample layer is the Sonic Potions LXR's transient samples, whose licence is not the GPL: README.md).
 name: build
 on:
   push: { branches: [main, "feature/**"] }
@@ -51,11 +51,12 @@ jobs:
           exit 1
       - uses: actions/upload-artifact@v4
         with: { name: luxr-fwsc, path: build/luxr.fwsc }
-      - name: Update page (the installer alone, no firmware)
+      - name: Update page with the firmware of this build
         if: github.ref == 'refs/heads/main'
         run: |
           python3 web/make_luxr_admin.py
-          mkdir -p site && cp build/web/luxr-update.html site/index.html
+          mkdir -p site && cp build/web/luxr-update.html site/index.html && cp build/luxr.fwsc site/
+          printf '{"date":"%s","commit":"%s","sha256":"%s"}\n' "$(date -u +%F\ %H:%M)" "$GITHUB_SHA" "$(sha256sum build/luxr.fwsc | cut -d' ' -f1)" > site/build.json
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main'
         with: { path: site }
