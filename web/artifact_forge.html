@@ -1,0 +1,25 @@
+  <section aria-labelledby="h-forge">
+    <h2 id="h-forge">1 · Firmware erstellen <small>GitHub Actions</small></h2>
+    <ol>
+      <li>Quellcode im Repository <a href="https://github.com/Orbitator/oneclick-fm1" target="_blank" rel="noopener" style="color:inherit">Orbitator/oneclick-fm1</a>: Generator, Synth-Engines, LXR-Drums, Bedienung.</li>
+      <li>Jede Änderung auf <code>main</code> startet den Build: JieLi-Compiler (pi32v2) und AC79-SDK erzeugen App, Update-Lader und das Paket <code>oneclick.fwsc</code>.</li>
+      <li>Das Paket dieses Builds steckt in dieser Seite und ist unten unter „Übertragen“ schon geprüft.</li>
+    </ol>
+    <dl>
+      <dt>Build</dt><dd id="fBuild">–</dd>
+      <dt>Commit</dt><dd id="fCommit">–</dd>
+      <dt>Paket</dt><dd id="fPkg">–</dd>
+      <dt>SHA-256</dt><dd id="fSha">–</dd>
+    </dl>
+    <div class="row">
+      <a class="btnlink" href="https://github.com/Orbitator/oneclick-fm1/actions/workflows/build.yml" target="_blank" rel="noopener">Neu bauen auf GitHub ↗</a>
+      <button id="fSave">oneclick.fwsc speichern</button>
+    </div>
+    <p class="hint" id="fNote">„Neu bauen“: auf GitHub „Run workflow“ drücken. Etwa 3 Minuten später liegt die neue Firmware auf der <a href="https://orbitator.github.io/oneclick-fm1/" target="_blank" rel="noopener" style="color:inherit">Update-Seite</a>; diese Seite aktualisiere ich, wenn du mich darum bittest.</p>
+  </section>
+  <section id="midiBlocked" hidden aria-live="polite" style="border-color:var(--warn)">
+    <h2>MIDI ist in diesem Fenster gesperrt</h2>
+    <p>Das Artefakt-Fenster darf nicht auf USB-MIDI zugreifen. Übertragen geht auf der eigenständigen Update-Seite mit derselben Firmware:</p>
+    <div class="row"><a class="btnlink go" href="https://orbitator.github.io/oneclick-fm1/" target="_blank" rel="noopener">Update-Seite öffnen ↗</a></div>
+    <p class="hint">Dort in Chrome oder Edge „Verbinden“ und „Installieren“. Alternativ die Datei speichern und mit einer lokalen Kopie der Admin-Seite einspielen.</p>
+  </section>
