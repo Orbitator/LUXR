@@ -109,6 +109,7 @@ def generate():
     if APP == "lxr":                 # the LXR's transient samples (their own licence: not in this repository)
         cmds.append([tools / "gen_lxr_transients.py", GEN / "lxr_transients.h"])
         cmds.append([tools / "gen_own_transients.py", GEN / "own_transients.h"])   # (+ sixteen of each sound's own)
+        cmds.append([tools / "gen_machine_transients.py", GEN / "machine_transients.h"])   # (+ sixteen after the classics)
     procs = [subprocess.Popen([sys.executable, *map(str, c)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                               text=True) for c in cmds]
     failed = []

@@ -20,16 +20,20 @@ enum { K_DRUM, K_SNARE, K_CLAP, K_HATC, K_HATO, K_CYM, K_N };
 static const uint8_t TRK_KIND[NTRK] = {K_DRUM, K_SNARE, K_CLAP, K_HATC, K_HATO, K_DRUM, K_DRUM, K_CYM};
 static const char *const TRK_NAME[NTRK] = {"KICK", "SNARE", "CLAP", "CL HAT", "OP HAT", "TOM", "RIM", "CYMBAL"};
 static const char *const TRK_SHORT[NTRK] = {"BD", "SD", "CP", "CH", "OH", "TM", "RS", "CY"};
-/* the sample layer: off, the LXR's SNAP (a pitch snap of the synth layer), the LXR's twelve transient samples, then
- * sixteen of the sound's own (tools/gen_own_transients.py) */
+/* the sample layer: off, the LXR's SNAP (a pitch snap of the synth layer), the LXR's twelve transient samples, sixteen
+ * of the sound's own (tools/gen_own_transients.py), sixteen after the classic drum machines (gen_machine_transients.py:
+ * 808 909 606 707 DMX SDS, at 22.05 kHz) */
 enum { TR_OFF, TR_SNAP, TR_SMP0 };
 #define TR_OWN0 (TR_SMP0 + 12)
-#define TR_N (TR_OWN0 + 16)
+#define TR_MACH0 (TR_OWN0 + 16)
+#define TR_N (TR_MACH0 + 16)
 typedef struct { uint8_t dest, wave, rate; int8_t depth; } lfo_t;   /* LD_*, LW_*, LR_* (with the tempo), -64..63 */
 
 typedef struct {                 /* a sound; values 0..127 unless noted */
     uint8_t p[8];                /* the synth layer: eight parameters by kind (lx_synth.c LX_LABEL) */
     uint8_t smp, slvl, spitch, sdec;   /* the sample layer: TR_*, level, pitch (64 = as recorded), decay (127 = whole) */
+    uint8_t sstart;              /* .. where it starts (0 = its beginning) */
+    int8_t stone, sbend;         /* .. its filter (- low-pass, + high-pass), its pitch bend (- up into, + down from) */
     uint8_t syn;                 /* the synth layer's level */
     uint8_t level, dly, rev, drv;   /* the sends: delay, reverb, drive */
     int8_t pan;                  /* -64..63 */
@@ -88,6 +92,7 @@ typedef struct {
     uint8_t active, vel, acc, choke;
     uint32_t ph[3], noise, t;    /* t: samples since the hit */
     uint32_t tph, tinc;          /* the sample layer: its phase (Q20 samples), step */
+    int32_t tlp, benv;           /* .. its filter's state, its bend's envelope (Q15) */
     int32_t amp, penv, click, cfade, nenv, tone, snap, tenv;   /* Q15 */
     int32_t lp, bp;              /* the filter */
 } voice_t;

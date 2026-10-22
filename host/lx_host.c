@@ -14,6 +14,7 @@
 #include "oc_tables.h"
 #include "lxr_transients.h"
 #include "own_transients.h"
+#include "machine_transients.h"
 
 static uint32_t rng_state = 0x1234567u;
 static uint32_t rng(void)

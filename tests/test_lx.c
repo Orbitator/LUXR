@@ -117,13 +117,47 @@ int main(int argc, char **argv)
             }
             sound_init(t);
         }
-        CHECK(!quiet && TR_N - TR_OWN0 >= 16, "16 own transients for each sound, all sound (%u quiet)", quiet);
+        CHECK(!quiet && TR_MACH0 - TR_OWN0 == 16, "16 own transients for each sound, all sound (%u quiet)", quiet);
+        quiet = 0;
+        for (t = 0; t < NTRK; t++) {             /* and 16 after the classic machines (22.05 kHz) */
+            snd[t].syn = 0;
+            snd[t].slvl = 127;
+            for (k = 0; k < 16u; k++) {
+                snd[t].smp = (uint8_t)(TR_MACH0 + k);
+                reset_count();
+                ev_push(EV_HIT, t, 120);
+                host_run(60, watch, 0);
+                quiet += peak_out < 0.01f;
+            }
+            sound_init(t);
+        }
+        CHECK(!quiet && TR_N - TR_MACH0 == 16, "16 machine transients for each sound, all sound (%u quiet)", quiet);
     }
-    /* SELECT rolls a new sound for the selected one: always with a transient sample */
+    /* the sample layer's START, TONE, BEND change what it plays */
+    {
+        double base, e2;
+        snd[1].syn = 0;
+        snd[1].slvl = 127;
+        snd[1].smp = TR_MACH0 + 3;               /* 909 A */
+        reset_count(); ev_push(EV_HIT, 1, 120); host_run(60, watch, 0); base = sum_sq;
+        snd[1].sstart = 100;
+        reset_count(); ev_push(EV_HIT, 1, 120); host_run(60, watch, 0); e2 = sum_sq;
+        CHECK(e2 < base * 0.7, "START late in the sample: less of it (%.2f -> %.2f)", base, e2);
+        snd[1].sstart = 0;
+        snd[1].stone = -60;
+        reset_count(); ev_push(EV_HIT, 1, 120); host_run(60, watch, 0); e2 = sum_sq;
+        CHECK(e2 < base * 0.8, "TONE low-pass: darker, less energy (%.2f -> %.2f)", base, e2);
+        snd[1].stone = 0;
+        snd[1].sbend = 63;
+        reset_count(); ev_push(EV_HIT, 1, 120); host_run(60, watch, 0); e2 = sum_sq;
+        CHECK(e2 < base * 0.95 || e2 > base * 1.05, "BEND changes it (%.2f -> %.2f)", base, e2);
+        sound_init(1);
+    }
+    /* ALGORITHM rolls a new sound for the selected one: always with a transient sample */
     for (t = 0; t < 40u; t++) {
         sel_track((int32_t)(t % NTRK));
-        host_turn(EN_SELECT, 1);
-        CHECK(snd[song.sel].smp >= TR_SMP0 && snd[song.sel].slvl > 0, "SELECT: %s without a sample (%u)", TRK_NAME[song.sel],
+        host_turn(EN_ALGO, 1);
+        CHECK(snd[song.sel].smp >= TR_SMP0 && snd[song.sel].slvl > 0, "ALGORITHM: %s without a sample (%u)", TRK_NAME[song.sel],
               snd[song.sel].smp);
     }
     sel_track(0);
@@ -418,14 +452,31 @@ int main(int argc, char **argv)
     host_ppm(path);
     host_tap(B_EDIT);
     CHECK(ui.page == PG_SAMPLE, "EDIT a third time: the sample layer");
-    host_turn(EN_K3, -127);
-    CHECK(snd[song.sel].syn == 0u, "SAMPLE LAYER, K3: the synth layer's level to 0 (%u)", snd[song.sel].syn);
-    host_turn(EN_K1, 3);
+    host_turn(EN_K1, 30);                        /* into the machines' bank */
+    host_turn(EN_K3, -20);
+    CHECK(snd[song.sel].smp >= TR_MACH0 && snd[song.sel].spitch == 44u, "SAMPLE: K1 sample (%u), K3 its pitch (%u)",
+          snd[song.sel].smp, snd[song.sel].spitch);
     snprintf(path, sizeof path, "%s/lx_sample.ppm", dir);
     host_ppm(path);
-    host_turn(EN_K3, 127);
     host_tap(B_EDIT);
-    CHECK(ui.page == PG_SND, "EDIT a fourth time: the sound's mix and sends");
+    CHECK(ui.page == PG_SAMPLE2, "EDIT a fourth time: SAMPLE 2");
+    host_turn(EN_K1, 40);
+    host_turn(EN_K2, -30);
+    host_turn(EN_K3, 20);
+    host_turn(EN_K4, -127);
+    CHECK(snd[song.sel].sstart == 40u && snd[song.sel].stone == -30 && snd[song.sel].sbend == 20 && !snd[song.sel].syn,
+          "SAMPLE 2: start, tone, bend, synth level");
+    snprintf(path, sizeof path, "%s/lx_sample2.ppm", dir);
+    host_ppm(path);
+    host_run(3000, 0, 0);                        /* (all quiet) */
+    reset_count();
+    host_turn(EN_K1, 5);
+    host_turn(EN_K3, 5);
+    host_run(100, watch, 0);
+    CHECK(!voice[song.sel].active && peak_out < 0.001f, "turning a knob does not play the sound");
+    host_turn(EN_K4, 127);
+    host_tap(B_EDIT);
+    CHECK(ui.page == PG_SND, "EDIT a fifth time: the sound's mix and sends");
     host_tap(B_EDIT);
     CHECK(ui.page == PG_VOICE, "EDIT again: back to the synth layer");
     host_tap(B_HOME);

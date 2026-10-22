@@ -22,12 +22,17 @@ Status: **v0.1, auf dem Rechner getestet (tests/test_lx.c), noch nie auf einem F
 | 7 | RIM | wie KICK (kurz, hoch) |
 | 8 | CYMBAL | Pitch, Decay, Ratio, FM · Filter, Reso, Noise, Drive |
 
-**Sample-Layer** (EDIT zweimal, oder ENV): **28 Transienten pro Sound** – SAMPLE wählt aus den **16 eigenen** des Sounds
-(BD 01 … BD 16, SD 01 … usw.: beim Bauen synthetisiert, `tools/gen_own_transients.py`) und den **12 Original-LXR-Transienten**
-(CLK, CK2, TIK, KIK, RIM, DRP, HAT, CLP, KK2, SNR, TOM, SP2), dazu SNAP (der Pitch-Snap der LXR) und OFF. Weiter LEVEL,
-PITCH (25 … 175 % wie an der LXR), DECAY (FULL = ganzes Sample); mit SHIFT: SYNTH (Pegel des Synth-Layers – auf 0 spielt nur
-das Sample). Wie an der LXR wird das Sample vor der Amp-Hüllkurve eingemischt. Jeder Werks- und jeder gewürfelte Sound
-spielt immer ein Transienten-Sample, meist eines seiner eigenen.
+**Sample-Layer** (EDIT dreimal, oder ENV): **44 Transienten pro Sound** zur Wahl:
+- **16 eigene** des Sounds (BD 01 … BD 16, SD 01 … usw.), beim Bauen synthetisiert (`tools/gen_own_transients.py`);
+- **16 im Stil der Klassiker** (808 A–C, 909 A–C, 606 A–B, 707 A–B, DMX A–B, SDS6, SDS7 A–B, SDS8), beim Bauen nach
+  deren Bauweise synthetisiert, keine Aufnahmen der Geräte (`tools/gen_machine_transients.py`, 22,05 kHz wie bei 707/DMX);
+- die **12 Original-LXR-Transienten** (CLK, CK2, TIK, KIK, RIM, DRP, HAT, CLP, KK2, SNR, TOM, SP2); dazu SNAP und OFF.
+
+Seite SAMPLE: Sample, Level, Pitch (25 … 175 %), Decay (FULL = ganzes Sample); Seite SAMPLE 2 (EDIT nochmal): Start
+(Einsprungpunkt, davor grau), Tone (LP = Tiefpass, HP = Hochpass), Bend (Pitch-Hüllkurve des Samples: + von oben herab,
+− von unten herauf), Synth (Pegel des Synth-Layers – auf 0 spielt nur das Sample). Wie an der LXR wird das Sample vor
+der Amp-Hüllkurve eingemischt. Jeder Werks- und jeder gewürfelte Sound spielt immer ein Transienten-Sample.
+Das Drehen an Knöpfen spielt den Sound nicht an (anspielen: weiße Taste des Sounds oder D#4).
 
 **Pro Sound außerdem** (wie in der Web-App): Volume, Pan, Sends für Delay, Reverb und Drive (EDIT dreimal: SOUND MIX) und
 **zwei LFOs** (LFO, nochmal: LFO 2) mit Ziel (Pitch, Filter, Decay, Level, Pan, Sample), Welle (Sinus, Dreieck, Säge,
@@ -41,8 +46,8 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 
 | Bedienelement | normal | mit SHIFT |
 |---|---|---|
-| **SELECT** | würfelt einen neuen Sound für den gewählten (immer mit Transienten-Sample) und spielt ihn an | Tempo |
-| **ALGORITHM** | Sound 1–8 wählen | Pattern wählen |
+| **SELECT** | Sound 1–8 wählen | Pattern wählen |
+| **ALGORITHM** | würfelt einen neuen Sound für den gewählten (immer mit Transienten-Sample) und spielt ihn an | Tempo |
 | **PRESETS** | die gespeicherten Patches (Kit + Patterns) durchblättern, jeder wird sofort geladen | nur die Patterns des Patches |
 | **KNOB 1–4** | die vier Karten der Seite (Reihe A) | Reihe B |
 | **PLAY** | Start / Stop | von vorn |
@@ -59,8 +64,9 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | SEQ (2.) | **LIVE PADS** | Pad-Velocity, Quantize-Raster, -Richtung, Metronom | |
 | EDIT | SYNTH 1-4 | Synth-Parameter 1–4 | Parameter 5–8 |
 | EDIT (2.) | SYNTH 5-8 | Synth-Parameter 5–8 (z. B. Tone, Snap, Click, Drive) | Parameter 1–4 |
-| EDIT (3.) / ENV | SAMPLE LAYER | Sample (spielt beim Drehen an), Level, **Synth-Pegel**, Pitch | Decay |
-| EDIT (4.) | SOUND MIX | Volume, Pan, Delay-Send, Reverb-Send | Drive-Send |
+| EDIT (3.) / ENV | SAMPLE LAYER | Sample, Level, Pitch, Decay | Synth-Pegel |
+| EDIT (4.) | SAMPLE 2 | Start, Tone, Bend, Synth-Pegel | |
+| EDIT (5.) | SOUND MIX | Volume, Pan, Delay-Send, Reverb-Send | Drive-Send |
 | LFO / LFO (2.) | LFO 1 / LFO 2 | Ziel, Welle, Rate (im Tempo), Tiefe (bipolar) | |
 | FX | FX SENDS (des Sounds, im Kit) | Drive-Send, Delay-Send, Reverb-Send, Volume | |
 | FX (2.) | DRIVE (global, im Kit) | Modus (SOFT, HARD, FOLD), Stärke, Ton, Pegel | |

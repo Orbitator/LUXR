@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * LUXR: the panel and the screen (after Felucca's conventions and ONE CLICK's layout). The full map: README.md.
  *
- *   KNOBS   SELECT a new sound for the selected one, rolled (SHIFT: tempo) · ALGORITHM the sound 1..8 (SHIFT: the
- *           pattern) · PRESETS the stored patches, kit and patterns (SHIFT: their patterns only) · KNOB 1..4 the page's
+ *   KNOBS   SELECT the sound 1..8 (SHIFT: the pattern) · ALGORITHM a new sound for the selected one, rolled (SHIFT:
+ *           tempo) · PRESETS the stored patches, kit and patterns (SHIFT: their patterns only) · KNOB 1..4 the page's
  *           four cards, SHIFT the page's second row · MASTER volume
  *   SHIFT   GLO held (from 250 ms, or at once when another control is used while it is down). GLO tapped: the MIXER,
  *           tapped again its page 2 (PAN) and back.
@@ -50,19 +50,19 @@ static const uint16_t TRK_COL[NTRK] = {RGB(255, 96, 110), RGB(255, 170, 40), RGB
                                        RGB(90, 210, 200), RGB(90, 160, 255), RGB(176, 140, 255), RGB(240, 130, 220)};
 #define C_REC RGB(255, 72, 60)
 
-enum { PG_KIT, PG_SEQ, PG_LIVE, PG_VOICE, PG_VOICE2, PG_SAMPLE, PG_SND, PG_LFO1, PG_LFO2, PG_FXS, PG_FXD, PG_FXDL, PG_FXR,
+enum { PG_KIT, PG_SEQ, PG_LIVE, PG_VOICE, PG_VOICE2, PG_SAMPLE, PG_SAMPLE2, PG_SND, PG_LFO1, PG_LFO2, PG_FXS, PG_FXD, PG_FXDL, PG_FXR,
        PG_PAT, PG_NR, PG_MIX, PG_SAVE, PG_REC, PG_N };
-static const char *const PG_NAME[PG_N] = {"LUXR KIT", "SEQUENCER", "LIVE PADS", "SYNTH 1-4", "SYNTH 5-8", "SAMPLE LAYER",
+static const char *const PG_NAME[PG_N] = {"LUXR KIT", "SEQUENCER", "LIVE PADS", "SYNTH 1-4", "SYNTH 5-8", "SAMPLE LAYER", "SAMPLE 2",
                                           "SOUND MIX", "LFO 1", "LFO 2", "FX SENDS", "DRIVE", "DELAY", "REVERB",
                                           "PATTERNS", "NOTE REPEAT", "MIXER", "STORE", "QUANTIZE"};
-static const uint8_t PAGE_BTN[PG_N] = {B_HOME, B_SEQ, B_SEQ, B_EDIT, B_EDIT, B_EDIT, B_EDIT, B_LFO, B_LFO, B_FX, B_FX, B_FX,
+static const uint8_t PAGE_BTN[PG_N] = {B_HOME, B_SEQ, B_SEQ, B_EDIT, B_EDIT, B_EDIT, B_EDIT, B_EDIT, B_LFO, B_LFO, B_FX, B_FX, B_FX,
                                        B_FX, B_SCL, B_ARP, B_GLO, B_SAVE, B_REC};
-static const uint8_t PAGE_KC[PG_N] = {KC_HOME, KC_SEQ, KC_SEQ, KC_EDIT, KC_EDIT, KC_EDIT, KC_EDIT, KC_LFO, KC_LFO, KC_FX, KC_FX,
+static const uint8_t PAGE_KC[PG_N] = {KC_HOME, KC_SEQ, KC_SEQ, KC_EDIT, KC_EDIT, KC_EDIT, KC_EDIT, KC_EDIT, KC_LFO, KC_LFO, KC_FX, KC_FX,
                                       KC_FX, KC_FX, KC_SCL, KC_ARP, KC_GLO, KC_SAVE, KC_REC};
 /* a button's pages, in the order its taps show them (a button not listed: none, or its own logic) */
-typedef struct { uint8_t btn, n, pg[4]; } group_t;
+typedef struct { uint8_t btn, n, pg[5]; } group_t;
 static const group_t GROUPS[] = {
-    {B_HOME, 1, {PG_KIT}}, {B_SEQ, 2, {PG_SEQ, PG_LIVE}}, {B_EDIT, 4, {PG_VOICE, PG_VOICE2, PG_SAMPLE, PG_SND}},
+    {B_HOME, 1, {PG_KIT}}, {B_SEQ, 2, {PG_SEQ, PG_LIVE}}, {B_EDIT, 5, {PG_VOICE, PG_VOICE2, PG_SAMPLE, PG_SAMPLE2, PG_SND}},
     {B_ENV, 1, {PG_SAMPLE}}, {B_LFO, 2, {PG_LFO1, PG_LFO2}}, {B_FX, 4, {PG_FXS, PG_FXD, PG_FXDL, PG_FXR}},
     {B_SCL, 1, {PG_PAT}}, {B_SAVE, 1, {PG_SAVE}},
 };
@@ -72,7 +72,7 @@ enum {
     P_NONE, P_BPM, P_SWING, P_TUNE, P_KDEC, P_CLICK, P_MIDICH, P_THEME, P_VERSION,
     P_LEN, P_SVEL, P_ROT, P_EUCLID, P_PLEN, P_COPY, P_SACC, P_LVEL,
     P_V0, P_V1, P_V2, P_V3, P_V4, P_V5, P_V6, P_V7,
-    P_SMP, P_SLVL, P_SPITCH, P_SDEC, P_SYN,
+    P_SMP, P_SLVL, P_SPITCH, P_SDEC, P_SYN, P_SSTART, P_STONE, P_SBEND,
     P_L1DEST, P_L1WAVE, P_L1RATE, P_L1DEPTH, P_L2DEST, P_L2WAVE, P_L2RATE, P_L2DEPTH,
     P_LEVEL, P_PAN, P_DLY, P_REV, P_DRV,
     P_DMODE, P_DAMT, P_DTONE, P_DLVL, P_DTIME, P_DFB, P_DLTONE, P_DLLVL, P_RSIZE, P_RDAMP, P_RLVL,
@@ -82,7 +82,7 @@ enum {
     P_SLOT, P_SWHAT, P_LWHAT, P_LOAD, P_QGRID, P_QROUND,
     P_COUNT
 };
-enum { FM_NUM, FM_PCT, FM_BIP, FM_NAME, FM_STEPS, FM_PAN, FM_X100, FM_BPM, FM_SMP, FM_PAT, FM_LOAD };
+enum { FM_NUM, FM_PCT, FM_BIP, FM_NAME, FM_STEPS, FM_PAN, FM_X100, FM_BPM, FM_SMP, FM_PAT, FM_LOAD, FM_TONE };
 typedef struct { const char *label; uint8_t fmt; int16_t min, max; const char *const *names; } pdesc_t;
 static const char *const N_OFFON[] = {"OFF", "ON"};
 static const char *const N_LDEST[] = {"OFF", "PITCH", "FILTER", "DECAY", "LEVEL", "PAN", "SAMPLE"};
@@ -126,6 +126,9 @@ static const pdesc_t PD[P_COUNT] = {
     [P_SPITCH] = {"PITCH", FM_X100, 0, 127, 0},
     [P_SDEC] = {"DECAY", FM_NUM, 0, 127, 0},
     [P_SYN] = {"SYNTH", FM_NUM, 0, 127, 0},
+    [P_SSTART] = {"START", FM_NUM, 0, 127, 0},
+    [P_STONE] = {"TONE", FM_TONE, -64, 63, 0},
+    [P_SBEND] = {"BEND", FM_BIP, -64, 63, 0},
     [P_L1DEST] = {"DEST", FM_NAME, 0, LD_N - 1, N_LDEST}, [P_L2DEST] = {"DEST", FM_NAME, 0, LD_N - 1, N_LDEST},
     [P_L1WAVE] = {"WAVE", FM_NAME, 0, LW_N - 1, N_LWAVE}, [P_L2WAVE] = {"WAVE", FM_NAME, 0, LW_N - 1, N_LWAVE},
     [P_L1RATE] = {"RATE", FM_NAME, 0, LR_N - 1, N_LRATE}, [P_L2RATE] = {"RATE", FM_NAME, 0, LR_N - 1, N_LRATE},
@@ -173,7 +176,8 @@ static const uint8_t PAGE_P[PG_N][8] = {
     [PG_LIVE] = {P_LVEL, P_QGRID, P_QROUND, P_CLICK, 0, 0, 0, 0},
     [PG_VOICE] = {P_V0, P_V1, P_V2, P_V3, P_V4, P_V5, P_V6, P_V7},
     [PG_VOICE2] = {P_V4, P_V5, P_V6, P_V7, P_V0, P_V1, P_V2, P_V3},
-    [PG_SAMPLE] = {P_SMP, P_SLVL, P_SYN, P_SPITCH, P_SDEC, 0, 0, 0},
+    [PG_SAMPLE] = {P_SMP, P_SLVL, P_SPITCH, P_SDEC, P_SYN, 0, 0, 0},
+    [PG_SAMPLE2] = {P_SSTART, P_STONE, P_SBEND, P_SYN, 0, 0, 0, 0},
     [PG_SND] = {P_LEVEL, P_PAN, P_DLY, P_REV, P_DRV, 0, 0, 0},
     [PG_LFO1] = {P_L1DEST, P_L1WAVE, P_L1RATE, P_L1DEPTH, 0, 0, 0, 0},
     [PG_LFO2] = {P_L2DEST, P_L2WAVE, P_L2RATE, P_L2DEPTH, 0, 0, 0, 0},
@@ -269,7 +273,7 @@ static void fmt_u(char *b, uint32_t v);
 #define ST_SET 0x0000u
 #define ST_PROJ(i) (0x1000u + 0x3000u * (uint32_t)(i))
 #define MAGIC_SET 0x3254584Cu                    /* "LXT2" */
-#define MAGIC_PROJ 0x3250584Cu                   /* "LXP2" (LXP1, before the two LFOs and the FX: not read) */
+#define MAGIC_PROJ 0x3350584Cu                   /* "LXP3" (LXP1, LXP2: before the sample's start, tone, bend) */
 enum { SW_ALL, SW_KIT, SW_PAT };
 typedef struct { uint32_t magic; uint8_t theme, midi_ch, click, slot, qgrid, qround, pad[2]; } set_rec_t;
 typedef struct {                                 /* the kit */
@@ -343,6 +347,8 @@ static void kit_put(const kit_rec_t *k)
     memcpy(snd, k->s, sizeof snd);
     for (t = 0; t < NTRK; t++) {                 /* (stored values as indexes: kept in range) */
         snd[t].smp %= TR_N;
+        snd[t].stone = (int8_t)clamp(snd[t].stone, -64, 63);
+        snd[t].sbend = (int8_t)clamp(snd[t].sbend, -64, 63);
         for (j = 0; j < 2u; j++) {
             snd[t].lfo[j].dest %= LD_N;
             snd[t].lfo[j].wave %= LW_N;
@@ -548,6 +554,9 @@ static int32_t pget(uint32_t id)
     case P_SPITCH: return s->spitch;
     case P_SDEC: return s->sdec;
     case P_SYN: return s->syn;
+    case P_SSTART: return s->sstart;
+    case P_STONE: return s->stone;
+    case P_SBEND: return s->sbend;
     case P_L1DEST: case P_L2DEST: return lfo_of(id)->dest;
     case P_L1WAVE: case P_L2WAVE: return lfo_of(id)->wave;
     case P_L1RATE: case P_L2RATE: return lfo_of(id)->rate;
@@ -661,6 +670,9 @@ static void pset(uint32_t id, int32_t v)
     case P_SPITCH: s->spitch = (uint8_t)v; break;
     case P_SDEC: s->sdec = (uint8_t)v; break;
     case P_SYN: s->syn = (uint8_t)v; break;
+    case P_SSTART: s->sstart = (uint8_t)v; break;
+    case P_STONE: s->stone = (int8_t)v; break;
+    case P_SBEND: s->sbend = (int8_t)v; break;
     case P_L1DEST: case P_L2DEST: lfo_of(id)->dest = (uint8_t)v; break;
     case P_L1WAVE: case P_L2WAVE: lfo_of(id)->wave = (uint8_t)v; break;
     case P_L1RATE: case P_L2RATE: lfo_of(id)->rate = (uint8_t)v; break;
@@ -726,9 +738,12 @@ static void fmt_s(char *b, int32_t v, int plus)  /* signed; plus: "+3" */
     else if (plus && v > 0) *b++ = '+';
     fmt_u(b, (uint32_t)(v < 0 ? -v : v));
 }
-static void smp_name(char *b, uint32_t smp, uint32_t t)   /* the sample layer's: OFF, SNAP, the LXR's, the sound's own */
+static void smp_name(char *b, uint32_t smp, uint32_t t)   /* the sample layer's: OFF, SNAP, the LXR's, the sound's own,
+                                                           * the machines' (808 A ...) */
 {
-    if (smp >= TR_OWN0) {
+    if (smp >= TR_MACH0) {
+        str_cpy(b, MACH_NAME[(smp - TR_MACH0) % MACH_TRANS_N], 16);
+    } else if (smp >= TR_OWN0) {
         str_cpy(b, TRK_SHORT[t % NTRK], 16);
         b[2] = ' ';
         b[3] = (char)('0' + (smp - TR_OWN0 + 1u) / 10u);
@@ -746,6 +761,10 @@ static void pformat(uint32_t id, char *val, const char **unit)
     switch (d.fmt) {
     case FM_NAME: str_cpy(val, d.names ? d.names[clamp(v, d.min, d.max) - d.min] : "", 16); break;
     case FM_SMP: smp_name(val, (uint32_t)v, song.sel); break;
+    case FM_TONE:
+        if (!v) str_cpy(val, "OFF", 16);
+        else { str_cpy(val, v < 0 ? "LP " : "HP ", 16); fmt_u(val + 3, (uint32_t)(v < 0 ? -v : v)); }
+        break;
     case FM_PAT: if (v) { val[0] = 'P'; fmt_u(val + 1, (uint32_t)v); } else str_cpy(val, "-", 16); break;
     case FM_LOAD: str_cpy(val, ui.used[(uint32_t)(v - 1) % NSLOT] ? "TURN" : "EMPTY", 16); break;
     case FM_PCT: fmt_u(val, (uint32_t)v); *unit = "%"; break;
@@ -1068,9 +1087,9 @@ static void ui_input(void)
         }
     }
     /* the knobs */
-    if (e[EN_SELECT]) {                          /* SELECT: a new sound, rolled (its own transients); SHIFT: tempo */
+    if (e[EN_ALGO]) {                            /* ALGORITHM: a new sound, rolled (its own transients); SHIFT: tempo */
         if (ui.shift) {
-            pset(P_BPM, pget(P_BPM) + e[EN_SELECT]);
+            pset(P_BPM, pget(P_BPM) + e[EN_ALGO]);
         } else {
             undo_burst(0x700u + song.sel);
             sound_preset(song.sel, 1u + rng() % 255u);
@@ -1078,9 +1097,9 @@ static void ui_input(void)
             ui_say("NEW SOUND");
         }
     }
-    if (e[EN_ALGO]) {
-        if (ui.shift) pset(P_PAT, pget(P_PAT) + e[EN_ALGO]);
-        else sel_track((int32_t)song.sel + e[EN_ALGO]);
+    if (e[EN_SELECT]) {                          /* SELECT: the sound 1..8; SHIFT: the pattern */
+        if (ui.shift) pset(P_PAT, pget(P_PAT) + e[EN_SELECT]);
+        else sel_track((int32_t)song.sel + e[EN_SELECT]);
     }
     if (e[EN_PRESET])                            /* PRESETS: the stored patches (SHIFT: their patterns only) */
         patch_turn(e[EN_PRESET], ui.shift ? SW_PAT : SW_ALL);
@@ -1089,11 +1108,9 @@ static void ui_input(void)
         int32_t d = e[EN_K1 + k];
         if (!d || !id)
             continue;
-        if (id >= P_V0 && id <= P_DRV)
+        if ((id >= P_V0 && id <= P_DRV) || (id >= P_SSTART && id <= P_SBEND))
             undo_burst(0x800u + song.sel * 64u + id);
         pset(id, pget(id) + d);
-        if (id == P_SMP || id == P_SLVL || id == P_SYN || id == P_SPITCH)   /* (heard as it is chosen) */
-            ev_push(EV_HIT, song.sel, 110);
         ui.hot = (uint8_t)(k + 1u);
         ui.hot_t = fm1_ms | 1u;
     }
@@ -1283,37 +1300,45 @@ static void g_params(void)                       /* SYNTH LAYER: the eight param
         cv_rrect(x, y + 14, 3 + s->p[k] * (w - 3) / 127, 6, 2, sh ? TRK_COL[song.sel % NTRK] : T_DIM, T_SURF);
     }
 }
-static void g_sample(void)                       /* SAMPLE LAYER: the transient's wave and its decay */
+static uint16_t j0_col(uint32_t at, uint32_t start)   /* the wave before START dim */
+{
+    return at < start ? T_DIM : TRK_COL[song.sel % NTRK];
+}
+static void g_sample(void)                       /* SAMPLE LAYER: the transient's wave, its decay, where it starts */
 {
     const sound_t *s = TS;
     int32_t i, mid = 64, env = 32767, k = lx_k(20u + s->sdec * 50u / 127u);
-    char b[24];
+    uint32_t mach = s->smp >= TR_MACH0, n = mach ? MACH_TRANS_LEN : LXR_TRANS_LEN, st = n * s->sstart / 128u;
+    const int8_t *tr;
+    char b[28];
     if (s->smp < TR_SMP0) {
         cv_text_in(3, 40, GW, &AF_M, s->smp == TR_SNAP ? "SNAP: A PITCH SNAP" : "NO SAMPLE LAYER", T_MID, T_SURF);
         cv_text_in(3, 70, GW, &AF_S, s->smp == TR_SNAP ? "LEVEL = AMOUNT, PITCH = SPEED" : "KNOB 1: CHOOSE ONE", T_DIM, T_SURF);
         return;
     }
-    {
-    const int8_t *tr = s->smp >= TR_OWN0 ? OWN_TRANS[song.sel % NTRK][(s->smp - TR_OWN0) % OWN_TRANS_N]
-                                         : LXR_TRANS[(s->smp - TR_SMP0) % LXR_TRANS_N];
-    for (i = 0; i < 220; i++) {                  /* min / max a column, the decay over it */
-        uint32_t a = (uint32_t)i * LXR_TRANS_LEN / 220u, e = (uint32_t)(i + 1) * LXR_TRANS_LEN / 220u, j;
+    tr = mach ? MACH_TRANS[song.sel % NTRK][(s->smp - TR_MACH0) % MACH_TRANS_N]
+         : s->smp >= TR_OWN0 ? OWN_TRANS[song.sel % NTRK][(s->smp - TR_OWN0) % OWN_TRANS_N]
+         : LXR_TRANS[(s->smp - TR_SMP0) % LXR_TRANS_N];
+    for (i = 0; i < 220; i++) {                  /* min / max a column, the decay over it (from START) */
+        uint32_t a = (uint32_t)i * n / 220u, e = (uint32_t)(i + 1) * n / 220u, j;
         int32_t lo = 0, hi = 0;
         for (j = a; j < e; j++) {
             int32_t v = tr[j];
             if (v < lo) lo = v;
             if (v > hi) hi = v;
-            if (s->sdec < 127u)                  /* (the decay as lx_render has it, a sample at a time) */
+            if (s->sdec < 127u && j >= st) {     /* (the decay as lx_render has it: a 44.1 kHz sample at a time) */
                 env = lx_dec(env, k);
+                if (mach)
+                    env = lx_dec(env, k);
+            }
         }
         lo = lo * env / 32767;                   /* (the shape; LEVEL is on its card) */
         hi = hi * env / 32767;
-        cv_rect(10 + i, mid - hi * 48 / 128, 1, 1 + (hi - lo) * 48 / 128, TRK_COL[song.sel % NTRK]);
+        cv_rect(10 + i, mid - hi * 48 / 128, 1, 1 + (hi - lo) * 48 / 128, j0_col(a, st));
     }
     smp_name(b, s->smp, song.sel);
-    str_cat(b, s->smp >= TR_OWN0 ? "  OWN TRANSIENT" : "  LXR TRANSIENT", sizeof b);
+    str_cat(b, mach ? "  CLASSIC MACHINE" : s->smp >= TR_OWN0 ? "  OWN TRANSIENT" : "  LXR TRANSIENT", sizeof b);
     g_label(10, 104, b, T_MID);
-    }
 }
 static void g_mixer(void)                        /* MIXER: eight strips, the bank's four lit */
 {
@@ -1452,8 +1477,8 @@ static uint32_t graph_sig(void)
         return h + fm1_ms / 50u;                 /* (the meters move) */
     if (ui.page == PG_NR)
         return h + nr.rate * 101u + (nr.held | nr.latched) * 1009u + nr.latch + song.rec * 3u + song.playing * 5u;
-    if (ui.page == PG_SAMPLE)
-        return h + TS->smp * 101u + TS->slvl * 1009u + TS->sdec * 10007u;
+    if (ui.page == PG_SAMPLE || ui.page == PG_SAMPLE2)
+        return h + TS->smp * 101u + TS->slvl * 1009u + TS->sdec * 10007u + TS->sstart * 7u;
     if (ui.page == PG_VOICE || ui.page == PG_VOICE2)
         return h + hsh(1u, (const char *)TS->p) + TS->p[0] * 3u;
     if (ui.page == PG_PAT)
@@ -1488,7 +1513,7 @@ static void draw_graph(int force)
     g_box();
     switch (ui.page) {
     case PG_VOICE: case PG_VOICE2: g_params(); break;
-    case PG_SAMPLE: g_sample(); break;
+    case PG_SAMPLE: case PG_SAMPLE2: g_sample(); break;
     case PG_MIX: g_mixer(); break;
     case PG_NR: g_repeat(); break;
     case PG_PAT: g_patterns(); break;
@@ -1507,7 +1532,7 @@ static void draw_foot(int force)
     static const khint_t H_MIXPAN[3] = {{KC_K14, "PAN"}, {KC_OCTPM, "BANK"}, {KC_GLO, "LEVEL"}};
     static const khint_t H_NR[3] = {{KC_KEYS, "PADS"}, {KC_K1, "RATE"}, {KC_ARP, "OFF"}};
     static const khint_t H_SAVE[3] = {{KC_OCTUP, "SAVE"}, {KC_K4, "LOAD"}, {KC_OCTDN, "BACK"}};
-    static const khint_t H_PAGE[3] = {{KC_ALGO, "SOUND"}, {KC_SELECT, "NEW"}, {KC_PRESETS, "PATCH"}};
+    static const khint_t H_PAGE[3] = {{KC_SELECT, "SOUND"}, {KC_ALGO, "NEW"}, {KC_PRESETS, "PATCH"}};
     static const khint_t H_LIVE[3] = {{KC_KEYS, "PADS"}, {KC_REC, "REC"}, {KC_SEQ, "STEPS"}};
     static const khint_t H_REC[3] = {{KC_K1, "GRID"}, {KC_K2, "TO"}, {KC_REC, "ARM"}};
     static const khint_t H_SHIFT[3] = {{KC_K14, "ROW B"}, {KC_KEYS, "MUTE"}, {KC_PLAY, "TOP"}};

@@ -54,6 +54,7 @@
 #include "oc_tables.h"
 #include "lxr_transients.h"
 #include "own_transients.h"
+#include "machine_transients.h"
 
 #include "libc.c"
 #include "lcd.c"

@@ -151,8 +151,11 @@ static void voice_hit(uint32_t t, uint32_t vel, uint32_t acc)
     v->choke = 0;
     v->t = 0;
     v->amp = v->penv = v->click = v->cfade = v->nenv = v->tone = v->snap = v->tenv = 32767;
-    v->tph = 0;
+    /* the sample layer from START (its phase in 44.1 kHz samples, Q20: a 22.05 kHz machine sample spans twice its length) */
+    v->tph = (((s->smp >= TR_MACH0 ? 2u * MACH_TRANS_LEN : LXR_TRANS_LEN) * s->sstart) >> 7) << 20;
     v->tinc = (1u << 18) + s->spitch * ((3u << 19) / 127u);   /* Q20: 0.25 .. 1.75 */
+    v->tlp = 0;
+    v->benv = 32767;
     v->noise ^= (t + 1u) * 2654435761u + fm1_ms;
     v->active = 1;
 }
@@ -166,8 +169,11 @@ static void lx_render(uint32_t t, voice_t *v, int32_t *out, uint32_t n)
     int32_t tune = clamp(song.tune, -24, 24) * 16 + lfo_amt(t, LD_PITCH, 12 * 16), lcut = lfo_amt(t, LD_FILTER, 64);
     int32_t ka, kp = lx_k(15), kc = lx_k(12), kn = 0, kt = 0, ks, kd, f = 0, q = 50000, click = 0, noise = 0, color = 0;
     int32_t slvl = clamp(s->slvl + lfo_amt(t, LD_SAMPLE, 127), 0, 127);
-    const int8_t *tr = s->smp >= TR_OWN0 ? OWN_TRANS[t][(s->smp - TR_OWN0) % OWN_TRANS_N]   /* the sample layer's */
+    const int8_t *tr = s->smp >= TR_MACH0 ? MACH_TRANS[t][(s->smp - TR_MACH0) % MACH_TRANS_N]   /* the sample layer's */
+                     : s->smp >= TR_OWN0 ? OWN_TRANS[t][(s->smp - TR_OWN0) % OWN_TRANS_N]
                      : s->smp >= TR_SMP0 ? LXR_TRANS[(s->smp - TR_SMP0) % LXR_TRANS_N] : 0;
+    uint32_t mach = s->smp >= TR_MACH0, tn = mach ? MACH_TRANS_LEN : LXR_TRANS_LEN, tend = (mach ? 2u * tn : tn) << 20;
+    int32_t tk = s->stone < 0 ? 4095 + s->stone * 60 : s->stone * 40, kb = lx_k(18);   /* TONE (Q12), BEND's envelope */
     uint32_t didx;
     switch (kind) {
     case K_DRUM:
@@ -274,15 +280,30 @@ static void lx_render(uint32_t t, voice_t *v, int32_t *out, uint32_t n)
         if (snap)
             v->snap = lx_dec(v->snap, ks);
         y = (y * syn) >> 7;
-        if (tr && v->tph < ((uint32_t)LXR_TRANS_LEN << 20)) {   /* the sample layer (all 2205 samples long) */
-            uint32_t k = v->tph >> 20;
-            int32_t x = tr[k] * 256;
-            if (k > LXR_TRANS_LEN - 256u)        /* (the samples end abruptly: a 6 ms fade) */
-                x = x * (int32_t)(LXR_TRANS_LEN - k) >> 8;
+        if (tr && v->tph < tend) {               /* the sample layer */
+            uint32_t k = mach ? v->tph >> 21 : v->tph >> 20, inc = v->tinc;
+            int32_t x;
+            if (mach) {                          /* (22.05 kHz: between two samples, linearly) */
+                int32_t a0 = tr[k], a1 = k + 1u < tn ? tr[k + 1u] : 0;
+                x = a0 * 256 + (a1 - a0) * (int32_t)((v->tph >> 13) & 0xFFu);
+            } else {
+                x = tr[k] * 256;
+            }
+            if (k > tn - (mach ? 128u : 256u))   /* (the samples end abruptly: a 6 ms fade) */
+                x = x * (int32_t)(tn - k) >> (mach ? 7 : 8);
+            if (s->stone) {                      /* TONE: a one-pole low-pass (-) or high-pass (+) */
+                v->tlp += ((x - v->tlp) * tk) >> 12;
+                x = s->stone < 0 ? v->tlp : x - v->tlp;
+            }
             layer = (((x * v->tenv) >> 15) * slvl) >> 6;   /* (twice the LXR's: heard over a full synth layer) */
             if (s->sdec < 127u)
                 v->tenv = lx_dec(v->tenv, kd);
-            v->tph += v->tinc;
+            if (s->sbend) {                      /* BEND: from up to 2x the pitch down (+), from far below up (-) */
+                int32_t f = (s->sbend * (v->benv >> 7)) >> 8;
+                inc = (uint32_t)clamp((int32_t)v->tinc + (int32_t)(v->tinc >> 6) * f, (int32_t)(v->tinc >> 2), 0x7FFFFFFF);
+                v->benv = lx_dec(v->benv, kb);
+            }
+            v->tph += inc;
             y += layer;
         }
         if (p[7])
@@ -296,7 +317,7 @@ static void lx_render(uint32_t t, voice_t *v, int32_t *out, uint32_t n)
         }
         out[i] += (((y * a) >> 15) * gain) >> 7;
         v->amp = lx_dec(v->amp, ka);
-        if (v->amp < 8 && tt > 1400u && (!tr || v->tph >= ((uint32_t)LXR_TRANS_LEN << 20) || !slvl)) {
+        if (v->amp < 8 && tt > 1400u && (!tr || v->tph >= tend || !slvl)) {
             v->active = 0;
             break;
         }
@@ -341,13 +362,18 @@ static void sound_preset(uint32_t t, uint32_t k)   /* track t's sound k: 0 the f
     }
     if (k && TRK_KIND[t] == K_DRUM && t != 6u && (xrand(&x) & 3u) == 0u)
         s->p[4] = 26;                            /* a triangle drum now and then */
-    /* the sample layer always plays: mostly one of the sound's own sixteen, now and then a fitting LXR one */
-    if (!k)
+    /* the sample layer always plays: one of the sound's own sixteen, of its sixteen after the classic machines, or a
+     * fitting LXR one */
+    if (!k) {
         s->smp = TR_FACTORY[t][0];
-    else if (xrand(&x) % 4u)
-        s->smp = (uint8_t)(TR_OWN0 + xrand(&x) % 16u);
-    else
-        s->smp = (uint8_t)(TR_SMP0 + TR_LXR_FIT[t][xrand(&x) % 3u]);
+    } else {
+        uint32_t r = xrand(&x) % 10u;
+        s->smp = (uint8_t)(r < 4u ? TR_OWN0 + xrand(&x) % 16u : r < 8u ? TR_MACH0 + xrand(&x) % 16u
+                                  : TR_SMP0 + TR_LXR_FIT[t][xrand(&x) % 3u]);
+    }
+    s->sstart = 0;
+    s->stone = 0;
+    s->sbend = k && xrand(&x) % 5u == 0u ? (int8_t)((int32_t)(xrand(&x) % 81u) - 40) : 0;
     s->slvl = k ? (uint8_t)(60u + xrand(&x) % 68u) : TR_FACTORY[t][1];
     s->spitch = k ? (uint8_t)(40u + xrand(&x) % 50u) : 64;
     s->sdec = k && xrand(&x) % 3u == 0u ? (uint8_t)(50u + xrand(&x) % 70u) : 127;
