@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# Build the firmware (JieLi toolchain + AC79 SDK) and publish the admin page with it on GitHub Pages:
-# https://<user>.github.io/<repo>/ loads the newest oneclick.fwsc by itself.
+# Build LUXR (JieLi toolchain + AC79 SDK): build/luxr.fwsc as the artifact luxr-fwsc. Not published on Pages or a
+# branch: its sample layer is the Sonic Potions LXR's transient samples, whose licence is not the GPL (README.md).
 name: build
 on:
-  push: { branches: [main, "feature/**"] }   # (feature branches: the firmware as an artifact, no Pages)
+  push: { branches: [main, "feature/**"] }
   workflow_dispatch:
-permissions: { contents: write, pages: write, id-token: write }
-concurrency: { group: "pages-${{ github.ref }}", cancel-in-progress: true }
+permissions: { contents: write }
+concurrency: { group: "build-${{ github.ref }}", cancel-in-progress: true }
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -43,38 +43,10 @@ jobs:
         run: |
           set -o pipefail
           export JIELI_TOOLCHAIN=$HOME/.jieli/toolchain AC79_SDK=$HOME/fw-AC79_AIoT_SDK
-          # ONE CLICK, then LUXR (the drum machine with the LXR's transient samples: README-LUXR.md)
-          { python3 tools/build.py && python3 tools/build.py --app lxr; } 2>&1 | tee build.log && exit 0
+          python3 tools/build.py --app lxr 2>&1 | tee build.log && exit 0
           # the log on the branch ci-log (readable without the web UI)
           git config user.name ci; git config user.email ci@users.noreply.github.com
           git checkout -q --orphan ci-log && git rm -rqf --cached . && git add -f build.log && git commit -qm "build log $GITHUB_SHA" && git push -qf origin ci-log
           exit 1
-      - name: Site
-        if: github.ref == 'refs/heads/main'
-        run: |
-          python3 web/make_admin.py
-          mkdir -p site
-          cp build/web/oneclick-admin.html site/index.html
-          cp build/oneclick.fwsc site/          # (luxr.fwsc not on Pages: the LXR samples' licence, README-LUXR.md)
-          printf '{"date":"%s","commit":"%s","sha256":"%s"}\n' "$(date -u +%F\ %H:%M)" "$GITHUB_SHA" "$(sha256sum build/oneclick.fwsc | cut -d' ' -f1)" > site/build.json
-      - name: Firmware branch (the newest .fwsc as a plain git file)
-        if: github.ref == 'refs/heads/main'
-        run: |
-          d=$(mktemp -d); cp site/oneclick.fwsc site/build.json "$d"/; cd "$d"
-          git init -q -b firmware && git add . && git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "firmware $GITHUB_SHA"
-          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" firmware
-      - uses: actions/upload-artifact@v4
-        with: { name: oneclick-fwsc, path: build/oneclick.fwsc }
       - uses: actions/upload-artifact@v4
         with: { name: luxr-fwsc, path: build/luxr.fwsc }
-      - uses: actions/upload-pages-artifact@v3
-        if: github.ref == 'refs/heads/main'
-        with: { path: site }
-  deploy:
-    needs: build
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    environment: { name: github-pages, url: "${{ steps.d.outputs.page_url }}" }
-    steps:
-      - id: d
-        uses: actions/deploy-pages@v4

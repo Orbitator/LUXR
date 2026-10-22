@@ -3,7 +3,7 @@
  * sample layer), one compilation unit as oneclick.c: Felucca's platform as ONE CLICK uses it (the HAL, USB-MIDI, the
  * update entry, UBOOT, the store, the display), the lx_*.c app instead of the oc_*.c one.
  * build/gen/lxr_transients.h (tools/gen_lxr_transients.py) carries the Sonic Potions LXR licence, not the GPL: a
- * firmware built with it is for personal, non-commercial use (README-LUXR.md). */
+ * firmware built with it is for personal, non-commercial use (README.md). */
 #ifndef FELUCCA_FLASH
 #define FELUCCA_FLASH 1
 #endif

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * LUXR: the panel and the screen (after Felucca's conventions and ONE CLICK's layout). The full map: README-LUXR.md.
+ * LUXR: the panel and the screen (after Felucca's conventions and ONE CLICK's layout). The full map: README.md.
  *
  *   KNOBS   SELECT tempo (SHIFT: swing) · ALGORITHM the sound 1..8 (SHIFT: the pattern) · PRESETS the sound's presets
  *           (SHIFT: the sample layer's sample) · KNOB 1..4 the page's four cards, SHIFT the page's second row;
