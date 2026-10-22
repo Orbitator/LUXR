@@ -103,6 +103,11 @@ X.Y: FM-1_87Y) – die Update-Seite / Firmware-Werkstatt nimmt sie wie ONE CLICK
 Workflow (`.github/workflows/build.yml`) sie bei jedem Push auf `main` und legt sie als Actions-Artefakt
 `luxr-fwsc` ab (Actions › build › der Lauf › Artifacts).
 
+**Installieren:** die Update-Seite **https://orbitator.github.io/LUXR/** in Chrome oder Edge öffnen, FM-1 per USB
+verbinden, „Verbinden“ (Chrome fragt nach der MIDI-Erlaubnis), die entpackte `luxr.fwsc` wählen, „Installieren“. Die
+Seite enthält nur den Installer (`web/make_luxr_admin.py`), keine Firmware. Im Claude-Artefakt „Firmware-Werkstatt“ geht
+das nicht: Artefakt-Seiten bekommen kein Web MIDI.
+
 Tests auf dem Rechner: `tests/run.sh` (oder nur `cc … tests/test_lx.c && build/test_lx build/lx`: Klang, Sequencer,
 Note Repeat, Aufnahme, Erase, Patterns, Speicher, UBOOT-Countdown; Screenshots der Seiten und `lxr_demo.wav`).
 

@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# Build LUXR (JieLi toolchain + AC79 SDK): build/luxr.fwsc as the artifact luxr-fwsc. Not published on Pages or a
-# branch: its sample layer is the Sonic Potions LXR's transient samples, whose licence is not the GPL (README.md).
+# Build LUXR (JieLi toolchain + AC79 SDK): build/luxr.fwsc as the artifact luxr-fwsc, not published (its sample layer is
+# the Sonic Potions LXR's transient samples, whose licence is not the GPL: README.md). From main GitHub Pages gets the
+# update page alone (web/make_luxr_admin.py): https://<user>.github.io/LUXR/, the viewer picks luxr.fwsc there.
 name: build
 on:
   push: { branches: [main, "feature/**"] }
   workflow_dispatch:
-permissions: { contents: write }
+permissions: { contents: write, pages: write, id-token: write }
 concurrency: { group: "build-${{ github.ref }}", cancel-in-progress: true }
 jobs:
   build:
@@ -50,3 +51,19 @@ jobs:
           exit 1
       - uses: actions/upload-artifact@v4
         with: { name: luxr-fwsc, path: build/luxr.fwsc }
+      - name: Update page (the installer alone, no firmware)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          python3 web/make_luxr_admin.py
+          mkdir -p site && cp build/web/luxr-update.html site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
+        with: { path: site }
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: "${{ steps.d.outputs.page_url }}" }
+    steps:
+      - id: d
+        uses: actions/deploy-pages@v4
