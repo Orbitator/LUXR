@@ -116,6 +116,18 @@ int main(int argc, char **argv)
     }
     host_tap(B_PLAY);
     CHECK(!song.playing, "PLAY stops");
+    /* every sound dies away: hit at full level (accented, longest decays), then silence */
+    for (t = 0; t < NTRK; t++) {
+        snd[t].p[1] = 127;
+        snd[t].sdec = 127;
+        ev_push(EV_HIT, t, 127 | S_ACC);
+    }
+    host_run(15000, 0, 0);
+    for (t = 0; t < NTRK; t++)
+        CHECK(!voice[t].active, "%s still sounding 15 s after its hit (amp %d)", TRK_NAME[t], voice[t].amp);
+    reset_count();
+    host_run(200, watch, 0);
+    CHECK(peak_out < 0.002f, "silence after the hits died away (peak %.4f)", peak_out);
 
     /* 2. GLO: tapped the mixer, held SHIFT (not the mixer) */
     host_boot(2);

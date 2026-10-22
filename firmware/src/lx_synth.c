@@ -46,7 +46,13 @@ static int32_t lx_k(uint32_t idx)             /* a per-sample decay factor (Q16 
     uint32_t ns = TIME_MS[idx & 127u] * 44u + 1u;
     return clamp((int32_t)(452000u / ns), 1, 65535);
 }
-static inline int32_t lx_dec(int32_t e, int32_t k) { return e - (int32_t)(((uint32_t)e * (uint32_t)k) >> 16); }
+/* one sample of an exponential decay, e (0..32767) by k (Q16 taken off), rounded up: at least 1 a sample, so it
+ * reaches 0 (rounded down it stalled where e * k < 65536: a level held for ever) */
+static inline int32_t lx_dec(int32_t e, int32_t k)
+{
+    int32_t d = (int32_t)(((uint32_t)e * (uint32_t)k + 65535u) >> 16);
+    return e > d ? e - d : 0;
+}
 static inline int32_t lx_wave(uint32_t w, uint32_t ph, uint32_t *nz)
 {
     switch (w) {
