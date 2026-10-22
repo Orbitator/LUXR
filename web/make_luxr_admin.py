@@ -20,6 +20,7 @@ BACKUP_HTML = """  <section aria-labelledby="h-bk">
     <code>.luxr</code>-Datei; „Zurückspielen“ schreibt eine solche Datei zurück (auch Backups älterer LUXR-Versionen, sie werden
     umgewandelt). Geht mit LUXR ab der Version, die diese Seite mitbringt.</p>
     <div class="row"><button id="bkSave" disabled>Backup herunterladen</button></div>
+    <p class="hint" id="bkNote">Erst oben unter „1 · Gerät“ auf „Verbinden“ drücken.</p>
     <input id="bkFile" type="file" accept=".luxr">
     <div class="row"><button id="bkLoad" disabled>Backup zurückspielen</button></div>
     <label class="check"><input type="checkbox" id="bkAuto" checked> <span>Beim Installieren vorher ein Backup ziehen
@@ -140,7 +141,14 @@ EDITS = [   # (what, replacement): each must occur exactly once
     ('    $("iStore").textContent = "–";\n',
      '    $("iStore").textContent = "–";\n'
      '    lxDev = /^FM-1_87/.test(dev.id.text) ? await lxInfo(dev.link).catch(() => null) : null;   /* (LUXR: its patches) */\n'
-     '    if (lxDev) $("iStore").textContent = `${lxDev.ver}: ${lxDev.slots.length} von ${lxDev.n} Plätzen belegt`;\n'),
+     '    if (lxDev) $("iStore").textContent = `${lxDev.ver}: ${lxDev.slots.length} von ${lxDev.n} Plätzen belegt`;\n'
+     '    $("bkNote").textContent = lxDev ? `Bereit: ${lxDev.slots.length} belegte Plätze.` : /^FM-1_87/.test(dev.id.text) ?\n'
+     '      "Die LUXR-Version auf dem Gerät kennt das Backup noch nicht: erst die Firmware installieren (Abschnitt 2), dann erneut „Verbinden“." :\n'
+     '      /^ota-/.test(dev.id.text) ? "Das Gerät ist im Update-Modus: erst die Installation abschließen." :\n'
+     '      "Auf dem Gerät läuft kein LUXR.";\n'),
+    ('    $("devState").textContent = "nicht gefunden"; $("devState").className = "chip err";',
+     '    $("devState").textContent = "nicht gefunden"; $("devState").className = "chip err";\n'
+     '    lxDev = null; $("bkNote").textContent = "Kein FM-1 gefunden: siehe Fortschritt.";'),
     ('lock(true); $("bar").value = 0;\n  if (dev) { dev.link.close(); dev = null; }',
      'lock(true); $("bar").value = 0;\n'
      '  preBackup = null;\n'
