@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
 """LUXR: sixteen transients of each sound in the manner of the classic drum machines - Roland TR-808, TR-909, TR-606,
-TR-707, Oberheim DMX, Simmons SDS-6, SDS-7, SDS-8. Synthesized after how those machines make their sounds (the 808's
-bridged-T resonators and six square oscillators, the 909's swept kick and noise snare, the 606's thin analog voices,
-the 707's and the DMX's 8-bit PCM grit, the Simmons' swept oscillator and filtered noise); no recordings of them.
+TR-707, Oberheim DMX, Linn LM-1 and LinnDrum (LM-2), Simmons SDS-6, SDS-7, SDS-8. Synthesized after how those machines
+make their sounds (the 808's bridged-T resonators and six square oscillators, the 909's swept kick and noise snare, the
+606's thin analog voices, the 707's, the DMX's and the Linns' 8-bit PCM of acoustic drums - the LM-1 darker, with a
+cabasa for a cymbal, the LinnDrum brighter with ringing snares and real cymbals -, the Simmons' swept oscillator and
+filtered noise); no recordings of them.
 Signed 8 bit at 22.05 kHz (the 707 and the DMX played at about that), 1024 samples (46 ms).
 
   tools/gen_machine_transients.py OUT.h      -> MACH_TRANS[8][16][1024], MACH_NAME[16]"""
@@ -13,10 +15,10 @@ import sys
 from pathlib import Path
 
 FS, LEN = 22050, 1024
-NAMES = ["808 A", "808 B", "808 C", "909 A", "909 B", "909 C", "606 A", "606 B",
-         "707 A", "707 B", "DMX A", "DMX B", "SDS6", "SDS7 A", "SDS7 B", "SDS8"]
-MACHINE = ["808", "808", "808", "909", "909", "909", "606", "606",
-           "707", "707", "DMX", "DMX", "SDS6", "SDS7", "SDS7", "SDS8"]
+NAMES = ["808 A", "808 B", "909 A", "909 B", "606", "707 A", "707 B", "DMX A",
+         "DMX B", "LM1 A", "LM1 B", "LM2 A", "LM2 B", "SDS6", "SDS7", "SDS8"]
+MACHINE = ["808", "808", "909", "909", "606", "707", "707", "DMX",
+           "DMX", "LM1", "LM1", "LM2", "LM2", "SDS6", "SDS7", "SDS8"]
 BD, SD, CP, CH, OH, TM, RS, CY = range(8)
 
 
@@ -164,6 +166,19 @@ def model(m, t, r):
                 resonators([(j(700, 900), 1), (j(1900, 2300), 0.8)], j(4, 9), r, noise=0.3, ntau=1),
                 hiss(j(3500, 5000), j(80, 140), r, bp=j(5500, 7000), q=0.6)][t]
         return lofi(body, bits, lp)
+    if m in ("LM1", "LM2"):                     # Linn: 8-bit PCM of acoustic drums (the LM-1 darker, no cymbals)
+        lm1 = m == "LM1"
+        body = [sweep(j(130, 180), j(52, 64), j(8, 14), j(55, 95), r, click=j(0.5, 0.8), ctau=j(0.8, 1.6)),
+                noise_snare(j(1800, 2800) if lm1 else j(2800, 4200), 0.9, j(35, 60), [j(185, 205), j(330, 360) if lm1 else
+                            j(390, 430)], j(25, 45) if lm1 else j(40, 70), r, mix=j(0.5, 0.65)),
+                clap(int(j(3, 4.99)), j(5, 8), j(25, 45), j(1100, 1500), 1.3, r),
+                hiss(j(5500, 7000), j(5, 12), r, bp=j(7000, 8500), q=1.4),
+                hiss(j(5000, 6500), j(45, 90), r, bp=j(6500, 8000), q=1.2),
+                sweep(j(220, 380), j(95, 180), j(15, 35), j(70, 120), r, click=0.35),
+                resonators([(j(600, 800), 1), (j(1600, 2000), 0.6)], j(5, 10), r, noise=0.35, ntau=1.2),
+                (hiss(j(4000, 6000), j(20, 40), r, bp=j(6000, 8000), q=2) if lm1      # (the LM-1's cabasa)
+                 else hiss(j(3000, 4500), j(100, 160), r, bp=j(5000, 6500), q=0.7))][t]
+        return lofi(body, 8, 9000 if lm1 else 12000)
     # Simmons: SDS-6 the big sweep, SDS-7 brighter with more noise, SDS-8 punchy and short
     big, nz, ln = (1.6, 0.25, 1.0) if m == "SDS6" else (1.0, 0.45, 0.9) if m == "SDS7" else (0.8, 0.3, 0.6)
     return [simmons(j(180, 260) * big, j(45, 60), j(10, 25) * big, j(60, 120) * ln, nz * 0.5, 2000, r, "sine"),

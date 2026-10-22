@@ -24,8 +24,9 @@ Status: **v0.1, auf dem Rechner getestet (tests/test_lx.c), noch nie auf einem F
 
 **Sample-Layer** (EDIT dreimal, oder ENV): **44 Transienten pro Sound** zur Wahl:
 - **16 eigene** des Sounds (BD 01 … BD 16, SD 01 … usw.), beim Bauen synthetisiert (`tools/gen_own_transients.py`);
-- **16 im Stil der Klassiker** (808 A–C, 909 A–C, 606 A–B, 707 A–B, DMX A–B, SDS6, SDS7 A–B, SDS8), beim Bauen nach
-  deren Bauweise synthetisiert, keine Aufnahmen der Geräte (`tools/gen_machine_transients.py`, 22,05 kHz wie bei 707/DMX);
+- **16 im Stil der Klassiker** (808 A–B, 909 A–B, 606, 707 A–B, DMX A–B, Linn LM-1 A–B, LinnDrum LM-2 A–B, SDS6, SDS7,
+  SDS8), beim Bauen nach deren Bauweise synthetisiert, keine Aufnahmen der Geräte (`tools/gen_machine_transients.py`,
+  22,05 kHz 8 Bit wie bei 707/DMX/Linn; das LM-1 hatte keine Becken: dort ein Cabasa);
 - die **12 Original-LXR-Transienten** (CLK, CK2, TIK, KIK, RIM, DRP, HAT, CLP, KK2, SNR, TOM, SP2); dazu SNAP und OFF.
 
 Seite SAMPLE: Sample, Level, Pitch (25 … 175 %), Decay (FULL = ganzes Sample); Seite SAMPLE 2 (EDIT nochmal): Start
