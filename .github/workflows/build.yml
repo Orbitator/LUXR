@@ -35,7 +35,13 @@ jobs:
         continue-on-error: true
       - name: Firmware
         env: { JIELI_DOCKER: "0" }
-        run: JIELI_TOOLCHAIN=$HOME/.jieli/toolchain AC79_SDK=$HOME/fw-AC79_AIoT_SDK python3 tools/build.py
+        shell: bash
+        run: |
+          set -o pipefail
+          JIELI_TOOLCHAIN=$HOME/.jieli/toolchain AC79_SDK=$HOME/fw-AC79_AIoT_SDK python3 tools/build.py 2>&1 | tee build.log && exit 0
+          # the log's end as one annotation (readable without signing in)
+          echo "::error title=build.py::$(grep -v '^\s*$' build.log | tail -n 70 | cut -c1-300 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+          exit 1
       - name: Site
         run: |
           python3 web/make_admin.py
