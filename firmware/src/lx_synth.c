@@ -279,7 +279,7 @@ static void lx_render(uint32_t t, voice_t *v, int32_t *out, uint32_t n)
             int32_t x = tr[k] * 256;
             if (k > LXR_TRANS_LEN - 256u)        /* (the samples end abruptly: a 6 ms fade) */
                 x = x * (int32_t)(LXR_TRANS_LEN - k) >> 8;
-            layer = (((x * v->tenv) >> 15) * slvl) >> 7;
+            layer = (((x * v->tenv) >> 15) * slvl) >> 6;   /* (twice the LXR's: heard over a full synth layer) */
             if (s->sdec < 127u)
                 v->tenv = lx_dec(v->tenv, kd);
             v->tph += v->tinc;
@@ -287,6 +287,8 @@ static void lx_render(uint32_t t, voice_t *v, int32_t *out, uint32_t n)
         }
         if (p[7])
             y = sat((y * drive) >> 4);
+        else
+            y = clamp(y, -65535, 65535);         /* (synth + sample: y * a below stays in 32 bits) */
         if (v->choke) {                          /* choked (the closed hat over the open): ~3 ms */
             v->cfade -= 248;
             if (v->cfade <= 0) { v->active = 0; break; }
@@ -323,8 +325,8 @@ static const uint8_t LX_RANGE[NTRK][8][2] = {
     {{30, 90}, {50, 95}, {10, 110}, {20, 100}, {30, 100}, {10, 70}, {0, 50}, {0, 40}},
 };
 static const uint8_t TR_FACTORY[NTRK][2] = {     /* the sample layer: one of the sound's own, its level */
-    {TR_OWN0 + 0, 50}, {TR_OWN0 + 0, 45}, {TR_OWN0 + 0, 60}, {TR_OWN0 + 0, 40},
-    {TR_OWN0 + 0, 40}, {TR_OWN0 + 0, 45}, {TR_OWN0 + 0, 70}, {TR_OWN0 + 0, 40},
+    {TR_OWN0 + 0, 90}, {TR_OWN0 + 0, 90}, {TR_OWN0 + 0, 90}, {TR_OWN0 + 0, 80},
+    {TR_OWN0 + 0, 80}, {TR_OWN0 + 0, 90}, {TR_OWN0 + 0, 100}, {TR_OWN0 + 0, 80},
 };
 static const uint8_t TR_LXR_FIT[NTRK][3] = {     /* the LXR transients that suit each sound (CLK CK2 TIK KIK RIM DRP HAT CLP KK2 SNR TOM SP2) */
     {0, 3, 8}, {9, 11, 2}, {7, 9, 2}, {6, 2, 1}, {6, 11, 1}, {10, 2, 5}, {4, 5, 1}, {6, 11, 2},
@@ -346,7 +348,7 @@ static void sound_preset(uint32_t t, uint32_t k)   /* track t's sound k: 0 the f
         s->smp = (uint8_t)(TR_OWN0 + xrand(&x) % 16u);
     else
         s->smp = (uint8_t)(TR_SMP0 + TR_LXR_FIT[t][xrand(&x) % 3u]);
-    s->slvl = k ? (uint8_t)(35u + xrand(&x) % 76u) : TR_FACTORY[t][1];
+    s->slvl = k ? (uint8_t)(60u + xrand(&x) % 68u) : TR_FACTORY[t][1];
     s->spitch = k ? (uint8_t)(40u + xrand(&x) % 50u) : 64;
     s->sdec = k && xrand(&x) % 3u == 0u ? (uint8_t)(50u + xrand(&x) % 70u) : 127;
     s->preset = (uint8_t)k;

@@ -57,24 +57,26 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | HOME | KIT | Tempo, Swing, Tune (alle), Decay (alle) | MIDI-Kanal, Theme, Version |
 | SEQ | SEQUENCER | Länge der Spur, Velocity des letzten Steps, Rotate, Euclid | **PAT LEN: jeder Dreh verdoppelt die Patternlänge (zurück: halbiert)**, **COPY x2: Noten in die neuen Takte kopieren (an/aus)**, Accent des letzten Steps |
 | SEQ (2.) | **LIVE PADS** | Pad-Velocity, Quantize-Raster, -Richtung, Metronom | |
-| EDIT | SYNTH LAYER | Parameter 1–4 | Parameter 5–8 |
-| EDIT (2.) / ENV | SAMPLE LAYER | Sample, Level, Pitch, Decay | Synth-Pegel |
-| EDIT (3.) | SOUND MIX | Volume, Pan, Delay-Send, Reverb-Send | Drive-Send |
+| EDIT | SYNTH 1-4 | Synth-Parameter 1–4 | Parameter 5–8 |
+| EDIT (2.) | SYNTH 5-8 | Synth-Parameter 5–8 (z. B. Tone, Snap, Click, Drive) | Parameter 1–4 |
+| EDIT (3.) / ENV | SAMPLE LAYER | Sample (spielt beim Drehen an), Level, **Synth-Pegel**, Pitch | Decay |
+| EDIT (4.) | SOUND MIX | Volume, Pan, Delay-Send, Reverb-Send | Drive-Send |
 | LFO / LFO (2.) | LFO 1 / LFO 2 | Ziel, Welle, Rate (im Tempo), Tiefe (bipolar) | |
 | FX | FX SENDS (des Sounds, im Kit) | Drive-Send, Delay-Send, Reverb-Send, Volume | |
 | FX (2.) | DRIVE (global, im Kit) | Modus (SOFT, HARD, FOLD), Stärke, Ton, Pegel | |
 | FX (3.) | DELAY (global, im Kit) | Zeit (1/8 … 3/4), Feedback, Ton, Pegel | |
 | FX (4.) | REVERB (global, im Kit) | Größe, Dämpfung, Pegel | |
-| SCL | PATTERNS | Pattern (spielend: wechselt am Pattern-Ende), Chain (spielt N Patterns nacheinander) | |
+| SCL | PATTERNS | Pattern (spielend: wechselt am Pattern-Ende), Chain (spielt N Patterns nacheinander), **Copy** (ein Dreh kopiert das angezeigte Pattern), **Paste** (ein Dreh fügt es ins angezeigte Pattern ein) | |
 | ARP | NOTE REPEAT | Rate, Velocity, Vel-Modus (fest, steigend, fallend, zufällig), Latch | Humanize |
 | GLO (tippen) | MIXER, Seite 1 | Lautstärke der vier Sounds der Bank | Pan der vier Sounds |
 | GLO (nochmal tippen) | MIXER, Seite 2: PAN | Pan der vier Sounds der Bank (L64 … C … R63) | Lautstärke |
 | SAVE | STORE | Platz 1–8, **was gespeichert wird: KIT+PAT (Standard), nur KIT, nur PATTERN** – OCT+ speichert | |
 | REC (halten) | **QUANTIZE** | Raster (1/16, 1/8, 1/4), Richtung (zum nächsten Rasterpunkt / zum vorherigen), Metronom (aus, bei Aufnahme, an) | |
 
-**Weiße Tasten (16): Steps setzen.** Sie sind die 16 Steps des angezeigten Takts der gewählten Spur (LED = Step an,
-die laufende Position blinkt invertiert). Ist der Step neu und das Gerät steht, klingt er an.
-Mit SHIFT: F3–C4 schalten Sound 1–8 stumm, D4–G5 solo.
+**Weiße Tasten (16).** Auf der **SEQUENCER-Seite** sind sie die 16 Steps des angezeigten Takts der gewählten Spur
+(LED = Step an, die laufende Position blinkt invertiert; ist der Step neu und das Gerät steht, klingt er an). **Auf allen
+anderen Seiten** spielen F3–C4 die Sounds 1–8 (D4–G5 dieselben mit Accent), mit REC + PLAY aufgenommen; die LEDs
+leuchten beim Anschlag. Auf NOTE REPEAT sind es die Repeat-Pads. Mit SHIFT überall: F3–C4 Mute, D4–G5 Solo.
 
 **LIVE PADS (SEQ zweimal).** Alle acht Sounds gleichzeitig spielbar: F3–C4 sind Sound 1–8, D4–G5 dieselben mit Accent.
 Mit REC + PLAY wird jeder Schlag aufgenommen, auf das Raster aus QUANTIZE (REC halten) gelegt.

@@ -394,11 +394,21 @@ int main(int argc, char **argv)
     snprintf(path, sizeof path, "%s/lx_synth.ppm", dir);
     host_ppm(path);
     host_tap(B_EDIT);
-    CHECK(ui.page == PG_SAMPLE, "EDIT again: the sample layer");
-    snprintf(path, sizeof path, "%s/lx_sample.ppm", dir);
+    CHECK(ui.page == PG_VOICE2, "EDIT again: the synth layer's parameters 5-8 (no SHIFT needed)");
+    host_turn(EN_K1, 5);
+    CHECK(snd[song.sel].p[4] == LX_FACTORY[song.sel][4] + 5u, "SYNTH 5-8, K1: parameter 5 (%u)", snd[song.sel].p[4]);
+    snprintf(path, sizeof path, "%s/lx_synth2.ppm", dir);
     host_ppm(path);
     host_tap(B_EDIT);
-    CHECK(ui.page == PG_SND, "EDIT a third time: the sound's mix and sends");
+    CHECK(ui.page == PG_SAMPLE, "EDIT a third time: the sample layer");
+    host_turn(EN_K3, -127);
+    CHECK(snd[song.sel].syn == 0u, "SAMPLE LAYER, K3: the synth layer's level to 0 (%u)", snd[song.sel].syn);
+    host_turn(EN_K1, 3);
+    snprintf(path, sizeof path, "%s/lx_sample.ppm", dir);
+    host_ppm(path);
+    host_turn(EN_K3, 127);
+    host_tap(B_EDIT);
+    CHECK(ui.page == PG_SND, "EDIT a fourth time: the sound's mix and sends");
     host_tap(B_EDIT);
     CHECK(ui.page == PG_VOICE, "EDIT again: back to the synth layer");
     host_tap(B_HOME);
@@ -507,6 +517,31 @@ int main(int argc, char **argv)
           pat[0].s[1][5]);
     host_tap(B_PLAY);
     host_tap(B_REC);
+
+    /* 14. off SEQ the white keys play the sounds (and only SEQ shows the steps); PATTERNS: K3 copy, K4 paste */
+    host_boot(10);
+    host_tap(B_FX);
+    reset_count();
+    host_key(key_white(2));
+    host_run(40, watch, 0);
+    CHECK(hits[2] == 1u && !pat[0].s[song.sel][2], "FX page, white key 3: the clap played, no step set");
+    h_keys |= key_white(5);
+    host_run(20, 0, 0);
+    CHECK(h_led_key[__builtin_ctz(key_white(5))], "a pad lights as it is hit");
+    h_keys = 0;
+    host_run(400, 0, 0);
+    CHECK(!h_led_key[__builtin_ctz(key_white(0))], "off SEQ the steps are not lit (the kick on step 1)");
+    host_tap(B_SEQ);
+    host_run(30, 0, 0);
+    CHECK(h_led_key[__builtin_ctz(key_white(0))], "on SEQ the steps are lit (the kick on step 1)");
+    host_tap(B_SCL);
+    host_turn(EN_K3, 1);
+    CHECK(pget(P_PCOPY) == 1, "PATTERNS K3: pattern 1 copied");
+    host_turn(EN_K1, 2);                         /* pattern 3 (stopped: shown at once) */
+    host_turn(EN_K4, 1);
+    CHECK(song.pat == 2u && !memcmp(pat[2].s, pat[0].s, sizeof pat[0].s), "PATTERNS K4: pasted into pattern 3");
+    snprintf(path, sizeof path, "%s/lx_patterns.ppm", dir);
+    host_ppm(path);
 
     /* 9. UBOOT: OCT- and OCT+ 5 s */
     h_pressed |= 3u << B_OCTDN; h_held |= 3u << B_OCTDN;

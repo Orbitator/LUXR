@@ -50,19 +50,19 @@ static const uint16_t TRK_COL[NTRK] = {RGB(255, 96, 110), RGB(255, 170, 40), RGB
                                        RGB(90, 210, 200), RGB(90, 160, 255), RGB(176, 140, 255), RGB(240, 130, 220)};
 #define C_REC RGB(255, 72, 60)
 
-enum { PG_KIT, PG_SEQ, PG_LIVE, PG_VOICE, PG_SAMPLE, PG_SND, PG_LFO1, PG_LFO2, PG_FXS, PG_FXD, PG_FXDL, PG_FXR,
+enum { PG_KIT, PG_SEQ, PG_LIVE, PG_VOICE, PG_VOICE2, PG_SAMPLE, PG_SND, PG_LFO1, PG_LFO2, PG_FXS, PG_FXD, PG_FXDL, PG_FXR,
        PG_PAT, PG_NR, PG_MIX, PG_SAVE, PG_REC, PG_N };
-static const char *const PG_NAME[PG_N] = {"LUXR KIT", "SEQUENCER", "LIVE PADS", "SYNTH LAYER", "SAMPLE LAYER",
+static const char *const PG_NAME[PG_N] = {"LUXR KIT", "SEQUENCER", "LIVE PADS", "SYNTH 1-4", "SYNTH 5-8", "SAMPLE LAYER",
                                           "SOUND MIX", "LFO 1", "LFO 2", "FX SENDS", "DRIVE", "DELAY", "REVERB",
                                           "PATTERNS", "NOTE REPEAT", "MIXER", "STORE", "QUANTIZE"};
-static const uint8_t PAGE_BTN[PG_N] = {B_HOME, B_SEQ, B_SEQ, B_EDIT, B_EDIT, B_EDIT, B_LFO, B_LFO, B_FX, B_FX, B_FX,
+static const uint8_t PAGE_BTN[PG_N] = {B_HOME, B_SEQ, B_SEQ, B_EDIT, B_EDIT, B_EDIT, B_EDIT, B_LFO, B_LFO, B_FX, B_FX, B_FX,
                                        B_FX, B_SCL, B_ARP, B_GLO, B_SAVE, B_REC};
-static const uint8_t PAGE_KC[PG_N] = {KC_HOME, KC_SEQ, KC_SEQ, KC_EDIT, KC_EDIT, KC_EDIT, KC_LFO, KC_LFO, KC_FX, KC_FX,
+static const uint8_t PAGE_KC[PG_N] = {KC_HOME, KC_SEQ, KC_SEQ, KC_EDIT, KC_EDIT, KC_EDIT, KC_EDIT, KC_LFO, KC_LFO, KC_FX, KC_FX,
                                       KC_FX, KC_FX, KC_SCL, KC_ARP, KC_GLO, KC_SAVE, KC_REC};
 /* a button's pages, in the order its taps show them (a button not listed: none, or its own logic) */
 typedef struct { uint8_t btn, n, pg[4]; } group_t;
 static const group_t GROUPS[] = {
-    {B_HOME, 1, {PG_KIT}}, {B_SEQ, 2, {PG_SEQ, PG_LIVE}}, {B_EDIT, 3, {PG_VOICE, PG_SAMPLE, PG_SND}},
+    {B_HOME, 1, {PG_KIT}}, {B_SEQ, 2, {PG_SEQ, PG_LIVE}}, {B_EDIT, 4, {PG_VOICE, PG_VOICE2, PG_SAMPLE, PG_SND}},
     {B_ENV, 1, {PG_SAMPLE}}, {B_LFO, 2, {PG_LFO1, PG_LFO2}}, {B_FX, 4, {PG_FXS, PG_FXD, PG_FXDL, PG_FXR}},
     {B_SCL, 1, {PG_PAT}}, {B_SAVE, 1, {PG_SAVE}},
 };
@@ -76,13 +76,13 @@ enum {
     P_L1DEST, P_L1WAVE, P_L1RATE, P_L1DEPTH, P_L2DEST, P_L2WAVE, P_L2RATE, P_L2DEPTH,
     P_LEVEL, P_PAN, P_DLY, P_REV, P_DRV,
     P_DMODE, P_DAMT, P_DTONE, P_DLVL, P_DTIME, P_DFB, P_DLTONE, P_DLLVL, P_RSIZE, P_RDAMP, P_RLVL,
-    P_PAT, P_CHAIN,
+    P_PAT, P_CHAIN, P_PCOPY, P_PPASTE,
     P_NRRATE, P_NRVEL, P_NRVMODE, P_NRLATCH, P_NRHUMAN,
     P_MIX0, P_MIX1, P_MIX2, P_MIX3, P_MPAN0, P_MPAN1, P_MPAN2, P_MPAN3,
     P_SLOT, P_SWHAT, P_QGRID, P_QROUND,
     P_COUNT
 };
-enum { FM_NUM, FM_PCT, FM_BIP, FM_NAME, FM_STEPS, FM_PAN, FM_X100, FM_BPM, FM_SMP };
+enum { FM_NUM, FM_PCT, FM_BIP, FM_NAME, FM_STEPS, FM_PAN, FM_X100, FM_BPM, FM_SMP, FM_PAT };
 typedef struct { const char *label; uint8_t fmt; int16_t min, max; const char *const *names; } pdesc_t;
 static const char *const N_OFFON[] = {"OFF", "ON"};
 static const char *const N_LDEST[] = {"OFF", "PITCH", "FILTER", "DECAY", "LEVEL", "PAN", "SAMPLE"};
@@ -148,6 +148,8 @@ static const pdesc_t PD[P_COUNT] = {
     [P_RLVL] = {"LEVEL", FM_NUM, 0, 127, 0},
     [P_PAT] = {"PATTERN", FM_NUM, 1, NPAT, 0},
     [P_CHAIN] = {"CHAIN", FM_NUM, 1, NPAT, 0},
+    [P_PCOPY] = {"COPY", FM_PAT, 0, NPAT, 0},
+    [P_PPASTE] = {"PASTE", FM_PAT, 0, NPAT, 0},
     [P_NRRATE] = {"RATE", FM_NAME, 0, NR_N - 1, NR_NAME},
     [P_NRVEL] = {"VELO", FM_NUM, 1, 127, 0},
     [P_NRVMODE] = {"VEL MODE", FM_NAME, 0, NV_N - 1, N_VMODE},
@@ -168,7 +170,8 @@ static const uint8_t PAGE_P[PG_N][8] = {
     [PG_SEQ] = {P_LEN, P_SVEL, P_ROT, P_EUCLID, P_PLEN, P_COPY, P_SACC, 0},
     [PG_LIVE] = {P_LVEL, P_QGRID, P_QROUND, P_CLICK, 0, 0, 0, 0},
     [PG_VOICE] = {P_V0, P_V1, P_V2, P_V3, P_V4, P_V5, P_V6, P_V7},
-    [PG_SAMPLE] = {P_SMP, P_SLVL, P_SPITCH, P_SDEC, P_SYN, 0, 0, 0},
+    [PG_VOICE2] = {P_V4, P_V5, P_V6, P_V7, P_V0, P_V1, P_V2, P_V3},
+    [PG_SAMPLE] = {P_SMP, P_SLVL, P_SYN, P_SPITCH, P_SDEC, 0, 0, 0},
     [PG_SND] = {P_LEVEL, P_PAN, P_DLY, P_REV, P_DRV, 0, 0, 0},
     [PG_LFO1] = {P_L1DEST, P_L1WAVE, P_L1RATE, P_L1DEPTH, 0, 0, 0, 0},
     [PG_LFO2] = {P_L2DEST, P_L2WAVE, P_L2RATE, P_L2DEPTH, 0, 0, 0, 0},
@@ -176,7 +179,7 @@ static const uint8_t PAGE_P[PG_N][8] = {
     [PG_FXD] = {P_DMODE, P_DAMT, P_DTONE, P_DLVL, 0, 0, 0, 0},
     [PG_FXDL] = {P_DTIME, P_DFB, P_DLTONE, P_DLLVL, 0, 0, 0, 0},
     [PG_FXR] = {P_RSIZE, P_RDAMP, P_RLVL, 0, 0, 0, 0, 0},
-    [PG_PAT] = {P_PAT, P_CHAIN, 0, 0, 0, 0, 0, 0},
+    [PG_PAT] = {P_PAT, P_CHAIN, P_PCOPY, P_PPASTE, 0, 0, 0, 0},
     [PG_NR] = {P_NRRATE, P_NRVEL, P_NRVMODE, P_NRLATCH, P_NRHUMAN, 0, 0, 0},
     [PG_MIX] = {P_MIX0, P_MIX1, P_MIX2, P_MIX3, P_MPAN0, P_MPAN1, P_MPAN2, P_MPAN3},
     [PG_SAVE] = {P_SLOT, P_SWHAT, 0, 0, 0, 0, 0, 0},
@@ -431,7 +434,7 @@ static uint32_t tlen(uint32_t t) { return (uint32_t)clamp(PAT->len[t % NTRK], 1,
 static uint32_t nbars(uint32_t t) { return (tlen(t) + 15u) / 16u; }
 static uint8_t clip_bar[16], clip_ok;
 static pattern_t clip_pat;
-static uint8_t clip_pat_ok;
+static uint8_t clip_pat_ok;                      /* the pattern copied: its number + 1 (0: none) */
 static void rotate_track(uint32_t t, int32_t d)  /* the track's steps 1..LEN moved d steps later */
 {
     uint8_t tmp[NSTEP];
@@ -565,6 +568,8 @@ static int32_t pget(uint32_t id)
     case P_RLVL: return song.rev_lvl;
     case P_PAT: return (song.pat_next < NPAT ? song.pat_next : song.pat) + 1;
     case P_CHAIN: return song.chain;
+    case P_PCOPY: return clip_pat_ok;
+    case P_PPASTE: return pget(P_PAT);
     case P_NRRATE: return nr.rate;
     case P_NRVEL: return nr.vel;
     case P_NRVMODE: return nr.vmode;
@@ -588,6 +593,29 @@ static void pset(uint32_t id, int32_t v)
     pdesc_t d = pdesc_of(id);
     sound_t *s = TS;
     uint32_t t = song.sel % NTRK;
+    if (id == P_PCOPY || id == P_PPASTE) {       /* PATTERNS, KNOB 3 / 4: a turn copies / pastes the pattern KNOB 1 shows */
+        uint32_t k = (uint32_t)pget(P_PAT) - 1u;
+        char m[24];
+        if (v == pget(id))
+            return;
+        if (id == P_PCOPY) {
+            memcpy(&clip_pat, &pat[k % NPAT], sizeof clip_pat);
+            clip_pat_ok = (uint8_t)(k + 1u);
+            str_cpy(m, "P", sizeof m);
+            fmt_u(m + 1, k + 1u);
+            str_cat(m, " COPIED", sizeof m);
+        } else if (!clip_pat_ok) {
+            str_cpy(m, "COPY ONE FIRST (K3)", sizeof m);
+        } else {
+            if (k == song.pat)
+                undo_take();                     /* (undo keeps the pattern playing) */
+            memcpy(&pat[k % NPAT], &clip_pat, sizeof clip_pat);
+            str_cpy(m, "PASTED INTO P", sizeof m);
+            fmt_u(m + str_len(m), k + 1u);
+        }
+        ui_say(m);
+        return;
+    }
     if (id == P_PLEN) {                          /* (a turn doubles or halves, whatever its size) */
         if (v != pget(P_PLEN))
             plen_scale(v > pget(P_PLEN));
@@ -708,6 +736,7 @@ static void pformat(uint32_t id, char *val, const char **unit)
     switch (d.fmt) {
     case FM_NAME: str_cpy(val, d.names ? d.names[clamp(v, d.min, d.max) - d.min] : "", 16); break;
     case FM_SMP: smp_name(val, (uint32_t)v, song.sel); break;
+    case FM_PAT: if (v) { val[0] = 'P'; fmt_u(val + 1, (uint32_t)v); } else str_cpy(val, "-", 16); break;
     case FM_PCT: fmt_u(val, (uint32_t)v); *unit = "%"; break;
     case FM_BIP: fmt_s(val, v, 1); break;
     case FM_PAN:
@@ -794,7 +823,7 @@ static void black_key(uint32_t b)
         ev_push(EV_HIT, t, 100);
         break;
     case BK_COPY:
-        if (ui.shift) { memcpy(&clip_pat, PAT, sizeof clip_pat); clip_pat_ok = 1; ui_say("PATTERN COPIED"); }
+        if (ui.shift) { memcpy(&clip_pat, PAT, sizeof clip_pat); clip_pat_ok = (uint8_t)(song.pat + 1u); ui_say("PATTERN COPIED"); }
         else { memcpy(clip_bar, &PAT->s[t][ui.bar * 16u % NSTEP], 16); clip_ok = 1; ui_say("BAR COPIED"); }
         break;
     case BK_PASTE:
@@ -854,7 +883,8 @@ static void white_key(uint32_t w, int down)
         }
         return;
     }
-    if (ui.page == PG_LIVE && !ui.shift) {       /* LIVE: the eight sounds at once, D4..G5 accented; REC writes them */
+    if (ui.page != PG_SEQ && !ui.shift) {        /* off SEQ (LIVE and every other page): the eight sounds at once,
+                                                  * D4..G5 accented; REC + PLAY writes them */
         if (down)
             ev_push(EV_HIT, w % 8u, w < 8u ? ui.lvel : 127u | S_ACC);
         return;
@@ -1051,6 +1081,8 @@ static void ui_input(void)
         if (id >= P_V0 && id <= P_DRV)
             undo_burst(0x800u + song.sel * 64u + id);
         pset(id, pget(id) + d);
+        if (id == P_SMP || id == P_SLVL || id == P_SYN || id == P_SPITCH)   /* (heard as it is chosen) */
+            ev_push(EV_HIT, song.sel, 110);
         ui.hot = (uint8_t)(k + 1u);
         ui.hot_t = fm1_ms | 1u;
     }
@@ -1086,12 +1118,12 @@ static void ui_leds(void)
             on = (w == BK_MUTE && ((song.mute >> t) & 1u)) || (w == BK_SOLO && ((song.solo >> t) & 1u)) ||
                  (w == BK_ACCENT && ui.acc_mode) || (w == BK_FOLLOW && ui.follow) ||
                  (w == BK_TAP && song.playing && song.pstep % 4u == 0u && song.pos < FS / 20u);
-        } else if (ui.page == PG_LIVE && !ui.shift) {   /* LIVE: the pads light as their sounds are hit */
-            on = ((flash >> (w % 8u)) & 1u) != 0u;
         } else if (ui.page == PG_NR) {
             on = w < 8u ? (((nr.held | nr.latched | flash) >> w) & 1u) != 0u : w - 8u == nr.rate;
         } else if (ui.shift) {
             on = w < 8u ? !((song.mute >> w) & 1u) : ((song.solo >> (w - 8u)) & 1u) != 0u;
+        } else if (ui.page != PG_SEQ) {          /* (the steps only on SEQ; elsewhere the pads, lit as hit) */
+            on = ((flash >> (w % 8u)) & 1u) != 0u;
         } else {
             uint32_t idx = ui.bar * 16u + w;
             uint8_t s = idx < tlen(t) ? PAT->s[t][idx] : 0u;
@@ -1234,7 +1266,7 @@ static void g_params(void)                       /* SYNTH LAYER: the eight param
     const sound_t *s = TS;
     for (k = 0; k < 8u; k++) {
         int32_t x = 10 + (int32_t)(k / 4u) * 114, y = 8 + (int32_t)(k % 4u) * 28, w = 100;
-        int sh = (k >= 4u) == (ui.shift != 0);
+        int sh = (k >= 4u) == ((ui.page == PG_VOICE2) != (ui.shift != 0));
         g_label(x, y, LX_LABEL[kind][k], sh ? T_TEXT : T_MID);
         cv_rrect(x, y + 14, w, 6, 2, T_LINE, T_SURF);
         cv_rrect(x, y + 14, 3 + s->p[k] * (w - 3) / 127, 6, 2, sh ? TRK_COL[song.sel % NTRK] : T_DIM, T_SURF);
@@ -1268,7 +1300,7 @@ static void g_sample(void)                       /* SAMPLE LAYER: the transient'
         cv_rect(10 + i, mid - hi * 48 / 128, 1, 1 + (hi - lo) * 48 / 128, TRK_COL[song.sel % NTRK]);
     }
     smp_name(b, s->smp, song.sel);
-    str_cat(b, s->smp >= TR_OWN0 ? "  OWN TRANSIENT (1 OF 16)" : "  LXR TRANSIENT", sizeof b);
+    str_cat(b, s->smp >= TR_OWN0 ? "  OWN TRANSIENT" : "  LXR TRANSIENT", sizeof b);
     g_label(10, 104, b, T_MID);
     }
 }
@@ -1329,7 +1361,7 @@ static void g_patterns(void)                     /* PATTERNS: 16, the one playin
         fmt_u(b, i + 1u);
         cv_text_in(x, y + CAP_IN(S, 38), 24, &AF_S, b, i == song.pat || i == song.pat_next ? T_INK : used ? T_TEXT : T_DIM, c);
     }
-    g_label(12, 106, "ALGO+SHIFT: PATTERN   CHAIN: PLAYS N", T_DIM);
+    g_label(12, 106, "K3 COPIES, K4 PASTES THE PATTERN SHOWN", T_DIM);
 }
 static void g_store(void)
 {
@@ -1409,7 +1441,7 @@ static uint32_t graph_sig(void)
         return h + nr.rate * 101u + (nr.held | nr.latched) * 1009u + nr.latch + song.rec * 3u + song.playing * 5u;
     if (ui.page == PG_SAMPLE)
         return h + TS->smp * 101u + TS->slvl * 1009u + TS->sdec * 10007u;
-    if (ui.page == PG_VOICE)
+    if (ui.page == PG_VOICE || ui.page == PG_VOICE2)
         return h + hsh(1u, (const char *)TS->p) + TS->p[0] * 3u;
     if (ui.page == PG_PAT)
         return h + song.pat_next * 11u + song.chain * 101u + song.chain0 * 13u;
@@ -1442,7 +1474,7 @@ static void draw_graph(int force)
     ui.sig[5] = sig;
     g_box();
     switch (ui.page) {
-    case PG_VOICE: g_params(); break;
+    case PG_VOICE: case PG_VOICE2: g_params(); break;
     case PG_SAMPLE: g_sample(); break;
     case PG_MIX: g_mixer(); break;
     case PG_NR: g_repeat(); break;
