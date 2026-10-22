@@ -599,6 +599,8 @@ int main(int argc, char **argv)
     h_keys = 0;
     host_run(400, 0, 0);
     CHECK(!h_led_key[__builtin_ctz(key_white(0))], "off SEQ the steps are not lit (the kick on step 1)");
+    CHECK(song.sel == 5u, "on a sound's page (FX sends) the sound played is the one shown (%u)", song.sel);
+    sel_track(0);
     host_tap(B_SEQ);
     host_run(30, 0, 0);
     CHECK(h_led_key[__builtin_ctz(key_white(0))], "on SEQ the steps are lit (the kick on step 1)");
@@ -610,6 +612,135 @@ int main(int argc, char **argv)
     CHECK(song.pat == 2u && !memcmp(pat[2].s, pat[0].s, sizeof pat[0].s), "PATTERNS K4: pasted into pattern 3");
     snprintf(path, sizeof path, "%s/lx_patterns.ppm", dir);
     host_ppm(path);
+
+    /* 15. STEP EDIT: a set step held long, KNOB 1..4 its velocity, probability, pan, accent; a tap still clears */
+    host_boot(11);
+    sel_track(1);                                /* the snare: steps 5 and 13 */
+    h_keys |= key_white(4);
+    host_run(500, 0, 0);
+    CHECK(ui.sedit == (1u << 4), "held 0.5 s: STEP EDIT on step 5 (%x)", ui.sedit);
+    host_turn(EN_K1, -40);
+    host_turn(EN_K2, -8);                        /* 100 % -> 8/16: 50 % */
+    host_turn(EN_K3, 4);                         /* the sound's -> L32 */
+    host_turn(EN_K4, 1);
+    snprintf(path, sizeof path, "%s/lx_stepedit.ppm", dir);
+    host_ppm(path);
+    h_keys = 0;
+    host_run(40, 0, 0);
+    CHECK(PAT->s[1][4] == (60u | S_ACC) && X_PROB(PAT->x[1][4]) == 8u && X_PAN(PAT->x[1][4]) == 4u && !ui.sedit,
+          "STEP EDIT: velo 60, accent, 50 %%, own pan; let go: kept (%u %u %u)", PAT->s[1][4], X_PROB(PAT->x[1][4]),
+          X_PAN(PAT->x[1][4]));
+    host_key(key_white(12));
+    CHECK(!PAT->s[1][12], "a set step tapped: cleared when let go");
+    host_key(key_white(12));
+    CHECK(PAT->s[1][12] == 100u, "an empty step tapped: set");
+    {                                            /* probability 50 %: about half the passes; the step's pan heard */
+        uint32_t pass, played = 0;
+        memset(pat[0].s, 0, sizeof pat[0].s);
+        memset(pat[0].x, 0, sizeof pat[0].x);
+        pat[0].s[1][0] = 100;
+        pat[0].x[1][0] = 8u << 4;
+        host_tap(B_PLAY);
+        for (pass = 0; pass < 40u; pass++) {
+            reset_count();
+            host_run(BAR_MS, watch, 0);
+            played += hits[1] > 0u;
+        }
+        host_tap(B_PLAY);
+        CHECK(played > 10u && played < 30u, "PROB 50 %%: played in %u of 40 bars", played);
+        pat[0].x[1][0] = 1u;                     /* hard left */
+        ev_push(EV_HIT, 1, 1);                   /* (any hit first: the step's own pan comes with the sequencer) */
+        voice_hit(1, 120, 0, (1 - 8) * 8);
+        CHECK(voice[1].span == -56, "the step's pan reaches the voice (%d)", voice[1].span);
+    }
+
+    /* 16. the store: 14 slots; the formats before (LXP1..3) moved at the first boot; backup / restore over USB */
+    {
+        static uint8_t img[9000];
+        uint32_t i, t, ver, n, sum;
+        for (ver = 1; ver <= 3u; ver++) {
+            uint32_t ss = ver == 1u ? 22u : ver == 2u ? 27u : 30u, at = ver == 1u ? 28u : 12u, body;
+            memset(h_store, 0xFF, sizeof h_store);
+            memset(img, 0, sizeof img);
+            for (t = 0; t < NTRK; t++) {         /* a sound: p[8] = 10 + t, its level 77 */
+                for (i = 0; i < 8u; i++) img[at + t * ss + i] = (uint8_t)(10u + t);
+                img[at + t * ss + 8] = TR_OWN0 + 3;
+                img[at + t * ss + (ver == 3u ? 16u : 13u)] = 77;   /* level (after syn) */
+            }
+            n = at + NTRK * ss + (ver == 1u ? 0u : 13u);
+            for (i = 0; i < NPAT; i++) {         /* pattern i: track 2, step i at velocity 90, 16 steps */
+                img[n + i * 520u + 2u * NSTEP + i] = 90;
+                memset(img + n + i * 520u + NTRK * NSTEP, 16, NTRK);
+            }
+            if (ver >= 2u) img[n + NPAT * 520u] = 133;          /* bpm */
+            else img[12] = 133;
+            body = ver == 1u ? NTRK * ss + NPAT * 520u : NTRK * ss + 13u + NPAT * 520u + 6u;
+            sum = fnv(img + at, body);
+            img[0] = 'L'; img[1] = 'X'; img[2] = 'P'; img[3] = (uint8_t)('0' + ver);
+            img[4] = 0; img[8] = (uint8_t)sum; img[9] = (uint8_t)(sum >> 8); img[10] = (uint8_t)(sum >> 16); img[11] = (uint8_t)(sum >> 24);
+            memcpy(h_store + ST_OLD(5), img, sizeof img);       /* old slot 6 and slot 1 */
+            memcpy(h_store + ST_OLD(0), img, sizeof img);
+            {
+                set_rec_t st = {ver == 1u ? MAGIC_SET1 : MAGIC_SET, PAL_AMBER, 0, 0, 5, 0, 0, 0, 0};
+                memcpy(h_store + ST_SET, &st, sizeof st);
+            }
+            host_boot(12);
+            CHECK(ui.used[5] && ui.used[0], "LXP%u: slots 1 and 6 moved to the new layout", ver);
+            CHECK(!proj_load(5, SW_ALL) && snd[3].p[0] == 13u && snd[3].level == 77u && snd[3].smp == TR_OWN0 + 3 &&
+                  pat[7].s[2][7] == 90u && !pat[7].x[2][7] && song.bpm == 133u,
+                  "LXP%u: kit and patterns as they were (%u %u %u %u)", ver, snd[3].p[0], snd[3].level, pat[7].s[2][7], song.bpm);
+        }
+        /* USB: info, a slot read back whole, restored into another slot */
+        {
+            uint8_t f[400], raw[300];
+            uint32_t k, off;
+            static uint8_t got[sizeof(proj_t)];
+            f[0] = 0x7D; f[1] = 'O'; f[2] = 'C'; f[3] = 0x40;
+            proto_frame(f, 4);
+            k = unpack7(h_sent + 5, h_sent_n - 6, raw, sizeof raw);
+            CHECK(h_sent[4] == 0x41 && !memcmp(raw, "LUXR", 4) && raw[4 + str_len((char *)raw + 4) + 1] == NSLOT,
+                  "USB info: LUXR, %u slots", NSLOT);
+            for (off = 0; off < sizeof(proj_t); off += 256u) {
+                uint8_t q[5] = {5, (uint8_t)off, (uint8_t)(off >> 8), 0, 0};
+                f[3] = 0x42;
+                k = 4u + pack7(q, 5, f + 4);
+                proto_frame(f, k);
+                k = unpack7(h_sent + 5, h_sent_n - 6, raw, sizeof raw);
+                memcpy(got + off, raw + 5, k - 5u);
+            }
+            CHECK(rd32(got) == MAGIC_PROJ, "USB: slot 6 read back (LXP4)");
+            for (off = 0; off < sizeof(proj_t); off += 256u) {
+                uint8_t q[261];
+                uint32_t m = sizeof(proj_t) - off < 256u ? sizeof(proj_t) - off : 256u;
+                q[0] = 11; wr32(q + 1, off);
+                memcpy(q + 5, got + off, m);
+                f[3] = 0x44;
+                k = 4u + pack7(q, 5u + m, f + 4);
+                proto_frame(f, k);
+            }
+            {
+                uint8_t q[5] = {11, 0, 0, 0, 0};
+                wr32(q + 1, sizeof(proj_t));
+                f[3] = 0x46;
+                k = 4u + pack7(q, 5, f + 4);
+                proto_frame(f, k);
+                unpack7(h_sent + 5, h_sent_n - 6, raw, sizeof raw);
+            }
+            CHECK(h_sent[4] == 0x47 && raw[0] == 0 && ui.used[11], "USB restore into slot 12: ok");
+            snd[3].p[0] = 0;
+            CHECK(!proj_load(11, SW_ALL) && snd[3].p[0] == 13u, "slot 12 loads what slot 6 had");
+            memcpy(stage, img, sizeof img);      /* an old-format backup restored: converted on the way in */
+            {
+                uint8_t q[5] = {12, 0, 0, 0, 0};
+                wr32(q + 1, sizeof img);
+                f[3] = 0x46;
+                k = 4u + pack7(q, 5, f + 4);
+                proto_frame(f, k);
+                unpack7(h_sent + 5, h_sent_n - 6, raw, sizeof raw);
+            }
+            CHECK(raw[0] == 0 && ui.used[12], "an LXP3 backup restored into slot 13, converted");
+        }
+    }
 
     /* 9. UBOOT: OCT- and OCT+ 5 s */
     h_pressed |= 3u << B_OCTDN; h_held |= 3u << B_OCTDN;

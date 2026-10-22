@@ -49,11 +49,15 @@ enum { Q_16, Q_8, Q_4, Q_N };                                                /* 
 static const uint8_t Q_STEPS[Q_N] = {1, 2, 4};
 enum { CLICK_OFF, CLICK_REC, CLICK_ON, CLICK_N };
 
-/* a step: 0 = rest, else bits 0..6 the velocity (1..127), bit 7 the accent */
+/* a step: 0 = rest, else bits 0..6 the velocity (1..127), bit 7 the accent; its extras (STEP EDIT): the probability
+ * (high nibble: 0 always, k k/16) and the pan (low nibble: 0 the sound's, k (k - 8) * 8) */
 #define S_ACC 0x80u
 #define S_VEL(s) ((s) & 0x7Fu)
+#define X_PROB(x) ((x) >> 4)
+#define X_PAN(x) ((x) & 15u)
 typedef struct {
     uint8_t s[NTRK][NSTEP];
+    uint8_t x[NTRK][NSTEP];      /* the steps' extras */
     uint8_t len[NTRK];           /* steps 1..64 (16 a bar) */
 } pattern_t;
 
@@ -90,6 +94,7 @@ enum { NV_FIXED, NV_UP, NV_DOWN, NV_RANDOM, NV_N };
 
 typedef struct {
     uint8_t active, vel, acc, choke;
+    int8_t span;                 /* the hit's own pan (a step's), -64..63; 0x7F: the sound's */
     uint32_t ph[3], noise, t;    /* t: samples since the hit */
     uint32_t tph, tinc;          /* the sample layer: its phase (Q20 samples), step */
     int32_t tlp, benv;           /* .. its filter's state, its bend's envelope (Q15) */

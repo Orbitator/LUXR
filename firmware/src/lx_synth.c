@@ -132,7 +132,8 @@ static const char *const LX_LABEL[K_N][8] = {
 };
 
 /* a hit on track t (the audio ISR: the sequencer, the pads, MIDI) */
-static void voice_hit(uint32_t t, uint32_t vel, uint32_t acc)
+#define PAN_SOUND 0x7F
+static void voice_hit(uint32_t t, uint32_t vel, uint32_t acc, int32_t pan)   /* pan: a step's, or PAN_SOUND */
 {
     voice_t *v = &voice[t % NTRK];
     const sound_t *s = &snd[t % NTRK];
@@ -148,6 +149,7 @@ static void voice_hit(uint32_t t, uint32_t vel, uint32_t acc)
     }
     v->vel = (uint8_t)clamp((int32_t)vel, 1, 127);
     v->acc = (uint8_t)(acc != 0);
+    v->span = (int8_t)(pan == PAN_SOUND ? PAN_SOUND : clamp(pan, -64, 63));
     v->choke = 0;
     v->t = 0;
     v->amp = v->penv = v->click = v->cfade = v->nenv = v->tone = v->snap = v->tenv = 32767;
@@ -508,7 +510,7 @@ static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the 
             continue;
         g = s->level * 2;                        /* 0..254, 200 at the default */
         g = clamp(g * (256 + lfo_amt(t, LD_LEVEL, 256)) >> 8, 0, 254);
-        pan = clamp(s->pan + lfo_amt(t, LD_PAN, 64), -64, 64);
+        pan = clamp((voice[t].span == PAN_SOUND ? s->pan : voice[t].span) + lfo_amt(t, LD_PAN, 64), -64, 64);
         pl = 64 - pan;
         pr = 64 + pan;
         for (i = 0; i < n; i++) {

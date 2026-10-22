@@ -81,9 +81,15 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | REC (halten) | **QUANTIZE** | Raster (1/16, 1/8, 1/4), Richtung (zum nächsten Rasterpunkt / zum vorherigen), Metronom (aus, bei Aufnahme, an) | |
 
 **Weiße Tasten (16).** Auf der **SEQUENCER-Seite** sind sie die 16 Steps des angezeigten Takts der gewählten Spur
-(LED = Step an, die laufende Position blinkt invertiert; ist der Step neu und das Gerät steht, klingt er an). **Auf allen
-anderen Seiten** spielen F3–C4 die Sounds 1–8 (D4–G5 dieselben mit Accent), mit REC + PLAY aufgenommen; die LEDs
-leuchten beim Anschlag. Auf NOTE REPEAT sind es die Repeat-Pads. Mit SHIFT überall: F3–C4 Mute, D4–G5 Solo.
+(LED = Step an, die laufende Position blinkt invertiert). Kurz tippen: ein leerer Step wird gesetzt (und klingt an, wenn
+das Gerät steht), ein gesetzter beim Loslassen gelöscht. **Lang halten (ab 350 ms) oder halten und einen Knopf drehen:
+STEP EDIT** – KNOB 1 Velocity, KNOB 2 Probability (6 … 100 %: wie oft der Step spielt), KNOB 3 Pan nur für diesen Step
+(SOUND = der Pan des Sounds, L56 … C … R56), KNOB 4 Accent; mehrere gehaltene Steps werden zusammen bearbeitet. Im Raster
+sind Steps mit Probability blasser, solche mit eigenem Pan haben einen Punkt.
+**Auf allen anderen Seiten** spielen F3–C4 die Sounds 1–8 (D4–G5 dieselben mit Accent), mit REC + PLAY aufgenommen; die
+LEDs leuchten beim Anschlag. Auf den Seiten eines Sounds (SYNTH, SAMPLE, SOUND MIX, LFO, FX SENDS) wählt der Anschlag den
+Sound auch aus: das Display zeigt den gespielten. Auf NOTE REPEAT sind es die Repeat-Pads. Mit SHIFT überall: F3–C4 Mute,
+D4–G5 Solo.
 
 **LIVE PADS (SEQ zweimal).** Alle acht Sounds gleichzeitig spielbar: F3–C4 sind Sound 1–8, D4–G5 dieselben mit Accent.
 Mit REC + PLAY wird jeder Schlag aufgenommen, auf das Raster aus QUANTIZE (REC halten) gelegt.
@@ -111,9 +117,16 @@ auf dem Takt-Raster). LATCH: ein Pad läuft weiter, bis es nochmal gedrückt wir
 quantisiert geschrieben; mit ERASE (SHIFT + REC) löscht ein gehaltenes Pad die Schläge seines Sounds.
 
 **Patches.** Ein Patch ist ein Kit (die acht Sounds samt LFOs und Sends, Tune, Decay, Drive/Delay/Reverb) und seine
-16 Patterns (jede Spur bis 64 Steps, eigene Länge; Tempo, Swing, Chain, Mute/Solo). 8 Plätze. SAVE speichert beides
-oder nur Kit bzw. nur Patterns (der andere Teil bleibt, wie er auf dem Platz war); PRESETS lädt sie (mit SHIFT: nur die
-Patterns). Gespeicherte Daten von LUXR v0.1 vor diesem Stand werden nicht mehr gelesen (anderes Format).
+16 Patterns (jede Spur bis 64 Steps, eigene Länge, Velocity/Probability/Pan je Step; Tempo, Swing, Chain, Mute/Solo).
+**14 Plätze**, also bis zu 14 Kits und 224 Patterns. SAVE speichert beides oder nur Kit bzw. nur Patterns (der andere
+Teil bleibt, wie er auf dem Platz war); PRESETS lädt sie (mit SHIFT: nur die Patterns), ebenso KNOB 4 auf der STORE-Seite.
+
+**Updates behalten die Patches.** Ein Firmware-Update schreibt nur das Programm, nicht den Speicher. Ältere
+Speicherformate von LUXR (seit v0.1) liest die Firmware weiter: beim ersten Start nach dem Update zieht sie die bisherigen
+8 Plätze ins neue Format um („PATCHES KEPT“). Zusätzlich gibt es auf der Update-Seite **„3 · Backup“**: alle belegten
+Plätze als `.luxr`-Datei herunterladen und wieder zurückspielen (auch ältere Backups, sie werden umgewandelt); beim
+Installieren zieht die Seite auf Wunsch vorher ein Backup und spielt es danach zurück. Das geht ab dieser LUXR-Version –
+die Firmware davor kennt die Backup-Befehle noch nicht.
 
 **MIDI IN** (USB): General-MIDI-Drum-Noten spielen die Sounds (36 Kick, 38/40 Snare, 39 Clap, 42/44 CH, 46 OH,
 41–50 Tom, 37 Rim, 49/51/57 Cymbal), C4–G4 die Sounds 1–8. Kanal im KIT (SHIFT), Standard: alle.

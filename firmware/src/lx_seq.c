@@ -51,6 +51,7 @@ static void rec_hit(uint32_t t, uint32_t vel, uint32_t acc)
     if (at > g)                                  /* written ahead of the playhead: it sounded already, it does not play again */
         rec_skip[t] = (uint8_t)(at % len + 1u);
     p->s[t][at % len] = (uint8_t)(clamp((int32_t)vel, 1, 127) | (acc ? S_ACC : 0u));
+    p->x[t][at % len] = 0;                       /* (always, the sound's pan) */
     rec_writes++;
 }
 static int erasing(void) { return song.rec && song.erase && song.playing; }
@@ -60,7 +61,7 @@ static void live_hit(uint32_t t, uint32_t vel, uint32_t acc)
     t %= NTRK;
     if (erasing())
         return;
-    voice_hit(t, vel, acc);
+    voice_hit(t, vel, acc, PAN_SOUND);
     hit_flash |= (uint8_t)(1u << t);
     if (song.rec && song.playing)
         rec_hit(t, vel, acc);
@@ -160,10 +161,14 @@ static void track_step(uint32_t t)
     }
     if (erasing() && (((nr.held | nr.latched) >> t) & 1u)) {   /* ERASE: the held pads' steps go */
         p->s[t][idx] = 0;
+        p->x[t][idx] = 0;
         return;
     }
     if (s && trk_audible(t)) {
-        voice_hit(t, S_VEL(s), s & S_ACC);
+        uint32_t x = p->x[t][idx];
+        if (X_PROB(x) && (rng() & 15u) >= X_PROB(x))   /* PROBABILITY: k/16 of the passes */
+            return;
+        voice_hit(t, S_VEL(s), s & S_ACC, X_PAN(x) ? ((int32_t)X_PAN(x) - 8) * 8 : PAN_SOUND);
         hit_flash |= (uint8_t)(1u << t);
     }
 }
