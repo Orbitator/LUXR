@@ -3,10 +3,10 @@
 # https://<user>.github.io/<repo>/ loads the newest oneclick.fwsc by itself.
 name: build
 on:
-  push: { branches: [main] }
+  push: { branches: [main, "feature/**"] }   # (feature branches: the firmware as an artifact, no Pages)
   workflow_dispatch:
 permissions: { contents: write, pages: write, id-token: write }
-concurrency: { group: pages, cancel-in-progress: true }
+concurrency: { group: "pages-${{ github.ref }}", cancel-in-progress: true }
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -50,6 +50,7 @@ jobs:
           git checkout -q --orphan ci-log && git rm -rqf --cached . && git add -f build.log && git commit -qm "build log $GITHUB_SHA" && git push -qf origin ci-log
           exit 1
       - name: Site
+        if: github.ref == 'refs/heads/main'
         run: |
           python3 web/make_admin.py
           mkdir -p site
@@ -57,6 +58,7 @@ jobs:
           cp build/oneclick.fwsc site/          # (lxr-fm1.fwsc not on Pages: the LXR samples' licence, README-LXR.md)
           printf '{"date":"%s","commit":"%s","sha256":"%s"}\n' "$(date -u +%F\ %H:%M)" "$GITHUB_SHA" "$(sha256sum build/oneclick.fwsc | cut -d' ' -f1)" > site/build.json
       - name: Firmware branch (the newest .fwsc as a plain git file)
+        if: github.ref == 'refs/heads/main'
         run: |
           d=$(mktemp -d); cp site/oneclick.fwsc site/build.json "$d"/; cd "$d"
           git init -q -b firmware && git add . && git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "firmware $GITHUB_SHA"
@@ -66,9 +68,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: lxr-fm1-fwsc, path: build/lxr-fm1.fwsc }
       - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
         with: { path: site }
   deploy:
     needs: build
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: { name: github-pages, url: "${{ steps.d.outputs.page_url }}" }
     steps:
