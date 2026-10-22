@@ -382,7 +382,24 @@ int main(int argc, char **argv)
     snd[2].level = 1;
     proj_load(2, SW_ALL);
     CHECK(snd[2].level == 33u && pat[3].s[4][9] == 66u, "SAVE PATTERN kept the slot's kit (%u %u)", snd[2].level, pat[3].s[4][9]);
+    /* STORE, KNOB 3: what is loaded, KNOB 4: a turn loads the slot */
     host_tap(B_SAVE);
+    snd[2].level = 5;
+    pat[3].s[4][9] = 1;
+    host_turn(EN_K3, 1);                         /* LOADS: KIT */
+    host_turn(EN_K4, 1);
+    CHECK(snd[2].level == 33u && pat[3].s[4][9] == 1u, "K3 KIT, K4: the kit of slot 3 loaded, the patterns kept (%u %u)",
+          snd[2].level, pat[3].s[4][9]);
+    host_turn(EN_K3, 1);                         /* LOADS: PATTERN */
+    snd[2].level = 5;
+    host_turn(EN_K4, -1);
+    CHECK(snd[2].level == 5u && pat[3].s[4][9] == 66u, "K3 PATTERN, K4: the patterns loaded, the kit kept (%u %u)",
+          snd[2].level, pat[3].s[4][9]);
+    host_turn(EN_K3, -2);                        /* LOADS: KIT+PAT */
+    host_turn(EN_K4, 1);
+    CHECK(snd[2].level == 33u && pat[3].s[4][9] == 66u, "K3 KIT+PAT, K4: both loaded");
+    snprintf(path, sizeof path, "%s/lx_store.ppm", dir);
+    host_ppm(path);
     host_tap(B_OCTDN);
     CHECK(ui.page != PG_SAVE, "OCT- leaves the store");
     host_boot(6);                                /* a new boot sees the slots */

@@ -79,10 +79,10 @@ enum {
     P_PAT, P_CHAIN, P_PCOPY, P_PPASTE,
     P_NRRATE, P_NRVEL, P_NRVMODE, P_NRLATCH, P_NRHUMAN,
     P_MIX0, P_MIX1, P_MIX2, P_MIX3, P_MPAN0, P_MPAN1, P_MPAN2, P_MPAN3,
-    P_SLOT, P_SWHAT, P_QGRID, P_QROUND,
+    P_SLOT, P_SWHAT, P_LWHAT, P_LOAD, P_QGRID, P_QROUND,
     P_COUNT
 };
-enum { FM_NUM, FM_PCT, FM_BIP, FM_NAME, FM_STEPS, FM_PAN, FM_X100, FM_BPM, FM_SMP, FM_PAT };
+enum { FM_NUM, FM_PCT, FM_BIP, FM_NAME, FM_STEPS, FM_PAN, FM_X100, FM_BPM, FM_SMP, FM_PAT, FM_LOAD };
 typedef struct { const char *label; uint8_t fmt; int16_t min, max; const char *const *names; } pdesc_t;
 static const char *const N_OFFON[] = {"OFF", "ON"};
 static const char *const N_LDEST[] = {"OFF", "PITCH", "FILTER", "DECAY", "LEVEL", "PAN", "SAMPLE"};
@@ -161,6 +161,8 @@ static const pdesc_t PD[P_COUNT] = {
     [P_MPAN2] = {"", FM_PAN, -64, 63, 0}, [P_MPAN3] = {"", FM_PAN, -64, 63, 0},
     [P_SLOT] = {"SLOT", FM_NUM, 1, NSLOT, 0},
     [P_SWHAT] = {"SAVES", FM_NAME, 0, 2, N_SWHAT},
+    [P_LWHAT] = {"LOADS", FM_NAME, 0, 2, N_SWHAT},
+    [P_LOAD] = {"LOAD", FM_LOAD, 0, NSLOT, 0},
     [P_QGRID] = {"GRID", FM_NAME, 0, Q_N - 1, N_QGRID},
     [P_QROUND] = {"TO", FM_NAME, 0, 1, N_QROUND},
 };
@@ -182,12 +184,12 @@ static const uint8_t PAGE_P[PG_N][8] = {
     [PG_PAT] = {P_PAT, P_CHAIN, P_PCOPY, P_PPASTE, 0, 0, 0, 0},
     [PG_NR] = {P_NRRATE, P_NRVEL, P_NRVMODE, P_NRLATCH, P_NRHUMAN, 0, 0, 0},
     [PG_MIX] = {P_MIX0, P_MIX1, P_MIX2, P_MIX3, P_MPAN0, P_MPAN1, P_MPAN2, P_MPAN3},
-    [PG_SAVE] = {P_SLOT, P_SWHAT, 0, 0, 0, 0, 0, 0},
+    [PG_SAVE] = {P_SLOT, P_SWHAT, P_LWHAT, P_LOAD, 0, 0, 0, 0},
     [PG_REC] = {P_QGRID, P_QROUND, P_CLICK, 0, 0, 0, 0, 0},
 };
 
 static struct {
-    uint8_t page, back, hot, uboot, force, shift, bar, bank, cur, acc_mode, follow, slot, swhat, patch;
+    uint8_t page, back, hot, uboot, force, shift, bar, bank, cur, acc_mode, follow, slot, swhat, lwhat, patch;
     uint8_t glo_used, arp_from, rec_long, copy, lvel, eu[NTRK];
     uint8_t mixpan;                              /* the MIXER's page 2: KNOB 1..4 the pans */
     int8_t rot;
@@ -577,6 +579,8 @@ static int32_t pget(uint32_t id)
     case P_NRHUMAN: return nr.human;
     case P_SLOT: return ui.slot + 1;
     case P_SWHAT: return ui.swhat;
+    case P_LWHAT: return ui.lwhat;
+    case P_LOAD: return ui.slot + 1;
     case P_QGRID: return song.qgrid;
     case P_QROUND: return song.qround;
     }
@@ -614,6 +618,11 @@ static void pset(uint32_t id, int32_t v)
             fmt_u(m + str_len(m), k + 1u);
         }
         ui_say(m);
+        return;
+    }
+    if (id == P_LOAD) {                          /* STORE, KNOB 4: a turn loads the slot (what KNOB 3 says) */
+        if (v != pget(id))
+            proj_load(ui.slot, ui.lwhat);
         return;
     }
     if (id == P_PLEN) {                          /* (a turn doubles or halves, whatever its size) */
@@ -689,6 +698,7 @@ static void pset(uint32_t id, int32_t v)
     case P_NRHUMAN: nr.human = (uint8_t)v; break;
     case P_SLOT: ui.slot = (uint8_t)(v - 1); break;
     case P_SWHAT: ui.swhat = (uint8_t)v; break;
+    case P_LWHAT: ui.lwhat = (uint8_t)v; break;
     case P_QGRID: song.qgrid = (uint8_t)v; settings_save(); break;
     case P_QROUND: song.qround = (uint8_t)v; settings_save(); break;
     default:
@@ -737,6 +747,7 @@ static void pformat(uint32_t id, char *val, const char **unit)
     case FM_NAME: str_cpy(val, d.names ? d.names[clamp(v, d.min, d.max) - d.min] : "", 16); break;
     case FM_SMP: smp_name(val, (uint32_t)v, song.sel); break;
     case FM_PAT: if (v) { val[0] = 'P'; fmt_u(val + 1, (uint32_t)v); } else str_cpy(val, "-", 16); break;
+    case FM_LOAD: str_cpy(val, ui.used[(uint32_t)(v - 1) % NSLOT] ? "TURN" : "EMPTY", 16); break;
     case FM_PCT: fmt_u(val, (uint32_t)v); *unit = "%"; break;
     case FM_BIP: fmt_s(val, v, 1); break;
     case FM_PAN:
@@ -1202,7 +1213,7 @@ static void draw_card(uint32_t c, uint32_t id, int force)
     if (id) {
         pformat(id, val, &unit);
         ratio = d.max > d.min ? (pget(id) - d.min) * 1000 / (d.max - d.min) : -1;
-        if (d.fmt == FM_NAME || id == P_ROT)
+        if (d.fmt == FM_NAME || d.fmt == FM_SMP || d.fmt == FM_PAT || d.fmt == FM_LOAD || id == P_ROT)
             ratio = -1;
     }
     str_cpy(key, id ? d.label : "", sizeof key);
@@ -1375,8 +1386,10 @@ static void g_store(void)
         cv_text_in(x, y + 4, 50, &AF_M, b, i == ui.slot ? T_INK : T_TEXT, c);
         cv_text_in(x, y + 22, 50, &AF_S, ui.used[i] ? "USED" : "EMPTY", i == ui.slot ? T_INK : T_MID, c);
     }
-    g_label(12, 104, ui.swhat == SW_KIT ? "OCT+ SAVES THE KIT" : ui.swhat == SW_PAT ? "OCT+ SAVES THE PATTERNS" :
+    g_label(12, 96, ui.swhat == SW_KIT ? "OCT+ SAVES THE KIT" : ui.swhat == SW_PAT ? "OCT+ SAVES THE PATTERNS" :
             "OCT+ SAVES KIT + PATTERNS", T_MID);
+    g_label(12, 109, ui.lwhat == SW_KIT ? "K4 LOADS THE KIT" : ui.lwhat == SW_PAT ? "K4 LOADS THE PATTERNS" :
+            "K4 LOADS KIT + PATTERNS", T_MID);
 }
 static void g_live(void)                         /* LIVE: the eight pads (lit as they are hit), their accented row */
 {
@@ -1457,7 +1470,7 @@ static uint32_t graph_sig(void)
     if (ui.page == PG_REC)
         return h + song.qgrid * 11u + song.qround * 101u + song.click * 1009u;
     if (ui.page == PG_SAVE)
-        return h + ui.slot * 11u + ui.swhat * 101u + ui.used[0] + ui.used[1] * 2u + ui.used[2] * 4u + ui.used[3] * 8u +
+        return h + ui.slot * 11u + ui.swhat * 101u + ui.lwhat * 7u + ui.used[0] + ui.used[1] * 2u + ui.used[2] * 4u + ui.used[3] * 8u +
                ui.used[4] * 16u + ui.used[5] * 32u + ui.used[6] * 64u + ui.used[7] * 128u;
     for (t = 0; t < NTRK; t++) {                 /* the grid: the bar shown, the playhead, mute, solo */
         h = h * 31u + tlen(t) + (trk_audible(t) ? 7u : 0u);
@@ -1493,7 +1506,7 @@ static void draw_foot(int force)
     static const khint_t H_MIX[3] = {{KC_K14, "LEVEL"}, {KC_OCTPM, "BANK"}, {KC_GLO, "PAN"}};
     static const khint_t H_MIXPAN[3] = {{KC_K14, "PAN"}, {KC_OCTPM, "BANK"}, {KC_GLO, "LEVEL"}};
     static const khint_t H_NR[3] = {{KC_KEYS, "PADS"}, {KC_K1, "RATE"}, {KC_ARP, "OFF"}};
-    static const khint_t H_SAVE[3] = {{KC_OCTUP, "DO IT"}, {KC_K1, "SLOT"}, {KC_OCTDN, "BACK"}};
+    static const khint_t H_SAVE[3] = {{KC_OCTUP, "SAVE"}, {KC_K4, "LOAD"}, {KC_OCTDN, "BACK"}};
     static const khint_t H_PAGE[3] = {{KC_ALGO, "SOUND"}, {KC_SELECT, "NEW"}, {KC_PRESETS, "PATCH"}};
     static const khint_t H_LIVE[3] = {{KC_KEYS, "PADS"}, {KC_REC, "REC"}, {KC_SEQ, "STEPS"}};
     static const khint_t H_REC[3] = {{KC_K1, "GRID"}, {KC_K2, "TO"}, {KC_REC, "ARM"}};
