@@ -48,7 +48,7 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | Bedienelement | normal | mit SHIFT |
 |---|---|---|
 | **SELECT** | Sound 1–8 wählen | Pattern wählen |
-| **ALGORITHM** | würfelt einen neuen Sound für den gewählten (immer mit Transienten-Sample) und spielt ihn an | Tempo |
+| **ALGORITHM** | würfelt einen neuen Sound für den gewählten (immer mit Transienten-Sample) und spielt ihn an | **das nächste / vorige Sample des Sample-Layers** (alle 44 der Reihe nach, der Synth-Layer bleibt; das Display zeigt den Namen) |
 | **PRESETS** | die gespeicherten Patches (Kit + Patterns) durchblättern, jeder wird sofort geladen | nur die Patterns des Patches |
 | **KNOB 1–4** | die vier Karten der Seite (Reihe A) | Reihe B |
 | **PLAY** | Start / Stop | von vorn |

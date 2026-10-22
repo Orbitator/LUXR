@@ -742,6 +742,25 @@ int main(int argc, char **argv)
         }
     }
 
+    /* 17. SHIFT + ALGORITHM: the sample layer's samples in turn, the synth layer kept */
+    host_boot(13);
+    {
+        uint8_t p0[8], s0 = snd[0].smp;
+        memcpy(p0, snd[0].p, 8);
+        h_pressed |= 1u << B_GLO; h_held |= 1u << B_GLO;
+        host_run(300, 0, 0);
+        host_turn(EN_ALGO, 1);
+        CHECK(snd[0].smp == s0 + 1u && !memcmp(snd[0].p, p0, 8), "SHIFT + ALGORITHM: the next sample (%u -> %u), synth kept",
+              s0, snd[0].smp);
+        host_turn(EN_ALGO, -2);
+        CHECK(snd[0].smp == s0 - 1u, "turned back: the one before (%u)", snd[0].smp);
+        snd[0].smp = TR_N - 1;
+        host_turn(EN_ALGO, 1);
+        CHECK(snd[0].smp == TR_SMP0, "past the last: the first sample again (%u)", snd[0].smp);
+        h_held &= ~(1u << B_GLO);
+        host_run(40, 0, 0);
+    }
+
     /* 9. UBOOT: OCT- and OCT+ 5 s */
     h_pressed |= 3u << B_OCTDN; h_held |= 3u << B_OCTDN;
     host_run(5200, 0, 0);

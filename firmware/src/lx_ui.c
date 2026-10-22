@@ -2,7 +2,7 @@
  * LUXR: the panel and the screen (after Felucca's conventions and ONE CLICK's layout). The full map: README.md.
  *
  *   KNOBS   SELECT the sound 1..8 (SHIFT: the pattern) · ALGORITHM a new sound for the selected one, rolled (SHIFT:
- *           tempo) · PRESETS the stored patches, kit and patterns (SHIFT: their patterns only) · KNOB 1..4 the page's
+ *           the sample layer's samples in turn, the synth layer kept) · PRESETS the stored patches, kit and patterns (SHIFT: their patterns only) · KNOB 1..4 the page's
  *           four cards, SHIFT the page's second row · MASTER volume
  *   SHIFT   GLO held (from 250 ms, or at once when another control is used while it is down). GLO tapped: the MIXER,
  *           tapped again its page 2 (PAN) and back.
@@ -1297,9 +1297,16 @@ static void ui_input(void)
                 ui.sedit = (uint16_t)(ui.sedit | 1u << w);
         ui.wkeep = (uint16_t)(ui.wkeep | ui.sedit);
     }
-    if (e[EN_ALGO]) {                            /* ALGORITHM: a new sound, rolled (its own transients); SHIFT: tempo */
+    if (e[EN_ALGO]) {                            /* ALGORITHM: a new sound, rolled (its own transients); SHIFT: the
+                                                  * sample layer's next / previous sample, the synth layer kept */
         if (ui.shift) {
-            pset(P_BPM, pget(P_BPM) + e[EN_ALGO]);
+            sound_t *s = TS;
+            char m[24];
+            int32_t n = TR_N - TR_SMP0, k = s->smp >= TR_SMP0 ? s->smp - TR_SMP0 : (e[EN_ALGO] > 0 ? -1 : 0);
+            undo_burst(0xA00u + song.sel);
+            s->smp = (uint8_t)(TR_SMP0 + ((k + e[EN_ALGO]) % n + n) % n);
+            smp_name(m, s->smp, song.sel);
+            ui_say(m);
         } else {
             undo_burst(0x700u + song.sel);
             sound_preset(song.sel, 1u + rng() % 255u);
