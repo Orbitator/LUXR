@@ -73,6 +73,7 @@ details > summary { cursor: pointer; font-weight: 600; }
     <h2 id="h-dev">1 · Gerät</h2>
     <p class="hint">FM-1 per USB-Datenkabel direkt an den Computer, andere MIDI-Programme schließen.</p>
     <div class="row"><button id="connect" class="go">Verbinden</button><span id="devState" class="chip">nicht verbunden</span></div>
+    <label class="row hint">MIDI-Port <select id="portSel" style="font:13px var(--body);min-height:36px;max-width:100%"><option value="">automatisch</option></select></label>
     <dl id="devInfo" hidden>
       <dt>Firmware</dt><dd id="iFw">–</dd>
       <dt>Kennung</dt><dd id="iId">–</dd>
@@ -293,6 +294,40 @@ const OC = (() => {
 })();
 /* @oc-lib-end */
 const $ = (id) => document.getElementById(id);
+/* Port finding, more forgiving than the installer's own: Windows names the pairs "MIDIIN2 (FM-1)" / "MIDIOUT2 (FM-1)",
+   macOS/Linux add suffixes ("FM-1 MIDI 1", "FM-1:FM-1 MIDI 1 20:0"); a port picked by hand is probed whatever its name */
+const portKey = (n) => String(n || "").toLowerCase().replace(/midi(in|out)\d*\s*/g, "").replace(/\b(in|out|input|output)\b/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+let pickedPort = "";
+Updater.prototype.find = async function (filter) {
+  const outs = [...this.access.outputs.values()].filter((o) => o.state !== "disconnected");
+  const ins = [...this.access.inputs.values()].filter((i) => i.state !== "disconnected");
+  const auto = ins.filter((i) => i.id !== pickedPort && /fm-?1|felucca|ota|composite|sinco|usb[- ]?midi|m-?vave|jieli|midi ?(in|out)?\d* ?\(/i.test(i.name || ""));
+  auto.sort((x, y) => /fm-?1/i.test(y.name) - /fm-?1/i.test(x.name));
+  const cand = [...ins.filter((i) => i.id === pickedPort), ...auto];   /* the picked port first; after the reboot the update mode may show up under another one */
+  for (const input of cand) {
+    const k = portKey(input.name);
+    const output = outs.find((o) => o.name === input.name) || outs.find((o) => portKey(o.name) === k)
+      || (outs.length === 1 ? outs[0] : outs.find((o) => k && (portKey(o.name).includes(k) || k.includes(portKey(o.name)))));
+    if (!output) { this.log(`kein Ausgang zu „${input.name}“`); continue; }
+    try { await input.open(); await output.open(); } catch (e) { this.log(`„${input.name}“ belegt: ${e.message}`); continue; }
+    const link = new Link(input, output);
+    const id = await handshake(link, 2);
+    if (id && (!filter || filter(id))) return { link, id, name: input.name };
+    if (!id) this.log(`„${input.name}“ antwortet nicht`);
+    link.close();
+  }
+  return null;
+};
+function listPorts(a) {
+  const ins = [...a.inputs.values()], outs = [...a.outputs.values()];
+  log("MIDI-Eingänge: " + (ins.map((p) => `„${p.name}“ (${p.state})`).join(", ") || "keine"));
+  log("MIDI-Ausgänge: " + (outs.map((p) => `„${p.name}“ (${p.state})`).join(", ") || "keine"));
+  const sel = $("portSel"), cur = sel.value;
+  sel.innerHTML = '<option value="">automatisch</option>' + ins.map((p) => `<option value="${p.id}">${p.name.replace(/[<&"]/g, "")}</option>`).join("");
+  sel.value = ins.some((p) => p.id === cur) ? cur : "";
+  return ins.length;
+}
+
 const logEl = $("log");
 const log = (t) => { logEl.textContent += t + "\n"; logEl.scrollTop = logEl.scrollHeight; };
 const status = (t, cls = "") => { $("status").textContent = t; $("status").className = "status " + cls; };
@@ -314,7 +349,7 @@ function lock(on) {
   busy = on;
   $("install").disabled = on || !pkg || !$("pOk").checked;
   $("stockGo").disabled = on || !stock;
-  $("connect").disabled = on;
+  $("connect").disabled = on; $("portSel").disabled = on;
   ["pkgFile", "stockFile"].forEach((k) => $(k).disabled = on);
   $("smpRefresh").disabled = $("smpClear").disabled = on || !dev || !/^FM-1_8/.test(dev.id.text);
 }
@@ -345,10 +380,14 @@ const ocU32 = (r, i) => (r[i] | r[i + 1] << 8 | r[i + 2] << 16 | r[i + 3] << 24)
 async function connect() {
   lock(true);
   try {
-    const up = new Updater(await midi(), log);
+    const a = await midi(), n = listPorts(a);
+    a.onstatechange = () => listPorts(a);
+    const up = new Updater(a, log);
     if (dev) { dev.link.close(); dev = null; }
+    pickedPort = $("portSel").value;
     dev = await up.find();
-    if (!dev) throw Object.assign(new Error(ERR.notfound), { code: "notfound" });
+    if (!dev) throw new Error(n ? "MIDI ist erlaubt und Ports sind da, aber kein FM-1 hat geantwortet. Im Protokoll stehen die gefundenen Ports: den FM-1-Port unten auswählen und erneut „Verbinden“. Andere MIDI-Programme (DAW, M-VAVE-App) schließen."
+      : "MIDI ist erlaubt, aber der Computer sieht kein MIDI-Gerät: ein USB-Datenkabel (kein reines Ladekabel) direkt am Computer verwenden, FM-1 einschalten. Bluetooth-MIDI reicht für das Update nicht.");
     $("devInfo").hidden = false;
     $("iId").textContent = dev.id.text; $("iPort").textContent = dev.name; $("iFw").textContent = ident(dev.id);
     $("devState").textContent = "verbunden"; $("devState").className = "chip ok";
@@ -418,6 +457,7 @@ async function run(image, product) {
   if (dev) { dev.link.close(); dev = null; }
   const writes = Math.ceil(image.length / 512);
   try {
+    pickedPort = $("portSel").value;
     const up = new Updater(await midi(), log);
     const step = (k, a) => {
       if (k === "start") status("Gestartet: das FM-1 prüft das Paket …");
