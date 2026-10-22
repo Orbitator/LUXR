@@ -401,63 +401,112 @@ static void sound_init(uint32_t t)               /* the whole sound: the factory
 }
 
 /* -------------------------------------------------------------- effects --- */
-#define DLY_N 32768u                             /* 0.74 s */
-#define RV_C 4
-static int16_t dly_buf[DLY_N] __attribute__((section(".pool")));
-static int16_t rv_comb[RV_C][1700] __attribute__((section(".pool")));
-static int16_t rv_ap[4][560] __attribute__((section(".pool")));
-static const uint16_t RV_CLEN[RV_C] = {1557, 1617, 1491, 1422};
-static const uint16_t RV_APLEN[4] = {556, 441, 341, 225};
+#define DLY_N 32768u                             /* 0.74 s a side */
+static int16_t dly_buf[2][DLY_N] __attribute__((section(".pool")));   /* left, right */
 static uint32_t dly_w;
-static uint16_t rv_ci[RV_C], rv_ai[4];
-static int32_t rv_lp[RV_C], dly_lp;
-
+static int32_t dly_lp[2];
 static inline int32_t s16(int32_t x) { return clamp(x, -32767, 32767); }
-static void fx_block(int32_t *L, int32_t *R, const int32_t *dsend, const int32_t *rsend, uint32_t n)
+
+/* the reverb: a plate after Dattorro (J. Audio Eng. Soc. 45/9, 1997) - four input diffusers, then a tank of two halves,
+ * each a modulated allpass, a delay, damping and the decay, an allpass and a delay, crossed into the other half; the
+ * output taps read across both. Its lengths at 29.761 kHz scaled to 44.1 kHz. SIZE: the decay, DAMP: the damping. */
+typedef struct { int16_t *b; uint16_t n, w; } line_t;
+#define RV_EXC 24u                               /* the tank allpasses' modulation, +-samples */
+enum { RV_I1 = 210, RV_I2 = 159, RV_I3 = 562, RV_I4 = 410,
+       RV_LA1 = 996, RV_LD1 = 6598, RV_LA2 = 2667, RV_LD2 = 5512,
+       RV_RA1 = 1345, RV_RD1 = 6249, RV_RA2 = 3936, RV_RD2 = 4687 };
+static int16_t rv_mem[RV_I1 + RV_I2 + RV_I3 + RV_I4 + RV_LA1 + RV_LD1 + RV_LA2 + RV_LD2 + RV_RA1 + RV_RD1 + RV_RA2 + RV_RD2 +
+                      4u * RV_EXC + 4u] __attribute__((section(".pool")));
+static line_t rv_in[4], rv_la1, rv_ld1, rv_la2, rv_ld2, rv_ra1, rv_rd1, rv_ra2, rv_rd2;
+static int32_t rv_bw, rv_dl, rv_dr;              /* the input's low-pass, the halves' damping */
+static uint32_t rv_ph;
+static void rv_init(void)
+{
+    static const uint16_t IN[4] = {RV_I1, RV_I2, RV_I3, RV_I4};
+    line_t *L[8] = {&rv_la1, &rv_ld1, &rv_la2, &rv_ld2, &rv_ra1, &rv_rd1, &rv_ra2, &rv_rd2};
+    static const uint16_t N[8] = {RV_LA1 + 2 * RV_EXC + 2, RV_LD1, RV_LA2, RV_LD2, RV_RA1 + 2 * RV_EXC + 2, RV_RD1, RV_RA2, RV_RD2};
+    int16_t *m = rv_mem;
+    uint32_t k;
+    for (k = 0; k < 4u; k++) { rv_in[k].b = m; rv_in[k].n = IN[k]; rv_in[k].w = 0; m += IN[k]; }
+    for (k = 0; k < 8u; k++) { L[k]->b = m; L[k]->n = N[k]; L[k]->w = 0; m += N[k]; }
+}
+static inline int32_t ln_tap(const line_t *d, uint32_t k) { return d->b[(d->w + d->n - k) % d->n]; }   /* k ago, 1..n */
+static inline void ln_put(line_t *d, int32_t v) { d->b[d->w] = (int16_t)s16(v); if (++d->w >= d->n) d->w = 0; }
+static inline int32_t ln_ap(line_t *d, int32_t g, int32_t x)   /* an allpass over the whole line, g Q15 */
+{
+    int32_t y = d->b[d->w], v = x - ((g * y) >> 15);
+    ln_put(d, v);
+    return y + ((g * v) >> 15);
+}
+static inline int32_t ln_apm(line_t *d, uint32_t len, int32_t mod, int32_t g, int32_t x)   /* .. its delay len + mod (Q8) */
+{
+    int32_t q = (int32_t)len * 256 + mod, k = q >> 8, f = q & 255, a = ln_tap(d, (uint32_t)k), b = ln_tap(d, (uint32_t)k + 1u);
+    int32_t y = a + (((b - a) * f) >> 8), v = x - ((g * y) >> 15);
+    ln_put(d, v);
+    return y + ((g * v) >> 15);
+}
+/* the delay: MONO (one line, as before: slightly wider on the right), STEREO (each side its line and its time, fed by
+ * the sends as the sounds are panned), PING PONG (the sends into the left line, each side's repeats into the other's) */
+static void fx_block(int32_t *L, int32_t *R, const int32_t *dsl, const int32_t *dsr, const int32_t *rsend, uint32_t n)
 {
     static const uint8_t DIV16[6] = {2, 3, 4, 6, 8, 12};   /* the delay in 16ths: 1/8 3/16 1/4 3/8 1/2 3/4 */
-    uint32_t i, k, dt = (uint32_t)(FS * 15u * DIV16[song.dly_div % 6u] / (song.bpm ? song.bpm : 120u));
-    int32_t dfb = song.dly_fb * 27 / 127, rfb = 22 + song.rev_size * 9 / 127, rd = 1 + song.rev_damp / 43;
-    int32_t dk = 16 + song.dly_tone * 240 / 127, dl = song.dly_lvl, rl = song.rev_lvl;   /* TONE: the repeats' brightness */
+    uint32_t i, bpm = song.bpm ? song.bpm : 120u, mode = song.dly_mode % DL_N;
+    uint32_t dt = (uint32_t)(FS * 15u * DIV16[song.dly_div % 6u] / bpm);
+    uint32_t dt2 = mode == DL_STEREO ? (uint32_t)(FS * 15u * DIV16[song.dly_div2 % 6u] / bpm) : dt;
+    int32_t dfb = song.dly_fb * 27 / 127, dk = 16 + song.dly_tone * 240 / 127, dl = song.dly_lvl, rl = song.rev_lvl;
+    int32_t decay = 13000 + song.rev_size * 18000 / 127;     /* 0.40 .. 0.95 */
+    int32_t damp = 32767 - song.rev_damp * 26000 / 127;      /* (the damping's pass: 1.0 .. 0.2) */
+    int32_t md1, md2;
+    if (!rv_in[0].b)                             /* (the lines laid out at the first block) */
+        rv_init();
     if (dt >= DLY_N)
         dt = DLY_N - 1u;
+    if (dt2 >= DLY_N)
+        dt2 = DLY_N - 1u;
+    rv_ph += 0x1000u * n;                        /* (about 1 Hz: the tank allpasses drift, no ringing) */
+    md1 = (sine(rv_ph) * (int32_t)RV_EXC) >> 7;  /* Q8 samples */
+    md2 = (sine(rv_ph + 0x40000000u) * (int32_t)RV_EXC) >> 7;
     for (i = 0; i < n; i++) {
-        int32_t d = dly_buf[(dly_w - dt) & (DLY_N - 1u)], r = 0, a, in = rsend[i] >> 2, ap;
-        dly_lp += ((d - dly_lp) * dk) >> 8;      /* darker repeats */
-        dly_buf[dly_w++ & (DLY_N - 1u)] = (int16_t)s16(dsend[i] + ((dly_lp * dfb) >> 5));
-        for (k = 0; k < RV_C; k++) {             /* parallel combs with damping */
-            int16_t *b = rv_comb[k];
-            int32_t y = b[rv_ci[k]];
-            rv_lp[k] += (y - rv_lp[k]) >> rd;
-            b[rv_ci[k]] = (int16_t)s16(in + ((rv_lp[k] * rfb) >> 5));
-            if (++rv_ci[k] >= RV_CLEN[k])
-                rv_ci[k] = 0;
-            r += y;
+        int32_t dL = dly_buf[0][(dly_w - dt) & (DLY_N - 1u)], dR = dly_buf[1][(dly_w - dt2) & (DLY_N - 1u)];
+        int32_t x = rsend[i] >> 2, a, b, rl_, rr_, d;
+        uint32_t w = dly_w++ & (DLY_N - 1u);
+        dly_lp[0] += ((dL - dly_lp[0]) * dk) >> 8;   /* darker repeats */
+        dly_lp[1] += ((dR - dly_lp[1]) * dk) >> 8;
+        if (mode == DL_MONO) {                   /* (the left line alone) */
+            dly_buf[0][w] = (int16_t)s16(dsl[i] + dsr[i] + ((dly_lp[0] * dfb) >> 5));
+            dR = (dL * 7) >> 3;
+        } else if (mode == DL_STEREO) {
+            dly_buf[0][w] = (int16_t)s16(dsl[i] * 2 + ((dly_lp[0] * dfb) >> 5));
+            dly_buf[1][w] = (int16_t)s16(dsr[i] * 2 + ((dly_lp[1] * dfb) >> 5));
+        } else {                                 /* PING PONG: left, then right, then left .. */
+            dly_buf[0][w] = (int16_t)s16(dsl[i] + dsr[i] + ((dly_lp[1] * dfb) >> 5));
+            dly_buf[1][w] = (int16_t)s16((dly_lp[0] * 31) >> 5);
         }
-        r >>= 1;
-        for (k = 0; k < 2u; k++) {               /* left: allpasses 0 1, right: 2 3 */
-            int16_t *b = rv_ap[k];
-            a = b[rv_ai[k]];
-            ap = r - (a >> 1);
-            b[rv_ai[k]] = (int16_t)s16(ap);
-            r = a + (ap >> 1);
-            if (++rv_ai[k] >= RV_APLEN[k])
-                rv_ai[k] = 0;
-        }
-        L[i] += ((r * rl) >> 7) + ((d * dl) >> 7);   /* the returns' LEVEL */
-        {
-            int32_t rr = r;
-            for (k = 2; k < 4u; k++) {
-                int16_t *b = rv_ap[k];
-                a = b[rv_ai[k]];
-                ap = rr - (a >> 1);
-                b[rv_ai[k]] = (int16_t)s16(ap);
-                rr = a + (ap >> 1);
-                if (++rv_ai[k] >= RV_APLEN[k])
-                    rv_ai[k] = 0;
-            }
-            R[i] += ((rr * rl) >> 7) + ((d * 7 * dl) >> 10);
-        }
+        d = dL;
+        rv_bw += ((x - rv_bw) * 24000) >> 15;    /* the input's bandwidth */
+        x = ln_ap(&rv_in[0], 24576, rv_bw);      /* the input diffusers: 0.75 0.75 0.625 0.625 */
+        x = ln_ap(&rv_in[1], 24576, x);
+        x = ln_ap(&rv_in[2], 20480, x);
+        x = ln_ap(&rv_in[3], 20480, x);
+        /* the left half, fed by the right's end */
+        a = ln_apm(&rv_la1, RV_LA1, md1, -22938, x + ((ln_tap(&rv_rd2, RV_RD2) * decay) >> 15));
+        ln_put(&rv_ld1, a);
+        rv_dl += ((ln_tap(&rv_ld1, RV_LD1) - rv_dl) * damp) >> 15;
+        a = ln_ap(&rv_la2, 16384, (rv_dl * decay) >> 15);
+        /* the right half, fed by the left's end */
+        b = ln_apm(&rv_ra1, RV_RA1, md2, -22938, x + ((ln_tap(&rv_ld2, RV_LD2) * decay) >> 15));
+        ln_put(&rv_ld2, a);
+        ln_put(&rv_rd1, b);
+        rv_dr += ((ln_tap(&rv_rd1, RV_RD1) - rv_dr) * damp) >> 15;
+        b = ln_ap(&rv_ra2, 16384, (rv_dr * decay) >> 15);
+        ln_put(&rv_rd2, b);
+        /* the output taps (Dattorro's, scaled) */
+        rl_ = ln_tap(&rv_rd1, 394) + ln_tap(&rv_rd1, 4407) - ln_tap(&rv_ra2, 2835) + ln_tap(&rv_rd2, 2958)
+            - ln_tap(&rv_ld1, 2949) - ln_tap(&rv_la2, 277) - ln_tap(&rv_ld2, 1580);
+        rr_ = ln_tap(&rv_ld1, 523) + ln_tap(&rv_ld1, 5374) - ln_tap(&rv_la2, 1820) + ln_tap(&rv_ld2, 3961)
+            - ln_tap(&rv_rd1, 3128) - ln_tap(&rv_ra2, 496) - ln_tap(&rv_rd2, 179);
+        L[i] += ((((rl_ * 5) >> 3) * rl) >> 7) + ((d * dl) >> 7);   /* the returns' LEVEL */
+        R[i] += ((((rr_ * 5) >> 3) * rl) >> 7) + ((dR * dl) >> 7);
     }
 }
 
@@ -492,12 +541,12 @@ static void seq_block(uint32_t n);               /* lx_seq.c: the steps of this 
 static int32_t peak[NTRK];                       /* the mixer's meters (Q15, decaying in the UI) */
 static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the master into out: stereo, Q15 */
 {
-    int32_t tb[CTL], L[CTL], R[CTL], ds[CTL], rs[CTL], dv[CTL];
+    int32_t tb[CTL], L[CTL], R[CTL], dsl[CTL], dsr[CTL], rs[CTL], dv[CTL];
     uint32_t i, t, m = song.master_q12;
     seq_block(n);
     lfo_block(n);
     for (i = 0; i < n; i++)
-        L[i] = R[i] = ds[i] = rs[i] = dv[i] = 0;
+        L[i] = R[i] = dsl[i] = dsr[i] = rs[i] = dv[i] = 0;
     for (t = 0; t < NTRK; t++) {
         const sound_t *s = &snd[t];
         int32_t g, pan, pl, pr, dg = s->dly, rg = s->rev, vg = s->drv, pk = 0;
@@ -517,7 +566,8 @@ static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the 
             int32_t x = (tb[i] >> 2) * g >> 4;
             L[i] += (x * pl) >> 7;
             R[i] += (x * pr) >> 7;
-            ds[i] += (x * dg) >> 8;
+            dsl[i] += (((x * dg) >> 8) * pl) >> 7;   /* (the delay's sends as the sound is panned) */
+            dsr[i] += (((x * dg) >> 8) * pr) >> 7;
             rs[i] += (x * rg) >> 7;
             dv[i] += (x * vg) >> 7;
             if (x > pk) pk = x;
@@ -526,7 +576,7 @@ static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the 
         if (pk > peak[t])
             peak[t] = pk;
     }
-    fx_block(L, R, ds, rs, n);
+    fx_block(L, R, dsl, dsr, rs, n);
     drive_block(L, R, dv, n);
     if (song.playing && (song.click == CLICK_ON || (song.click == CLICK_REC && song.rec)) && song.step % 4u == 0u) {
         uint32_t bar = song.pstep % 16u == 0u, p0 = song.pos >= n ? song.pos - n : 0u;

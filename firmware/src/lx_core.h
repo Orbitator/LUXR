@@ -45,19 +45,27 @@ enum { LW_SINE, LW_TRI, LW_SAW, LW_SQR, LW_SH, LW_N };
 enum { LR_16, LR_8, LR_4, LR_2, LR_1BAR, LR_2BAR, LR_4BAR, LR_8BAR, LR_N };   /* the LFO's cycle, with the tempo */
 static const uint8_t LR_STEPS[LR_N] = {1, 2, 4, 8, 16, 32, 64, 128};         /* (16ths) */
 enum { DM_SOFT, DM_HARD, DM_FOLD, DM_N };                                    /* the drive bus */
+enum { DL_MONO, DL_STEREO, DL_PINGPONG, DL_N };                              /* the delay */
 enum { Q_16, Q_8, Q_4, Q_N };                                                /* recording: the grid */
 static const uint8_t Q_STEPS[Q_N] = {1, 2, 4};
 enum { CLICK_OFF, CLICK_REC, CLICK_ON, CLICK_N };
 
-/* a step: 0 = rest, else bits 0..6 the velocity (1..127), bit 7 the accent; its extras (STEP EDIT): the probability
- * (high nibble: 0 always, k k/16) and the pan (low nibble: 0 the sound's, k (k - 8) * 8) */
+/* a step: 0 = rest, else bits 0..6 the velocity (1..127), bit 7 the accent; its extras (STEP EDIT): when it plays
+ * (bits 3..7: 0 always, 1..15 k/16 of the passes, 16..29 the conditions 1:2 2:2 1:4 .. 4:4 1:8 .. 8:8 - the A-th of every
+ * B passes) and its pan (bits 0..2: 0 the sound's, k (k - 4) * 16) */
 #define S_ACC 0x80u
 #define S_VEL(s) ((s) & 0x7Fu)
-#define X_PROB(x) ((x) >> 4)
-#define X_PAN(x) ((x) & 15u)
+#define X_COND(x) ((x) >> 3)
+#define X_PAN(x) ((x) & 7u)
+#define X_PANV(x) (((int32_t)X_PAN(x) - 4) * 16)
+#define C_PROB_N 16u                     /* (codes 1..15: a probability) */
+#define C_N 30u
+static const uint8_t COND_A[14] = {1, 2, 1, 2, 3, 4, 1, 2, 3, 4, 5, 6, 7, 8};
+static const uint8_t COND_B[14] = {2, 2, 4, 4, 4, 4, 8, 8, 8, 8, 8, 8, 8, 8};
 typedef struct {
     uint8_t s[NTRK][NSTEP];
     uint8_t x[NTRK][NSTEP];      /* the steps' extras */
+    uint8_t r[NTRK][NSTEP];      /* the steps' substeps: 0 one hit, k k + 1 hits over the step (2..6) */
     uint8_t len[NTRK];           /* steps 1..64 (16 a bar) */
 } pattern_t;
 
@@ -79,10 +87,12 @@ typedef struct {
     /* the global FX (stored with the kit) */
     uint8_t drv_mode, drv_amt, drv_tone, drv_lvl;  /* the drive bus: DM_*, gain, tone, return */
     uint8_t dly_div, dly_fb, dly_tone, dly_lvl;    /* the delay: time (16ths), feedback, tone, return */
+    uint8_t dly_mode, dly_div2;                    /* .. DM_MONO / STEREO / PING PONG, the right side's time (STEREO) */
     uint8_t rev_size, rev_damp, rev_lvl;           /* the reverb */
     uint16_t master_q12;
     uint32_t step, pos;          /* the global 16th, samples into it */
     uint32_t pstep;              /* 16ths since the pattern began */
+    uint32_t loops;              /* the patterns played through since PLAY (the conditions' passes) */
     uint32_t cpu_q8;
 } song_t;
 

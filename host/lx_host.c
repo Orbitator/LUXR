@@ -92,6 +92,7 @@ static int io_store_prog(uint32_t off, const void *s, uint32_t n)   /* (NOR: bit
         h_store[off + i] &= b[i];
     return 0;
 }
+static int32_t io_batt(void) { return 612; }     /* (a battery about 3.9 V) */
 static uint8_t h_sent[1024];                     /* the last USB message sent (the backup protocol) */
 static uint32_t h_sent_n;
 static int proto_send(const uint8_t *p, uint32_t n)

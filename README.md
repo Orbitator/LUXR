@@ -61,6 +61,7 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | Taste | Seite | Knöpfe 1–4 | mit SHIFT |
 |---|---|---|---|
 | HOME | KIT | Tempo, Swing, Tune (alle), Decay (alle) | MIDI-Kanal, Theme, Version |
+| HOME (halten) | **SYSTEM** | Version, belegte Plätze und freier Speicher, Audio-Last, Akkuspannung (geschätzt, unkalibriert), About | |
 | SEQ | SEQUENCER | Länge der Spur, Velocity des letzten Steps, Rotate, Euclid | **PAT LEN: jeder Dreh verdoppelt die Patternlänge (zurück: halbiert)**, **COPY x2: Noten in die neuen Takte kopieren (an/aus)**, Accent des letzten Steps |
 | SEQ (2.) | **LIVE PADS** | Pad-Velocity, Quantize-Raster, -Richtung, Metronom | |
 | EDIT | SYNTH 1-4 | Synth-Parameter 1–4 | Parameter 5–8 |
@@ -71,8 +72,9 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | LFO / LFO (2.) | LFO 1 / LFO 2 | Ziel, Welle, Rate (im Tempo), Tiefe (bipolar) | |
 | FX | FX SENDS (des Sounds, im Kit) | Drive-Send, Delay-Send, Reverb-Send, Volume | |
 | FX (2.) | DRIVE (global, im Kit) | Modus (SOFT, HARD, FOLD), Stärke, Ton, Pegel | |
-| FX (3.) | DELAY (global, im Kit) | Zeit (1/8 … 3/4), Feedback, Ton, Pegel | |
-| FX (4.) | REVERB (global, im Kit) | Größe, Dämpfung, Pegel | |
+| FX (3.) | DELAY (global, im Kit) | **Modus** (MONO, STEREO: links und rechts je eine Zeit, PINGPONG: die Wiederholungen wechseln die Seite), Zeit (1/8 … 3/4; in STEREO die linke), Zeit rechts (STEREO), Feedback | |
+| FX (4.) | DELAY 2 | Ton, Pegel | |
+| FX (5.) | REVERB (global, im Kit) | Größe (Nachhallzeit), Dämpfung, Pegel – ein Plate-Hall nach Dattorro | |
 | SCL | PATTERNS | Pattern (spielend: wechselt am Pattern-Ende), Chain (spielt N Patterns nacheinander), **Copy** (ein Dreh kopiert das angezeigte Pattern), **Paste** (ein Dreh fügt es ins angezeigte Pattern ein) | |
 | ARP | NOTE REPEAT | Rate, Velocity, Vel-Modus (fest, steigend, fallend, zufällig), Latch | Humanize |
 | GLO (tippen) | MIXER, Seite 1 | Lautstärke der vier Sounds der Bank | Pan der vier Sounds |
@@ -83,9 +85,12 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 **Weiße Tasten (16).** Auf der **SEQUENCER-Seite** sind sie die 16 Steps des angezeigten Takts der gewählten Spur
 (LED = Step an, die laufende Position blinkt invertiert). Kurz tippen: ein leerer Step wird gesetzt (und klingt an, wenn
 das Gerät steht), ein gesetzter beim Loslassen gelöscht. **Lang halten (ab 350 ms) oder halten und einen Knopf drehen:
-STEP EDIT** – KNOB 1 Velocity, KNOB 2 Probability (6 … 100 %: wie oft der Step spielt), KNOB 3 Pan nur für diesen Step
-(SOUND = der Pan des Sounds, L56 … C … R56), KNOB 4 Accent; mehrere gehaltene Steps werden zusammen bearbeitet. Im Raster
-sind Steps mit Probability blasser, solche mit eigenem Pan haben einen Punkt.
+STEP EDIT** – KNOB 1 Velocity; KNOB 2 Probability (6 … 100 %: wie oft der Step spielt) und weiter rechts die
+**Bedingungen 1:2, 2:2, 1:4 … 4:4, 1:8 … 8:8** (A:B = der Step spielt im A-ten von je B Durchläufen der Spur, ab PLAY
+gezählt: 1:2 im 1., 3., 5. …, 2:2 im 2., 4. …); KNOB 3 Pan nur für diesen Step (SOUND = der Pan des Sounds, sonst
+L48 L32 L16 C R16 R32 R48); KNOB 4 **Substeps** (OFF, 2 … 6: so viele Schläge gleichmäßig über den Step verteilt).
+Mehrere gehaltene Steps werden zusammen bearbeitet. Im Raster sind Steps mit Probability oder Bedingung blasser,
+Substeps teilen die Zelle, ein eigenes Pan ist ein Punkt. (Accents setzt der Accent-Modus, C#5.)
 **Auf allen anderen Seiten** spielen F3–C4 die Sounds 1–8 (D4–G5 dieselben mit Accent), mit REC + PLAY aufgenommen; die
 LEDs leuchten beim Anschlag. Auf den Seiten eines Sounds (SYNTH, SAMPLE, SOUND MIX, LFO, FX SENDS) wählt der Anschlag den
 Sound auch aus: das Display zeigt den gespielten. Auf NOTE REPEAT sind es die Repeat-Pads. Mit SHIFT überall: F3–C4 Mute,
@@ -118,7 +123,7 @@ quantisiert geschrieben; mit ERASE (SHIFT + REC) löscht ein gehaltenes Pad die 
 
 **Patches.** Ein Patch ist ein Kit (die acht Sounds samt LFOs und Sends, Tune, Decay, Drive/Delay/Reverb) und seine
 16 Patterns (jede Spur bis 64 Steps, eigene Länge, Velocity/Probability/Pan je Step; Tempo, Swing, Chain, Mute/Solo).
-**14 Plätze**, also bis zu 14 Kits und 224 Patterns. SAVE speichert beides oder nur Kit bzw. nur Patterns (der andere
+**14 Plätze**, also bis zu 14 Kits und 224 Patterns. **Beim Einschalten wird Patch 1 geladen** (Kit und Patterns), falls belegt. SAVE speichert beides oder nur Kit bzw. nur Patterns (der andere
 Teil bleibt, wie er auf dem Platz war); PRESETS lädt sie (mit SHIFT: nur die Patterns), ebenso KNOB 4 auf der STORE-Seite.
 
 **Updates behalten die Patches.** Ein Firmware-Update schreibt nur das Programm, nicht den Speicher. Ältere

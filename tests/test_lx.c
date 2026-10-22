@@ -500,6 +500,10 @@ int main(int argc, char **argv)
     host_ppm(path);
     host_tap(B_FX);
     CHECK(ui.page == PG_FXDL, "FX again: DELAY");
+    host_turn(EN_K1, 2);
+    CHECK(song.dly_mode == DL_PINGPONG, "DELAY MODE: PING PONG");
+    host_tap(B_FX);
+    CHECK(ui.page == PG_FXDL2, "FX again: DELAY 2 (tone, level)");
     host_tap(B_FX);
     CHECK(ui.page == PG_FXR, "FX again: REVERB");
     host_tap(B_FX);
@@ -516,6 +520,41 @@ int main(int argc, char **argv)
             if (m) wet = (float)sum_sq; else dry = (float)sum_sq;
         }
         CHECK(wet > dry * 1.05f, "the drive send adds the drive bus (%.1f -> %.1f)", dry, wet);
+        snd[0].drv = 0;
+    }
+    {                                            /* the delay's modes: ping pong alternates the sides, stereo has two times */
+        static float el[64], er[64];
+        uint32_t k, mode;
+        for (mode = 0; mode < 3u; mode++) {
+            uint32_t tbase = h_samples;
+            float rl = 0, rr = 0;
+            song.dly_mode = (uint8_t)mode;
+            song.dly_div = 2;                    /* 1/4: 0.5 s at 120 */
+            song.dly_div2 = 0;                   /* 1/8 (stereo's right) */
+            song.dly_fb = 90;
+            snd[6].dly = 127;
+            snd[6].rev = 0;
+            snd[6].pan = 0;
+            ev_push(EV_HIT, 6, 127);
+            memset(el, 0, sizeof el); memset(er, 0, sizeof er);
+            for (k = 0; k < 64u; k++) {          /* 64 windows of 31 ms */
+                uint32_t j;
+                host_run(31, 0, 0);
+                for (j = 0; j < CTL; j++) { el[k] += out_l[j] * out_l[j]; er[k] += out_r[j] * out_r[j]; }
+            }
+            (void)tbase;
+            for (k = 14; k < 18u; k++) { rl += el[k]; rr += er[k]; }   /* (around 0.5 s: the first repeat) */
+            if (mode == DL_PINGPONG)
+                CHECK(rl > rr * 4.0f, "PING PONG: the first repeat on the left (%.4f %.4f)", rl, rr);
+            if (mode == DL_STEREO) {
+                float r8 = 0, l8 = 0;
+                for (k = 6; k < 10u; k++) { r8 += er[k]; l8 += el[k]; }   /* (around 0.25 s: the right's 1/8) */
+                CHECK(r8 > l8 * 2.0f, "STEREO: the right side repeats at its own time (%.4f %.4f)", r8, l8);
+            }
+            host_run(3000, 0, 0);
+        }
+        song.dly_mode = DL_MONO;
+        snd[6].dly = 0;
     }
 
     /* 11. LFO: two a sound, in time with the tempo */
@@ -621,15 +660,15 @@ int main(int argc, char **argv)
     CHECK(ui.sedit == (1u << 4), "held 0.5 s: STEP EDIT on step 5 (%x)", ui.sedit);
     host_turn(EN_K1, -40);
     host_turn(EN_K2, -8);                        /* 100 % -> 8/16: 50 % */
-    host_turn(EN_K3, 4);                         /* the sound's -> L32 */
-    host_turn(EN_K4, 1);
+    host_turn(EN_K3, 2);                         /* the sound's -> L32 */
+    host_turn(EN_K4, 2);                         /* SUBSTEPS: 1 -> 3 */
     snprintf(path, sizeof path, "%s/lx_stepedit.ppm", dir);
     host_ppm(path);
     h_keys = 0;
     host_run(40, 0, 0);
-    CHECK(PAT->s[1][4] == (60u | S_ACC) && X_PROB(PAT->x[1][4]) == 8u && X_PAN(PAT->x[1][4]) == 4u && !ui.sedit,
-          "STEP EDIT: velo 60, accent, 50 %%, own pan; let go: kept (%u %u %u)", PAT->s[1][4], X_PROB(PAT->x[1][4]),
-          X_PAN(PAT->x[1][4]));
+    CHECK(PAT->s[1][4] == 60u && X_COND(PAT->x[1][4]) == 8u && X_PAN(PAT->x[1][4]) == 2u && PAT->r[1][4] == 2u && !ui.sedit,
+          "STEP EDIT: velo 60, 50 %%, L32, 3 substeps; let go: kept (%u %u %u %u)", PAT->s[1][4], X_COND(PAT->x[1][4]),
+          X_PAN(PAT->x[1][4]), PAT->r[1][4]);
     host_key(key_white(12));
     CHECK(!PAT->s[1][12], "a set step tapped: cleared when let go");
     host_key(key_white(12));
@@ -639,7 +678,7 @@ int main(int argc, char **argv)
         memset(pat[0].s, 0, sizeof pat[0].s);
         memset(pat[0].x, 0, sizeof pat[0].x);
         pat[0].s[1][0] = 100;
-        pat[0].x[1][0] = 8u << 4;
+        pat[0].x[1][0] = 8u << 3;
         host_tap(B_PLAY);
         for (pass = 0; pass < 40u; pass++) {
             reset_count();
@@ -650,8 +689,43 @@ int main(int argc, char **argv)
         CHECK(played > 10u && played < 30u, "PROB 50 %%: played in %u of 40 bars", played);
         pat[0].x[1][0] = 1u;                     /* hard left */
         ev_push(EV_HIT, 1, 1);                   /* (any hit first: the step's own pan comes with the sequencer) */
-        voice_hit(1, 120, 0, (1 - 8) * 8);
-        CHECK(voice[1].span == -56, "the step's pan reaches the voice (%d)", voice[1].span);
+        voice_hit(1, 120, 0, X_PANV(1u));
+        CHECK(voice[1].span == -48, "the step's pan reaches the voice (%d)", voice[1].span);
+        {                                        /* A:B: 1:2 the odd passes, 2:4 the 2nd of 4, 8:8 the 8th of 8 */
+            static const uint8_t CODE[3] = {16, 19, 29};
+            static const uint8_t WANT[3][8] = {{1, 0, 1, 0, 1, 0, 1, 0}, {0, 1, 0, 0, 0, 1, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 1}};
+            uint32_t c, bar, ok;
+            for (c = 0; c < 3u; c++) {
+                pat[0].x[1][0] = (uint8_t)(CODE[c] << 3);
+                host_tap(B_PLAY);
+                host_run(BAR_MS / 2u, 0, 0);     /* (mid bar 1: each window from here holds the next bar's step 1) */
+                for (bar = 0, ok = 1; bar < 8u; bar++) {
+                    reset_count();
+                    host_run(BAR_MS, watch, 0);
+                    ok &= (hits[1] > 0u) == WANT[c][(bar + 1u) % 8u];
+                }
+                host_tap(B_PLAY);
+                CHECK(ok, "condition %u:%u plays the right bars", COND_A[CODE[c] - 16u], COND_B[CODE[c] - 16u]);
+            }
+            pat[0].x[1][0] = 0;
+
+            ui.sedit = 1;                        /* (the knob: past 100 % the conditions) */
+            ui.bar = 0;
+            pat[0].s[1][0] = 100;
+            pset(P_EPROB, 17);
+            CHECK(X_COND(pat[0].x[1][0]) == 16u, "STEP EDIT PROB past 100 %%: 1:2");
+            ui.sedit = 0;
+        }
+        pat[0].x[1][0] = 0;                      /* SUBSTEPS: 4 hits on step 1, 6 on step 9: 10 a bar */
+        pat[0].r[1][0] = 3;
+        pat[0].s[1][8] = 100;
+        pat[0].r[1][8] = 5;
+        host_tap(B_PLAY);
+        host_run(100, 0, 0);
+        reset_count();
+        host_run(BAR_MS * 2u, watch, 0);
+        host_tap(B_PLAY);
+        CHECK(hits[1] >= 19u && hits[1] <= 21u, "substeps 4 + 6 a bar: %u hits in 2 bars (20)", hits[1]);
     }
 
     /* 16. the store: 14 slots; the formats before (LXP1..3) moved at the first boot; backup / restore over USB */
@@ -689,6 +763,25 @@ int main(int argc, char **argv)
             CHECK(!proj_load(5, SW_ALL) && snd[3].p[0] == 13u && snd[3].level == 77u && snd[3].smp == TR_OWN0 + 3 &&
                   pat[7].s[2][7] == 90u && !pat[7].x[2][7] && song.bpm == 133u,
                   "LXP%u: kit and patterns as they were (%u %u %u %u)", ver, snd[3].p[0], snd[3].level, pat[7].s[2][7], song.bpm);
+        }
+        /* LXP4 (the steps' extras as nibbles, no substeps): converted, probability kept, pan to its nearest place */
+        {
+            static uint8_t raw[16784];
+            kit_rec_t k;
+            uint32_t sum4;
+            memset(raw, 0, sizeof raw);
+            kit_take(&k);
+            k.s[2].level = 55;
+            memcpy(raw + 12, &k, KIT_OLD);
+            raw[12 + KIT_OLD + 3u * NSTEP + 5u] = 77;                    /* pattern 1, track 4, step 6 */
+            raw[12 + KIT_OLD + NTRK * NSTEP + 3u * NSTEP + 5u] = 8u << 4 | 4u;   /* 50 %, L32 */
+            memset(raw + 12 + KIT_OLD + 2u * NTRK * NSTEP, 16, NTRK);
+            sum4 = fnv(raw + 12, KIT_OLD + NPAT * 1032u + 6u);
+            memcpy(raw, "LXP4", 4);
+            raw[8] = (uint8_t)sum4; raw[9] = (uint8_t)(sum4 >> 8); raw[10] = (uint8_t)(sum4 >> 16); raw[11] = (uint8_t)(sum4 >> 24);
+            CHECK(!proj_convert(raw, sizeof raw) && proj_buf.k.s[2].level == 55u && proj_buf.p.p[0].s[3][5] == 77u &&
+                  X_COND(proj_buf.p.p[0].x[3][5]) == 8u && X_PAN(proj_buf.p.p[0].x[3][5]) == 2u,
+                  "LXP4 converted: kit, step, 50 %%, L32 (%u %u)", X_COND(proj_buf.p.p[0].x[3][5]), X_PAN(proj_buf.p.p[0].x[3][5]));
         }
         /* USB: info, a slot read back whole, restored into another slot */
         {
@@ -741,6 +834,22 @@ int main(int argc, char **argv)
             CHECK(raw[0] == 0 && ui.used[12], "an LXP3 backup restored into slot 13, converted");
         }
     }
+
+    /* 18. HOME: tapped the KIT, held SYSTEM; at power-on patch 1 is loaded */
+    host_boot(14);
+    host_tap(B_HOME);
+    CHECK(ui.page == PG_KIT, "HOME tapped: KIT");
+    host_hold(B_HOME, 500, 0);
+    CHECK(ui.page == PG_INFO, "HOME held: SYSTEM");
+    snprintf(path, sizeof path, "%s/lx_info.ppm", dir);
+    host_ppm(path);
+    snd[4].level = 21;
+    pat[0].s[6][3] = 99;
+    pat[0].r[6][3] = 4;
+    proj_save(0, SW_ALL);
+    host_boot(15);
+    CHECK(snd[4].level == 21u && pat[0].s[6][3] == 99u && pat[0].r[6][3] == 4u, "power-on: patch 1 loaded, substeps kept (%u %u %u)",
+          snd[4].level, pat[0].s[6][3], pat[0].r[6][3]);
 
     /* 17. SHIFT + ALGORITHM: the sample layer's samples in turn, the synth layer kept */
     host_boot(13);

@@ -72,3 +72,4 @@ static void oc_banner(const char *a, const char *b);
 #include "lx_ui.c"
 #include "master.c"
 #include "oc_main.c"
+static int32_t io_batt(void) { return fm1_adc_read(FM1_ADC_BATT); }   /* (PB1, the battery divider: fm1_adc.h) */

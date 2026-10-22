@@ -51,7 +51,8 @@ static void rec_hit(uint32_t t, uint32_t vel, uint32_t acc)
     if (at > g)                                  /* written ahead of the playhead: it sounded already, it does not play again */
         rec_skip[t] = (uint8_t)(at % len + 1u);
     p->s[t][at % len] = (uint8_t)(clamp((int32_t)vel, 1, 127) | (acc ? S_ACC : 0u));
-    p->x[t][at % len] = 0;                       /* (always, the sound's pan) */
+    p->x[t][at % len] = 0;                       /* (always, the sound's pan, one hit) */
+    p->r[t][at % len] = 0;
     rec_writes++;
 }
 static int erasing(void) { return song.rec && song.erase && song.playing; }
@@ -150,8 +151,23 @@ static void midi_note(uint32_t st, uint32_t d1, uint32_t d2)
 }
 
 /* ------------------------------------------------------------ the steps --- */
+static struct { uint8_t left, vel, acc; int8_t pan; uint32_t gap, at; } sub[NTRK];   /* a step's substeps to come */
+static void sub_block(void)                      /* the substeps due by now (song.pos: into the step) */
+{
+    uint32_t t;
+    for (t = 0; t < NTRK; t++)
+        while (sub[t].left && song.pos >= sub[t].at) {
+            sub[t].left--;
+            sub[t].at += sub[t].gap;
+            if (trk_audible(t)) {
+                voice_hit(t, sub[t].vel, sub[t].acc, sub[t].pan);
+                hit_flash |= (uint8_t)(1u << t);
+            }
+        }
+}
 static void track_step(uint32_t t)
 {
+    sub[t].left = 0;                             /* (a new step: the last one's substeps are over) */
     pattern_t *p = PAT;
     uint32_t len = clamp(p->len[t], 1, NSTEP), idx = song.pstep % len;
     uint8_t s = p->s[t][idx];
@@ -162,13 +178,28 @@ static void track_step(uint32_t t)
     if (erasing() && (((nr.held | nr.latched) >> t) & 1u)) {   /* ERASE: the held pads' steps go */
         p->s[t][idx] = 0;
         p->x[t][idx] = 0;
+        p->r[t][idx] = 0;
         return;
     }
     if (s && trk_audible(t)) {
         uint32_t x = p->x[t][idx];
-        if (X_PROB(x) && (rng() & 15u) >= X_PROB(x))   /* PROBABILITY: k/16 of the passes */
+        uint32_t c = X_COND(x);
+        if (c && c < C_PROB_N && (rng() & 15u) >= c)   /* PROBABILITY: k/16 of the passes */
             return;
-        voice_hit(t, S_VEL(s), s & S_ACC, X_PAN(x) ? ((int32_t)X_PAN(x) - 8) * 8 : PAN_SOUND);
+        if (c >= C_PROB_N && c < C_N) {          /* A:B: the A-th of every B passes of the track */
+            uint32_t pass = song.loops * (pat_len(p) / len) + song.pstep / len;
+            if (pass % COND_B[c - C_PROB_N] != COND_A[c - C_PROB_N] - 1u)
+                return;
+        }
+        voice_hit(t, S_VEL(s), s & S_ACC, X_PAN(x) ? X_PANV(x) : PAN_SOUND);
+        if (p->r[t][idx] && p->r[t][idx] < 6u) {     /* SUBSTEPS: the rest of the hits over this step, evenly */
+            sub[t].left = p->r[t][idx];
+            sub[t].gap = step_len(song.step) / (p->r[t][idx] + 1u);
+            sub[t].at = sub[t].gap;
+            sub[t].vel = (uint8_t)S_VEL(s);
+            sub[t].acc = (uint8_t)(s & S_ACC);
+            sub[t].pan = (int8_t)(X_PAN(x) ? X_PANV(x) : PAN_SOUND);
+        }
         hit_flash |= (uint8_t)(1u << t);
     }
 }
@@ -210,6 +241,7 @@ static void seq_block(uint32_t n)
             song.pat = song.chain0 = song.pat_next;
         song.pat_next = 0xFF;
         song.step = song.pos = song.pstep = 0;
+        song.loops = 0;
         song_abs = 0;
         lfo_clk = 0;                             /* (the LFOs from the bar PLAY began) */
         song.playing = 1;
@@ -223,11 +255,13 @@ static void seq_block(uint32_t n)
         return;
     song.pos += n;
     song_abs += n;
+    sub_block();
     if (song.pos >= step_len(song.step)) {
         song.pos -= step_len(song.step);
         song.step++;
         if (++song.pstep >= pat_len(PAT)) {
             song.pstep = 0;
+            song.loops++;
             pattern_end();
         }
         for (t = 0; t < NTRK; t++)
