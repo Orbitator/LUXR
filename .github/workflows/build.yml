@@ -54,6 +54,11 @@ jobs:
           cp build/web/oneclick-admin.html site/index.html
           cp build/oneclick.fwsc site/
           printf '{"date":"%s","commit":"%s","sha256":"%s"}\n' "$(date -u +%F\ %H:%M)" "$GITHUB_SHA" "$(sha256sum build/oneclick.fwsc | cut -d' ' -f1)" > site/build.json
+      - name: Firmware branch (the newest .fwsc as a plain git file)
+        run: |
+          d=$(mktemp -d); cp site/oneclick.fwsc site/build.json "$d"/; cd "$d"
+          git init -q -b firmware && git add . && git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "firmware $GITHUB_SHA"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" firmware
       - uses: actions/upload-artifact@v4
         with: { name: oneclick-fwsc, path: build/oneclick.fwsc }
       - uses: actions/upload-pages-artifact@v3
