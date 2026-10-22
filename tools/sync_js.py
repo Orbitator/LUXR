@@ -4,7 +4,7 @@
 import pathlib, re, sys
 root = pathlib.Path(__file__).resolve().parent.parent
 lib = (root / "tools/oc_lib.js").read_text()
-for f in ("companion/index.html", "emu/emu.html"):
+for f in ("companion/index.html", "emu/emu.html", "web/admin.html"):
     p = root / f
     s = p.read_text()
     n = re.subn(r"/\* @oc-lib-begin \*/.*?/\* @oc-lib-end \*/",

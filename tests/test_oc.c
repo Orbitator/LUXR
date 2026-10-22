@@ -384,6 +384,8 @@ int main(void)
     song.theme = 0; song.click = 0; store_scan(); CHECK(song.theme == PAL_AMBER + 3 && song.click == CLICK_REC, "settings kept");
     host_tap(B_PLAY); song.rec = 1; host_run(600, meter, 0); song.rec = 0; host_tap(B_PLAY);   /* (the click) */
     /* the companion protocol */
+    { uint8_t f[8] = {0x7D, 'O', 'C', 0x30}; h_sent_n = 0; CHECK(proto_frame(f, 4), "info");
+      CHECK(h_sent_n > 10u && h_sent[4] == 0x31 && h_sent[h_sent_n - 1] == 0xF7, "info %u", h_sent_n); }
     { uint8_t f[8] = {0x7D, 'O', 'C', 0x10}; CHECK(proto_frame(f, 4), "dump"); CHECK(h_sent_n > 2000 && h_sent[4] == 0x11, "dump %u", h_sent_n); }
     { uint8_t f[4] = {0x7D, 'X', 'C', 1}; CHECK(!proto_frame(f, 4), "foreign frame taken"); }
     /* UBOOT countdown: both OCT held 5 s */

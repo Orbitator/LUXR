@@ -1,0 +1,468 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only
+     ONE CLICK FM-1 admin: the device's state, the firmware update (the M-UPGRADE protocol over Web MIDI, with Felucca's
+     installer code: web/vendor/fm1pkg.js, fm1ota.js, (C) 2026 Leo Kuroshita, GPL-3.0), the return to the official V15,
+     the sample store. Open it in Chrome or Edge from this computer (a file, or http://localhost). -->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ONE CLICK Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@400;600&family=Instrument+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: one column of steps, as a service manual reads: the device, then the update, then the way back and the store */
+:root {
+  --bg: #eceef1; --panel: #f9fafb; --ink: #1b1e24; --mute: #5d6472; --line: #d3d8df; --accent: #c77700; --on-accent: #1a1205;
+  --ok: #23824f; --warn: #b26a00; --err: #c0353f; --chip: #e2e6eb;
+  --display: "Martian Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #111317; --panel: #191c21; --ink: #e7e9ee; --mute: #9aa1ae; --line: #2b3038;
+    --accent: #ffaa28; --ok: #4cc283; --warn: #f0b04a; --err: #ff6b74; --chip: #23272e; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #111317; --panel: #191c21; --ink: #e7e9ee; --mute: #9aa1ae; --line: #2b3038;
+  --accent: #ffaa28; --ok: #4cc283; --warn: #f0b04a; --err: #ff6b74; --chip: #23272e; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--body); }
+main { max-width: 760px; margin: 0 auto; display: grid; gap: 16px; padding-block: 28px 48px;
+       padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { margin: 0; font: 600 clamp(22px, 4.5vw, 30px)/1.1 var(--display); letter-spacing: -0.5px; }
+h1 span { color: var(--accent); }
+h2 { margin: 0; font: 600 14px/1.3 var(--display); letter-spacing: .6px; text-transform: uppercase; }
+h2 small { color: var(--mute); font: 400 12px var(--display); text-transform: none; letter-spacing: 0; margin-left: 8px; }
+p { margin: 0; max-width: 68ch; }
+.lede { color: var(--mute); }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: grid; gap: 12px; min-width: 0; }
+section.danger { border-color: color-mix(in srgb, var(--err) 45%, var(--line)); }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+button { font: 600 14px var(--body); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+         padding: 9px 16px; min-height: 42px; cursor: pointer; }
+button.go { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+button:disabled { opacity: .45; cursor: default; }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input[type=file] { font: 13px var(--body); color: var(--ink); max-width: 100%; }
+dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 16px; }
+dt { color: var(--mute); }
+dd { margin: 0; font: 13px/1.6 var(--display); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.chip { display: inline-block; border-radius: 999px; padding: 1px 10px; font: 600 12px var(--display); background: var(--chip); }
+.chip.ok { color: var(--ok); } .chip.warn { color: var(--warn); } .chip.err { color: var(--err); }
+.status { font-weight: 600; min-height: 1.5em; }
+.status.ok { color: var(--ok); } .status.err { color: var(--err); } .status.warn { color: var(--warn); }
+progress { width: 100%; height: 8px; accent-color: var(--accent); }
+pre { margin: 0; font: 11.5px/1.5 var(--display); color: var(--mute); background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+      padding: 8px 10px; max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+ol { margin: 0; padding-left: 22px; display: grid; gap: 6px; max-width: 68ch; }
+.hint { color: var(--mute); font-size: 13.5px; }
+label.check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; max-width: 68ch; }
+details > summary { cursor: pointer; font-weight: 600; }
+.slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; font: 12px var(--display); }
+.slots div { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 560px) { .slots { grid-template-columns: repeat(2, minmax(0, 1fr)); } dl { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <header style="display:grid;gap:8px">
+    <h1>ONE CLICK <span>Admin</span></h1>
+    <p class="lede">Firmware-Update und Wartung für den M-VAVE FM-1 über USB. Läuft in Chrome oder Edge auf diesem Computer; die Dateien bleiben im Browser.</p>
+  </header>
+
+  <section aria-labelledby="h-dev">
+    <h2 id="h-dev">1 · Gerät</h2>
+    <p class="hint">FM-1 per USB-Datenkabel direkt an den Computer, andere MIDI-Programme schließen.</p>
+    <div class="row"><button id="connect" class="go">Verbinden</button><span id="devState" class="chip">nicht verbunden</span></div>
+    <dl id="devInfo" hidden>
+      <dt>Firmware</dt><dd id="iFw">–</dd>
+      <dt>Kennung</dt><dd id="iId">–</dd>
+      <dt>MIDI-Port</dt><dd id="iPort">–</dd>
+      <dt>Speicher</dt><dd id="iStore">–</dd>
+    </dl>
+  </section>
+
+  <section aria-labelledby="h-up">
+    <h2 id="h-up">2 · Firmware installieren <small>oneclick.fwsc</small></h2>
+    <ol>
+      <li>Paket wählen, gebaut mit <code>tools/build.py</code> (Kennung FM-1_8xx).</li>
+      <li>„Installieren“: das FM-1 prüft das Paket, startet den Update-Lader und schreibt es (etwa 2 Minuten).</li>
+      <li>Danach startet es neu; die Seite prüft, dass es die neue Kennung meldet.</li>
+    </ol>
+    <input id="pkgFile" type="file" accept=".fwsc">
+    <dl id="pkgInfo" hidden>
+      <dt>Datei</dt><dd id="pName">–</dd>
+      <dt>Kennung</dt><dd id="pId">–</dd>
+      <dt>Größe</dt><dd id="pSize">–</dd>
+      <dt>SHA-256</dt><dd id="pSha">–</dd>
+      <dt>Lader</dt><dd id="pLdr">–</dd>
+    </dl>
+    <label class="check"><input type="checkbox" id="pOk"> <span>Songs, Sounds und Samples des Geräts habe ich bei Bedarf gesichert (Songs/Sounds bleiben beim Update erhalten, solange das Speicherformat gleich ist).</span></label>
+    <div class="row"><button id="install" class="go" disabled>Installieren</button></div>
+  </section>
+
+  <section aria-labelledby="h-run">
+    <h2 id="h-run">Fortschritt</h2>
+    <progress id="bar" max="100" value="0"></progress>
+    <p id="status" class="status" aria-live="polite">Bereit.</p>
+    <pre id="log" aria-label="Protokoll"></pre>
+    <p class="hint">Während des Schreibens das USB-Kabel nicht ziehen und die Seite offen lassen. Bricht es ab, bleibt das FM-1 im Update-Modus: wieder einstecken, „Installieren“ setzt fort.</p>
+  </section>
+
+  <section aria-labelledby="h-smp">
+    <h2 id="h-smp">3 · Samples <small>nur mit ONE CLICK</small></h2>
+    <div class="slots" id="slots"><div>nicht verbunden</div></div>
+    <div class="row"><button id="smpRefresh" disabled>Aktualisieren</button><button id="smpClear" disabled>Alle Samples löschen</button></div>
+    <p class="hint" id="smpNote">Samples laden geht in der Companion-App oder im Emulator.</p>
+  </section>
+
+  <section class="danger" aria-labelledby="h-back">
+    <h2 id="h-back">4 · Zurück zur Original-Firmware <small>FM-1 V15</small></h2>
+    <p class="hint">Die offizielle FM-1.fwsc (V15) von <a href="https://www.m-vave.com/download" target="_blank" rel="noopener" style="color:inherit">m-vave.com/download</a> wählen. Akzeptiert wird nur die unveränderte Datei (SHA-256 geprüft). Was ONE CLICK im Flash gespeichert hat, bleibt dort liegen, ist aber in V15 nicht sichtbar.</p>
+    <input id="stockFile" type="file" accept=".fwsc">
+    <p id="stockState" class="hint"></p>
+    <div class="row"><button id="stockGo" disabled>V15 installieren</button></div>
+  </section>
+
+  <section aria-labelledby="h-help">
+    <h2 id="h-help">Notfall</h2>
+    <ol>
+      <li><b>Update abgebrochen:</b> FM-1 bleibt im Update-Modus (Display „UPDATE“). Kabel neu stecken, hier „Installieren“ drücken: es geht weiter.</li>
+      <li><b>Startet nicht mehr:</b> zweimal hintereinander innerhalb von 30 s abgestürzt → das FM-1 geht von selbst in UBOOT. Ebenso <b>OCT− und OCT+ 5 s halten</b>. In UBOOT nimmt M-VAVEs Updater die V15 an.</li>
+      <li>Hilft nichts davon: Wiederherstellung mit dem <a href="https://github.com/kurogedelic/FM-1-transporter" target="_blank" rel="noopener" style="color:inherit">FM-1-transporter</a>.</li>
+    </ol>
+    <p class="hint">ONE CLICK FM-1 (GPL-3.0) baut auf Felucca von Leo Kuroshita (@kurogedelic), Hügelton Instruments; der Installer-Code stammt aus Felucca. M-VAVE und FM-1 sind Marken ihrer Inhaber. Benutzung auf eigene Gefahr, ohne Gewähr.</p>
+  </section>
+</main>
+
+<script>
+"use strict";
+/*LIB*/
+/* @oc-lib-begin */
+/* ONE CLICK FM-1: the browser side shared by the companion app and the emulator page (tools/sync_js.py copies it
+   into both between the @oc-lib markers): the dump, MIDI export, sample import (decode, 22 kHz mono, mu-law) and
+   the sample upload with its answers. Protocol: firmware/src/oc_proto.c. */
+const OC = (() => {
+  const TYPE = ["BASS", "CHORDS", "PAD", "ATMO", "PIANO", "GUITAR", "LEAD", "PLUCK", "BRASS", "FLUTE", "DRUMS", "KICK", "SNARE", "PERC", "LOOP"];
+  const ENG = ["SUBTRACT", "ACID", "FM", "SUPERSAW", "ADDITIVE", "NOISE", "DRUMS", "SAMPLE", "LXR"];
+  const isDrum = (ty) => ty >= 10 && ty <= 13, isLoop = (ty) => ty === 14;
+  function pack7(bytes) {
+    const o = [];
+    for (let i = 0; i < bytes.length; i += 7) {
+      let hi = 0; const h = o.length; o.push(0);
+      const m = Math.min(7, bytes.length - i);
+      for (let k = 0; k < m; k++) { hi |= ((bytes[i + k] >> 7) & 1) << k; o.push(bytes[i + k] & 0x7f); }
+      o[h] = hi;
+    }
+    return o;
+  }
+  function unpack7(d) {
+    const o = [];
+    for (let i = 0; i < d.length;) { const hi = d[i++]; for (let k = 0; k < 7 && i < d.length; k++) o.push(d[i++] | (((hi >> k) & 1) << 7)); }
+    return o;
+  }
+  /* the dump (11): version 1 (4 tracks) and 2 (the track count in it) */
+  function parseDump(raw) {
+    const v = raw[0]; if (v !== 1 && v !== 2) return null;
+    const ps = raw[1], ss = raw[2]; let n = 3; const nt = v === 2 ? raw[n++] : 4;
+    const s = { root: raw[n++], scale: raw[n++], prog: raw.slice(n, n + 4), bpm: raw[n + 4], playing: raw[n + 5], tracks: [], transpose: 0, swing: 0 };
+    n += 6;
+    for (let t = 0; t < nt; t++) {
+      const patch = raw.slice(n, n + ps); n += ps;
+      const len = raw[n++], gate = raw[n++], steps = [];
+      for (let i = 0; i < 64; i++, n += ss) { const b = raw.slice(n, n + ss); steps.push({ note: b.slice(0, 4), n: b[4], time: b[5], flags: b[6], vel: b[7], hit: b[8], acc: b[9] }); }
+      s.tracks.push({ engine: patch[0], patch, len, gate, steps, type: [0, 1, 6, 10, 11, 14][t] ?? 0, octave: 0 });
+    }
+    if (raw.length >= n + 2 * nt + 2) {
+      for (let t = 0; t < nt; t++) { s.tracks[t].type = raw[n + t]; s.tracks[t].octave = (raw[n + nt + t] << 24) >> 24; }
+      s.transpose = (raw[n + 2 * nt] << 24) >> 24; s.swing = raw[n + 2 * nt + 1];
+    }
+    return s;
+  }
+  /* MIDI export: 4 bars, Format 1, 480 PPQN, a track a part; drums on channel 10, the loop's slices as notes from C2 */
+  function toMidi(s, steps = 64) {
+    const PPQ = 480, S16 = PPQ / 4, DRUM = [36, 38, 39, 42, 46, 45, 37, 56];
+    const vlq = (v) => { const b = [v & 0x7f]; while ((v >>= 7)) b.unshift((v & 0x7f) | 0x80); return b; };
+    const u32 = (v) => [(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255];
+    const text = (type, str) => [0xff, type, ...vlq(str.length), ...Array.from(str, (c) => c.charCodeAt(0) & 0x7f)];
+    const chunk = (ev) => { ev.sort((a, b) => a[0] - b[0] || a[1] - b[1]); const d = []; let last = 0;
+      for (const [t, , bytes] of ev) { d.push(...vlq(t - last), ...bytes); last = t; } d.push(0, 0xff, 0x2f, 0);
+      return [0x4d, 0x54, 0x72, 0x6b, ...u32(d.length), ...d]; };
+    const swing = (g) => g * S16 + (g & 1 ? Math.round(S16 * (s.swing || 0) / 100) : 0);
+    const us = Math.round(60000000 / (s.bpm || 120));
+    const chunks = [chunk([[0, 0, text(3, "ONE CLICK FM-1")], [0, 0, [0xff, 0x51, 3, (us >> 16) & 255, (us >> 8) & 255, us & 255]], [0, 0, [0xff, 0x58, 4, 4, 2, 24, 8]]])];
+    s.tracks.forEach((tr, t) => {
+      const drum = isDrum(tr.type), loop = isLoop(tr.type), ch = drum ? 9 : t, len = Math.max(1, tr.len);
+      const ev = [[0, 0, text(3, `${t + 1} ${TYPE[tr.type] || "TRACK"}`)]];
+      const shift = drum || loop ? 0 : (s.transpose || 0) + 12 * (tr.octave || 0);
+      for (let g = 0; g < steps; g++) {
+        const st = tr.steps[g % len];
+        if (st.time !== 1) continue;
+        const on = swing(g), vel = Math.max(1, Math.min(127, (st.vel || 100) + ((st.flags & 1) ? 15 : 0)));
+        if (drum) {
+          for (let l = 0; l < 8; l++) if ((st.hit >> l) & 1) {
+            const v = (st.acc >> l) & 1 ? 127 : Math.min(st.vel || 100, 120);
+            ev.push([on, 1, [0x90 | ch, DRUM[l], v]], [on + S16 / 2, 0, [0x80 | ch, DRUM[l], 0]]);
+          }
+          continue;
+        }
+        if (loop) { const n = 36 + (st.note[0] & 63); ev.push([on, 1, [0x90 | ch, n, vel]], [on + S16, 0, [0x80 | ch, n, 0]]); continue; }
+        let k = 1; while (k < 16 && k < len && tr.steps[(g + k) % len].time === 2) k++;
+        const slide = (st.flags & 2) && tr.steps[(g + k) % len].time === 1;
+        const off = swing(g + k - 1) + (slide ? S16 : Math.max(10, Math.round(S16 * tr.gate / 100)));
+        for (let i = 0; i < Math.min(4, st.n); i++) {
+          const n = Math.max(0, Math.min(127, st.note[i] + shift));
+          ev.push([on, 1, [0x90 | ch, n, vel]], [Math.min(off, steps * S16), 0, [0x80 | ch, n, 0]]);
+        }
+      }
+      chunks.push(chunk(ev));
+    });
+    return new Uint8Array([0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 1, 0, chunks.length, (PPQ >> 8) & 255, PPQ & 255, ...chunks.flat()]);
+  }
+  /* samples: any file the browser decodes, to 22050 Hz mono, normalised, mu-law. A one-shot loses its silent end and
+     stays under 3 s; a loop keeps its length, its bars (1, 2, 4) guessed from the tempo unless given */
+  const RATE = 22050;
+  function ulaw(x) {
+    let v = Math.max(-32635, Math.min(32635, Math.round(x * 32767)));
+    const sign = v < 0 ? 0x80 : 0; if (v < 0) v = -v;
+    v += 0x84; let e = 7;
+    for (let m = 0x4000; e > 0 && !(v & m); e--, m >>= 1);
+    return ~(sign | (e << 4) | ((v >> (e + 3)) & 15)) & 0xff;
+  }
+  async function prepSample(file, kind, bpm, bars) {
+    const buf = await file.arrayBuffer();
+    const dec = await new OfflineAudioContext(1, 1, RATE).decodeAudioData(buf);
+    const n = Math.max(32, Math.ceil(dec.duration * RATE));
+    const off = new OfflineAudioContext(1, n, RATE), src = off.createBufferSource();
+    src.buffer = dec; src.connect(off.destination); src.start();
+    let d = (await off.startRendering()).getChannelData(0);
+    let pk = 0; for (const x of d) pk = Math.max(pk, Math.abs(x));
+    const g = pk > 0 ? 0.95 / pk : 1;
+    if (kind === 0) {                             // one-shot: no silent tail, at most 3 s
+      let e = d.length; while (e > 64 && Math.abs(d[e - 1]) * g < 0.003) e--;
+      d = d.subarray(0, Math.min(e, 3 * RATE));
+    } else if (!bars) {
+      const b = d.length / RATE * (bpm || 120) / 240;
+      bars = [1, 2, 4].reduce((a, c) => Math.abs(Math.log2(c / b)) < Math.abs(Math.log2(a / b)) ? c : a, 1);
+    }
+    const out = new Uint8Array(d.length);
+    for (let i = 0; i < d.length; i++) out[i] = ulaw(d[i] * g);
+    return { data: out, rate: RATE, bars: kind ? bars : 1, secs: d.length / RATE };
+  }
+  /* the upload: frames out through send(body) (body without F0 / F7), each answered 2F cmd code; feed answers in
+     through answer(d) (the whole F0 .. F7 message) */
+  const ERR = ["", "kein Platz mehr", "ungültige Anfrage", "falsche Reihenfolge", "Flash-Fehler"];
+  function uploader(send) {
+    let wait = null;
+    const ask = (body, cmd) => new Promise((res, rej) => {
+      wait = { cmd, res, rej, t: setTimeout(() => { wait = null; rej(new Error("keine Antwort vom Gerät")); }, 6000) };
+      send(body);
+    });
+    function answer(d) {
+      if (d[4] === 0x2F && wait && d[5] === wait.cmd) {
+        const w = wait; wait = null; clearTimeout(w.t);
+        if (d[6]) w.rej(new Error(ERR[d[6]] || "Fehler " + d[6])); else w.res();
+        return true;
+      }
+      return false;
+    }
+    async function upload(slot, kind, name, smp, target, progress) {
+      const len = smp.data.length, nm = Array.from(name.toUpperCase().slice(0, 11), (c) => c.charCodeAt(0) & 0x7f);
+      const head = [slot, kind, 60, smp.bars, RATE & 255, RATE >> 8, len & 255, (len >> 8) & 255, (len >> 16) & 255, len >>> 24, target ?? 0x7F];
+      while (nm.length < 12) nm.push(0);
+      await ask([0x7D, 0x4F, 0x43, 0x20, ...pack7([...head, ...nm])], 0x20);
+      for (let o = 0; o < len; o += 256) {
+        const c = smp.data.subarray(o, Math.min(len, o + 256));
+        await ask([0x7D, 0x4F, 0x43, 0x21, ...pack7([o & 255, (o >> 8) & 255, (o >> 16) & 255, o >>> 24, ...c])], 0x21);
+        if (progress && (o & 4095) === 0) progress(o / len);
+      }
+      await ask([0x7D, 0x4F, 0x43, 0x22], 0x22);
+      if (progress) progress(1);
+    }
+    const clear = (slot) => ask([0x7D, 0x4F, 0x43, 0x23, slot ?? 0x7F], 0x23);
+    return { answer, upload, clear };
+  }
+  function parseSmpList(raw) {                    // 25: free, area, 8 slots
+    const u32 = (i) => raw[i] | raw[i + 1] << 8 | raw[i + 2] << 16 | (raw[i + 3] << 24 >>> 0);
+    const slots = [];
+    for (let k = 0, i = 8; k < 8; k++, i += 22)
+      slots.push({ used: raw[i], kind: raw[i + 1], root: raw[i + 2], bars: raw[i + 3], rate: raw[i + 4] | raw[i + 5] << 8, len: u32(i + 6),
+                   name: String.fromCharCode(...raw.slice(i + 10, i + 22).filter((c) => c)) });
+    return { free: u32(0), area: u32(4), slots };
+  }
+  return { TYPE, ENG, isDrum, isLoop, pack7, unpack7, parseDump, toMidi, prepSample, uploader, parseSmpList, RATE };
+})();
+/* @oc-lib-end */
+const $ = (id) => document.getElementById(id);
+const logEl = $("log");
+const log = (t) => { logEl.textContent += t + "\n"; logEl.scrollTop = logEl.scrollHeight; };
+const status = (t, cls = "") => { $("status").textContent = t; $("status").className = "status " + cls; };
+const ERR = {
+  denied: "MIDI (SysEx) wurde nicht erlaubt: in der Adressleiste die Website-Einstellungen öffnen, MIDI erlauben, erneut versuchen.",
+  notfound: "FM-1 nicht gefunden: Datenkabel prüfen, andere MIDI-Programme schließen, erneut versuchen.",
+  model: "Das verbundene Gerät ist kein FM-1.",
+  lost: "USB-Verbindung verloren: Kabel neu stecken und erneut „Installieren“.",
+  stopped: "Das Gerät hat aufgehört zu antworten: Kabel neu stecken und erneut „Installieren“.",
+  noloader: "Der Update-Lader meldet sich nicht: Kabel neu stecken und „Installieren“ (das FM-1 bleibt im Update-Modus).",
+  noreturn: "Das FM-1 kommt nicht zurück: aus- und wieder einschalten.",
+  mismatch: "Geschrieben, aber das FM-1 meldet eine andere Kennung: ",
+  badreq: "Ungültige Anfrage vom Gerät: Paket und Gerät passen nicht zusammen.",
+};
+let access = null, pkg = null, stock = null, busy = false, dev = null;
+const ident = (id) => !id ? "–" : /^FM-1_8\d\d$/.test(id.text) ? `ONE CLICK (${id.text})` : id.text === "FM-1_015" ? "Original V15 (FM-1_015)"
+  : /^FM-1_9\d\d$/.test(id.text) ? `Felucca (${id.text})` : /^ota-/.test(id.text) ? `Update-Modus (${id.text})` : id.text;
+function lock(on) {
+  busy = on;
+  $("install").disabled = on || !pkg || !$("pOk").checked;
+  $("stockGo").disabled = on || !stock;
+  $("connect").disabled = on;
+  ["pkgFile", "stockFile"].forEach((k) => $(k).disabled = on);
+  $("smpRefresh").disabled = $("smpClear").disabled = on || !dev || !/^FM-1_8/.test(dev.id.text);
+}
+window.addEventListener("beforeunload", (e) => { if (busy) { e.preventDefault(); e.returnValue = "Es wird geschrieben."; } });
+async function midi() {
+  if (!navigator.requestMIDIAccess) throw Object.assign(new Error("Kein Web MIDI: die Seite in Chrome oder Edge öffnen."), { code: "nomidi" });
+  if (!access) {
+    try { access = await navigator.requestMIDIAccess({ sysex: true }); }
+    catch (e) { throw Object.assign(new Error(ERR.denied), { code: "denied" }); }
+  }
+  return access;
+}
+function explain(e) { return (e && e.code && ERR[e.code]) ? ERR[e.code] + (e.detail || "") : (e && e.message) || String(e); }
+
+/* ---- 1: the device and, with ONE CLICK, its own info (7D 'O' 'C' 30 -> 31) */
+function ocRequest(link, cmd, reply, ms = 1500) {
+  return new Promise(async (res) => {
+    link.drain(); link.send([0xF0, 0x7D, 0x4F, 0x43, ...cmd, 0xF7]);
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const p = await link.read(end - Date.now());
+      if (p && p[1] === 0x7D && p[2] === 0x4F && p[3] === 0x43 && p[4] === reply) return res(OC.unpack7(p.slice(5, -1)));
+    }
+    res(null);
+  });
+}
+const ocU32 = (r, i) => (r[i] | r[i + 1] << 8 | r[i + 2] << 16 | r[i + 3] << 24) >>> 0;
+async function connect() {
+  lock(true);
+  try {
+    const up = new Updater(await midi(), log);
+    if (dev) { dev.link.close(); dev = null; }
+    dev = await up.find();
+    if (!dev) throw Object.assign(new Error(ERR.notfound), { code: "notfound" });
+    $("devInfo").hidden = false;
+    $("iId").textContent = dev.id.text; $("iPort").textContent = dev.name; $("iFw").textContent = ident(dev.id);
+    $("devState").textContent = "verbunden"; $("devState").className = "chip ok";
+    $("iStore").textContent = "–";
+    if (/^FM-1_8/.test(dev.id.text)) {
+      const r = await ocRequest(dev.link, [0x30], 0x31);
+      if (r) {
+        const z = r.indexOf(0), ver = String.fromCharCode(...r.slice(0, z));
+        $("iFw").textContent = `ONE CLICK ${ver} (${dev.id.text}), ${r[z + 1]} Spuren`;
+        $("iStore").textContent = r[z + 2] ? `Samples: ${(ocU32(r, z + 3) / OC.RATE).toFixed(1)} s frei von ${(ocU32(r, z + 7) / OC.RATE).toFixed(1)} s` : "Flash nicht lesbar";
+      }
+      await listSlots();
+    } else if (/^ota-/.test(dev.id.text)) {
+      $("devState").textContent = "Update-Modus"; $("devState").className = "chip warn";
+      status("Das FM-1 ist im Update-Modus: Paket wählen und „Installieren“ setzt fort.", "warn");
+    }
+    log("verbunden: " + dev.id.text + " @ " + dev.name);
+  } catch (e) {
+    $("devState").textContent = "nicht gefunden"; $("devState").className = "chip err";
+    status(explain(e), "err"); log(String(e.stack || e));
+  }
+  lock(false);
+}
+$("connect").onclick = connect;
+
+/* ---- 3: the sample slots */
+async function listSlots() {
+  if (!dev) return;
+  const r = await ocRequest(dev.link, [0x24], 0x25);
+  if (!r) { $("slots").innerHTML = "<div>keine Antwort</div>"; return; }
+  const l = OC.parseSmpList(r);
+  $("slots").innerHTML = l.slots.map((s, k) => `<div><b>${k + 1}</b> ${s.used ? `${s.name || "–"} · ${s.kind ? `Loop ${s.bars} T` : "One-Shot"} · ${(s.len / (s.rate || 22050)).toFixed(1)} s` : "leer"}</div>`).join("");
+  $("smpNote").textContent = `Frei: ${(l.free / OC.RATE).toFixed(1)} s von ${(l.area / OC.RATE).toFixed(1)} s.`;
+}
+$("smpRefresh").onclick = async () => { lock(true); await listSlots(); lock(false); };
+let clearArmed = 0;
+$("smpClear").onclick = async () => {
+  if (Date.now() - clearArmed > 4000) { clearArmed = Date.now(); $("smpClear").textContent = "Wirklich alle löschen?"; setTimeout(() => $("smpClear").textContent = "Alle Samples löschen", 4000); return; }
+  clearArmed = 0; $("smpClear").textContent = "Alle Samples löschen";
+  lock(true);
+  const r = await ocRequest(dev.link, [0x23, 0x7F], 0x2F, 4000);
+  $("smpNote").textContent = r === null ? "Keine Antwort." : "Gelöscht.";
+  await listSlots(); lock(false);
+};
+
+/* ---- 2: the package */
+$("pkgFile").onchange = async () => {
+  pkg = null; lock(false);
+  const f = $("pkgFile").files[0]; if (!f) return;
+  try {
+    const bytes = new Uint8Array(await f.arrayBuffer()), product = productOf(bytes);
+    const ldr = new TextDecoder("latin1").decode(bytes).includes("FELUCCA-LOADER-1");
+    $("pkgInfo").hidden = false;
+    $("pName").textContent = f.name; $("pId").textContent = product; $("pSize").textContent = `${bytes.length.toLocaleString("de-DE")} Bytes`;
+    $("pSha").textContent = await sha256hex(bytes); $("pLdr").textContent = ldr ? "eigener (Felucca-Lader)" : "fehlt";
+    if (!/^[\x20-\x7e]{3,32}$/.test(product)) throw new Error("Keine gültige .fwsc-Datei.");
+    if (!/^FM-1_8\d\d$/.test(product)) throw new Error(`Kennung ${product}: kein ONE-CLICK-Paket (FM-1_8xx). Für die Original-Firmware Abschnitt 4 nutzen.`);
+    if (!ldr) throw new Error("Im Paket fehlt der Update-Lader: es ist nicht mit tools/build.py gebaut.");
+    pkg = { product, image: logicalImage(bytes) };
+    status(`Paket ${product} geprüft.`, "ok");
+  } catch (e) { status(e.message, "err"); }
+  lock(false);
+};
+$("pOk").onchange = () => lock(false);
+async function run(image, product) {
+  lock(true); $("bar").value = 0;
+  if (dev) { dev.link.close(); dev = null; }
+  const writes = Math.ceil(image.length / 512);
+  try {
+    const up = new Updater(await midi(), log);
+    const step = (k, a) => {
+      if (k === "start") status("Gestartet: das FM-1 prüft das Paket …");
+      if (k === "verify") $("bar").value = Math.min(5, a / 20);
+      if (k === "loader") status("Wechsel in den Update-Modus …");
+      if (k === "write") { status("Schreibe … nicht abziehen"); $("bar").value = 5 + 93 * Math.min(1, a / writes); }
+      if (k === "reboot") status("Neustart …");
+      if (k === "done") { $("bar").value = 100; }
+      if (k !== "verify" && k !== "write") log(`${k} ${a ?? ""}`);
+    };
+    const ota = await up.find((id) => /^ota-/i.test(id.model));
+    if (ota) {
+      ota.link.close(); log("Update-Modus gefunden: setze fort");
+      if (!(await up.resume(image, step, product))) throw Object.assign(new Error(""), { code: "stopped" });
+    } else {
+      await up.install(image, product, step);
+    }
+    status(`Fertig: das FM-1 meldet ${product}.`, "ok");
+    $("bar").value = 100;
+    setTimeout(connect, 1500);
+  } catch (e) { status(explain(e), "err"); log(String(e.stack || e)); }
+  lock(false);
+}
+$("install").onclick = () => pkg && !busy && run(pkg.image, pkg.product);
+
+/* ---- 4: the official V15 */
+$("stockFile").onchange = async () => {
+  stock = null; lock(false); $("stockState").textContent = "";
+  const f = $("stockFile").files[0]; if (!f) return;
+  try {
+    if (f.size !== STOCK_V15_SIZE) throw new Error("Das ist nicht die offizielle FM-1.fwsc V15 (falsche Größe).");
+    stock = await validateStockPackage(new Uint8Array(await f.arrayBuffer()));
+    $("stockState").textContent = "Offizielle V15 erkannt (SHA-256 stimmt).";
+  } catch (e) { $("stockState").textContent = e.message; }
+  lock(false);
+};
+let stockArmed = 0;
+$("stockGo").onclick = () => {
+  if (!stock || busy) return;
+  if (Date.now() - stockArmed > 5000) { stockArmed = Date.now(); $("stockGo").textContent = "Sicher? Nochmal drücken"; setTimeout(() => $("stockGo").textContent = "V15 installieren", 5000); return; }
+  $("stockGo").textContent = "V15 installieren";
+  run(stock.image, stock.product);
+};
+if (!navigator.requestMIDIAccess) status("Kein Web MIDI in diesem Browser: die Seite in Chrome oder Edge öffnen.", "err");
+lock(false);
+</script>
+</body>
+</html>

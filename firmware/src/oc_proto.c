@@ -13,6 +13,8 @@
  *                the track to give it to (0x7F none), name (12)
  *   21 + packed  a chunk: its offset (4, LE), up to 256 bytes (8-bit mu-law), in order
  *   22           commit (the directory written; the track assigned)       23 s   clear slot s (0x7F: all)
+ *   30           info: the device answers 31 + packed: the version (text, 0-terminated), the tracks, the store
+ *                readable in place (1/0), the samples' free bytes (4) and area (4)
  *   24           list: the device answers 25 + packed: free bytes (4), the area (4), 8 x (used kind root bars
  *                rate(2) length(4) name(12))
  *                20 .. 23 are answered 2F cmd code (0 ok, 1 no space, 2 bad request, 3 out of order, 4 flash): the
@@ -157,6 +159,21 @@ static int proto_frame(const uint8_t *p, uint32_t n)
     case 0x22: proto_status(0x22, smp_commit()); break;
     case 0x23: proto_status(0x23, smp_clear(n > 4u && p[4] < NSMP ? (int)p[4] : -1)); break;
     case 0x24: proto_smp_list(); break;
+    case 0x30: {                                  /* info (the admin page) */
+        static const char V[] = OC_VERSION;
+        uint32_t m = 0, w, fr = smp_free(), ar = SMP_AREA, j;
+        for (j = 0; V[j] && j < 15u; j++) px_raw[m++] = (uint8_t)V[j];
+        px_raw[m++] = 0;
+        px_raw[m++] = NTRK;
+        px_raw[m++] = io_store_map() != 0;
+        for (j = 0; j < 4u; j++) px_raw[m++] = (uint8_t)(fr >> (8u * j));
+        for (j = 0; j < 4u; j++) px_raw[m++] = (uint8_t)(ar >> (8u * j));
+        px_wire[0] = 0xF0; px_wire[1] = 0x7D; px_wire[2] = 'O'; px_wire[3] = 'C'; px_wire[4] = 0x31;
+        w = 5u + pack7(px_raw, m, px_wire + 5);
+        px_wire[w++] = 0xF7;
+        (void)proto_send(px_wire, w);
+        break;
+    }
     case 0x10: proto_dump(); break;
     case 0x12: {                                  /* steps of t */
         uint32_t h = n > 5u ? p[5] & 1u : 0u, half = NSTEP / 2u * sizeof(step_t);
