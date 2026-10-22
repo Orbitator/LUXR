@@ -4,7 +4,10 @@
 # [ONE CLICK: Felucca's build, pointed at oneclick.c and its own tables; identity FM-1_8XY.]
 """Build ONE CLICK: the app, the update loader and an installable .fwsc package.
 
-  tools/build.py [--release X.Y[-suffix]]
+  tools/build.py [--release X.Y[-suffix]] [--app lxr]
+
+--app lxr builds LXR FM-1 instead (firmware/src/lxrfm1.c, identity FM-1_87Y, lxr-fm1.fwsc): its sample layer
+needs the Sonic Potions LXR sources ($LXR_SRC, else cloned into build/ext/LXR), whose licence is not the GPL.
 
 Outputs in build/: oneclick.bin (app), loader/ota.bin (update loader),
 oneclick.fwsc (package). A release build (--release X.Y) writes oneclick-X.Y.fwsc and a folder
@@ -52,6 +55,8 @@ SDK_SHA256 = {
 
 PRODUCT = "FM-1_810"                # package identity; release builds are FM-1_8XY
 VERSION = None                      # FELUCCA_VERSION for release builds (default: firmware/src/felucca.c)
+APP = "oneclick"                    # --app: the unit firmware/src/UNIT.c, the output names
+UNIT, NAME = "oneclick", "oneclick"
 
 
 def toolchain():
@@ -101,6 +106,8 @@ def generate():
             [tools / "gen_aa_keycaps.py", GEN / "ui_keycaps.h"],
             [tools / "gen_ui_palettes.py", GEN / "ui_palettes.h"],
             [tools / "gen_tables.py", GEN / "oc_tables.h"]]
+    if APP == "lxr":                 # the LXR's transient samples (their own licence: not in this repository)
+        cmds.append([tools / "gen_lxr_transients.py", GEN / "lxr_transients.h"])
     procs = [subprocess.Popen([sys.executable, *map(str, c)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                               text=True) for c in cmds]
     failed = []
@@ -196,14 +203,15 @@ def build_app():
     if v in ("0", "1", "2", "3"):
         flags.append(f"-DFELUCCA_USB_LAYOUT={v}")
     flags.append(f'-DFELUCCA_ID="{PRODUCT}"')
+    unit = FW / "src" / f"{UNIT}.c"
     if VERSION:
         flags.append(f'-DOC_VERSION="{VERSION}"')
     # felucca.c goes to LLVM IR without the optimizer, the main-loop functions (UI, stores, editor) are
     # marked minsize (tools/size_fns.py), then the IR is compiled at -Os. FELUCCA_SIZE=0: -Os everywhere
     size = os.environ.get("FELUCCA_SIZE") == "1"   # (tools/size_fns.py knows Felucca's function names: off)
     cmain = (("cc", *flags, "-S", "-emit-llvm", "-Xclang", "-disable-llvm-optzns", "-c",
-              FW / "src" / "oneclick.c", "-o", OUT / "felucca.ll") if size else
-             ("cc", *flags, "-c", FW / "src" / "oneclick.c", "-o", OUT / "felucca.o"))
+              unit, "-o", OUT / "felucca.ll") if size else
+             ("cc", *flags, "-c", unit, "-o", OUT / "felucca.o"))
     tc_all(("cc", "-c", FW / "crt0.S", "-o", OUT / "crt0.o"),
            ("cc", "-c", FW / "hal" / "fm1_vec.S", "-o", OUT / "fm1_vec.o"),
            ("cc", "-c", FW / "hal" / "fm1_isr.S", "-o", OUT / "fm1_isr.o"),
@@ -241,7 +249,7 @@ def build_app():
             img += b"\xff" * (load - APP_XIP - len(img))
             img += blob
     img += b"\xff" * (-len(img) % 4)
-    (OUT / "oneclick.bin").write_bytes(img)
+    (OUT / f"{NAME}.bin").write_bytes(img)
     return bytes(img), syms, dis, rt
 
 
@@ -331,23 +339,28 @@ def mmio_check():
 
 
 def main():
-    global PRODUCT, VERSION
+    global PRODUCT, VERSION, APP, UNIT, NAME
     ap = argparse.ArgumentParser()
     ap.add_argument("--gen", action="store_true", help="only the generated headers (the host tests, the emulator)")
     ap.add_argument("--release", metavar="X.Y", help="release build: identity FM-1_9XY, version string vX.Y")
     ap.add_argument("--sdk", type=Path, help="JieLi AC79 SDK checkout (default: $AC79_SDK)")
+    ap.add_argument("--app", choices=("oneclick", "lxr"), default="oneclick",
+                    help="oneclick (default) or lxr: LXR FM-1, the drum machine with the LXR's transient samples")
     a = ap.parse_args()
+    APP = a.app
+    if APP == "lxr":
+        UNIT, NAME, PRODUCT = "lxrfm1", "lxr-fm1", "FM-1_870"
     if a.gen:
         generate()
         return
-    name = "oneclick.fwsc"
+    name = f"{NAME}.fwsc"
     if a.release:                   # one digit each: the identity has room for two (X.Y.Z and X.Y.Z.W keep X.Y's)
         m = re.fullmatch(r"(\d)\.(\d)(?:\.\d){0,2}(-[A-Za-z0-9]+)?", a.release)
         if not m:
             raise SystemExit(f"--release {a.release}: use X.Y, X.Y.Z, X.Y.Z.W or X.Y-suffix, one digit each")
-        PRODUCT = "FM-1_8" + m[1] + m[2]
+        PRODUCT = "FM-1_8" + (m[1] + m[2] if APP != "lxr" else "7" + m[2])   # (LXR FM-1: FM-1_87Y)
         VERSION = "v" + a.release.lower()      # e.g. v1.0, v1.1-rc1
-        name = f"oneclick-{a.release}.fwsc"
+        name = f"{NAME}-{a.release}.fwsc"
     fm1pkg_make.SDK = a.sdk
     for rel, sha in SDK_SHA256.items():          # fail early without the SDK
         if hashlib.sha256(fm1pkg_make.sdk_file(rel)).hexdigest() != sha:
@@ -374,14 +387,14 @@ def main():
     att = SRC / "assets" / "samples-cc0" / "ATTRIBUTION.txt"
     if att.exists():
         shutil.copy(att, OUT / "ATTRIBUTION.txt")
-    print(f"app      {OUT / 'oneclick.bin'}  {len(img)} B")
+    print(f"app      {OUT / (NAME + '.bin')}  {len(img)} B")
     print(f"loader   {LDR / 'ota.bin'}  {len(ota)} B")
     print(f"package  {OUT / name}  {len(pkg)} B, identity {PRODUCT}")
     if a.release:                   # what a release carries: the package, the app and every licence they need
         rel = OUT / f"release-{a.release}"
         shutil.rmtree(rel, ignore_errors=True)
         (rel / "LICENSES").mkdir(parents=True)
-        app = f"oneclick-{a.release}-app.bin"
+        app = f"{NAME}-{a.release}-app.bin"
         (rel / name).write_bytes(pkg)
         (rel / app).write_bytes(img)
         (rel / "SHA256SUMS").write_text("".join(f"{hashlib.sha256(b).hexdigest()}  {n}\n"

@@ -4,6 +4,9 @@
  * the boot-loop guard (two boots that die in their first 30 s -> UBOOT), the fault screen, OCT- + OCT+ held 5 s ->
  * UBOOT, the USB soft key -> UBOOT, the M-UPGRADE handshake and update (ota.c). These are how a broken firmware is
  * replaced without opening the FM-1: do not take them out.] */
+#ifndef APP_BANNER
+#define APP_BANNER "ONE CLICK"                   /* the boot screen (lxrfm1.c: LXR FM-1) */
+#endif
 extern uint32_t _data_start[], _data_end[], _data_load[], _bss_start[], _bss_end[];
 extern uint32_t _pool_start[], _pool_end[], _rt_start[], _rt_end[], _rt_load[];
 
@@ -162,7 +165,7 @@ static void fm1_main(void)
     }
     lcd_init();
     palette_set(PAL_AMBER);                       /* (the banners' colours before ui_init) */
-    oc_banner("ONE CLICK", "FM-1 " OC_VERSION);
+    oc_banner(APP_BANNER, "FM-1 " OC_VERSION);
     fm1_input_init();
     fm1_adc_init();
     panel_init();
