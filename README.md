@@ -30,7 +30,7 @@ Amp-Hüllkurve eingemischt; SNAP ist der Pitch-Snap der LXR (LEVEL = Stärke, PI
 ## Bedienung
 
 **GLO lange halten (ab 250 ms) = SHIFT.** Wird GLO zusammen mit einem anderen Bedienelement gedrückt, gilt SHIFT
-sofort. GLO kurz tippen öffnet den MIXER.
+sofort. GLO kurz tippen öffnet den MIXER, nochmal tippen schaltet auf dessen Seite 2 (PAN) und zurück.
 
 | Bedienelement | normal | mit SHIFT |
 |---|---|---|
@@ -55,7 +55,8 @@ sofort. GLO kurz tippen öffnet den MIXER.
 | FX | FX | Level, Pan, Delay-Send, Reverb-Send | Delayzeit, Feedback, Hallgröße, Dämpfung |
 | SCL | PATTERNS | Pattern (spielend: wechselt am Pattern-Ende), Chain (spielt N Patterns nacheinander) | |
 | ARP | NOTE REPEAT | Rate, Velocity, Vel-Modus (fest, steigend, fallend, zufällig), Latch | Humanize |
-| GLO (tippen) | MIXER | Lautstärke der vier Sounds der Bank | Pan der vier Sounds |
+| GLO (tippen) | MIXER, Seite 1 | Lautstärke der vier Sounds der Bank | Pan der vier Sounds |
+| GLO (nochmal tippen) | MIXER, Seite 2: PAN | Pan der vier Sounds der Bank (L64 … C … R63) | Lautstärke |
 | SAVE | STORE | Platz 1–8, Aktion (Save, Load, Load Kit) – OCT+ führt aus | |
 
 **Weiße Tasten (16): Steps setzen.** Sie sind die 16 Steps des angezeigten Takts der gewählten Spur (LED = Step an,

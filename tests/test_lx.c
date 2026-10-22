@@ -170,6 +170,21 @@ int main(int argc, char **argv)
     CHECK(ui.page == PG_MIX, "mixer still");
     snprintf(path, sizeof path, "%s/lx_mixer.ppm", dir);
     host_ppm(path);
+    /* GLO tapped again: the mixer's page 2, KNOB 1..4 the pans (OCT+ bank 5-8), again: back to the levels */
+    host_tap(B_GLO);
+    CHECK(ui.page == PG_MIX && ui.mixpan, "GLO again: mixer page 2 (pan)");
+    host_turn(EN_K1, -20);
+    CHECK(snd[0].pan == -20 && snd[0].level == 110u, "page 2 K1: kick pan %d (level %u kept)", snd[0].pan, snd[0].level);
+    host_tap(B_OCTUP);
+    host_turn(EN_K3, 30);
+    CHECK(snd[6].pan == 40, "page 2, bank 5-8, K3: rim pan %d", snd[6].pan);
+    snprintf(path, sizeof path, "%s/lx_mixer_pan.ppm", dir);
+    host_ppm(path);
+    host_tap(B_OCTDN);
+    host_tap(B_GLO);
+    CHECK(ui.page == PG_MIX && !ui.mixpan, "GLO again: back to the levels");
+    host_turn(EN_K1, -10);
+    CHECK(snd[0].level == 100u, "page 1 K1: kick level %u", snd[0].level);
 
     /* 4. SEQ: white keys the steps of the bar, OCT the bars, SHIFT + OCT+ a bar more */
     host_tap(B_SEQ);

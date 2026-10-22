@@ -3,8 +3,9 @@
  *
  *   KNOBS   SELECT tempo (SHIFT: swing) · ALGORITHM the sound 1..8 (SHIFT: the pattern) · PRESETS the sound's presets
  *           (SHIFT: the sample layer's sample) · KNOB 1..4 the page's four cards, SHIFT the page's second row;
- *           on the MIXER the levels of the four sounds of the bank (SHIFT: their pans) · MASTER volume
- *   SHIFT   GLO held (from 250 ms, or at once when another control is used while it is down). GLO tapped: the MIXER.
+ *           on the MIXER the levels of the four sounds of the bank (its page 2: their pans) · MASTER volume
+ *   SHIFT   GLO held (from 250 ms, or at once when another control is used while it is down). GLO tapped: the MIXER,
+ *           tapped again its page 2 (PAN) and back.
  *   PAGES   HOME kit · SEQ sequencer · EDIT synth layer (again: sample layer) · ENV sample layer · LFO · FX ·
  *           SCL patterns · ARP note repeat (tap: on / off, held: while held) · GLO mixer · SAVE store
  *   PLAY    start / stop (SHIFT: from the top)     REC arm recording (SHIFT: arm ERASE)
@@ -149,6 +150,7 @@ static const uint8_t PAGE_P[PG_N][8] = {
 static struct {
     uint8_t page, back, hot, uboot, force, shift, bar, bank, cur, acc_mode, follow, slot, sact;
     uint8_t glo_used, arp_from, eu[NTRK];
+    uint8_t mixpan;                              /* the MIXER's page 2: KNOB 1..4 the pans */
     int8_t rot;
     uint32_t hot_t, msg_t, both_t, burst_t, burst_tag, glo_t0, arp_t0, tap_t, tap_n, tap_sum;
     char msg[28];
@@ -576,7 +578,11 @@ static void pformat(uint32_t id, char *val, const char **unit)
         break;
     }
 }
-static uint32_t knob_id(uint32_t c) { return PAGE_P[ui.page % PG_N][(c & 3u) + (ui.shift ? 4u : 0u)]; }
+static uint32_t knob_id(uint32_t c)              /* (the MIXER: page 2 the pans, SHIFT the other row) */
+{
+    uint32_t b = ui.page == PG_MIX ? (ui.mixpan ^ ui.shift) & 1u : ui.shift;
+    return PAGE_P[ui.page % PG_N][(c & 3u) + (b ? 4u : 0u)];
+}
 
 /* ----------------------------------------------------------------- keys --- */
 /* key k: 0 = F3 .. 26 = G5; the white ones counted 0..15 from F3, the black ones 0..10 from F#3 */
@@ -777,7 +783,10 @@ static void ui_input(void)
     }
     if (released & (1u << B_GLO)) {
         if (!ui.glo_used && fm1_ms - ui.glo_t0 < SHIFT_MS)
-            go_page(PG_MIX);                     /* GLO tapped: the mixer */
+        {                                        /* GLO tapped: the mixer; on it, page 2 (pan) and back */
+            if (ui.page == PG_MIX) ui.mixpan ^= 1u;
+            else { go_page(PG_MIX); ui.mixpan = 0; }
+        }
         ui.shift = 0;
     }
     if (!glo)
@@ -1096,7 +1105,13 @@ static void g_mixer(void)                        /* MIXER: eight strips, the ban
         cv_rrect(x + 2, 8, 6, 78, 2, T_LINE, inb ? T_RAISE : T_SURF);
         cv_rrect(x + 2, 86 - h, 6, h < 2 ? 2 : h, 2, c, T_LINE);
         cv_rect(x + 11, 86 - pk, 4, pk, on ? T_THEME : T_DIM);
-        cv_rect(x + 10 + s->pan * 9 / 64, 92, 2, 5, T_MID);
+        if (ui.mixpan) {                         /* PAN: a bar from the centre, the strip's colour */
+            int32_t pw = s->pan * 10 / 64;
+            cv_rect(x - 1, 94, 22, 1, T_LINE);
+            cv_rect(pw < 0 ? x + 10 + pw : x + 10, 91, pw < 0 ? -pw + 1 : pw + 1, 7, c);
+        } else {
+            cv_rect(x + 10 + s->pan * 9 / 64, 92, 2, 5, T_MID);
+        }
         cv_text_fit(x, 100, &AF_S, TRK_SHORT[t], on ? T_TEXT : T_DIM, inb ? T_RAISE : T_SURF, 22);
         if ((song.mute >> t) & 1u) cv_text_fit(x + 1, 108 + 2, &AF_S, "M", C_REC, inb ? T_RAISE : T_SURF, 10);
         if ((song.solo >> t) & 1u) cv_text_fit(x + 11, 108 + 2, &AF_S, "S", T_ACCENT, inb ? T_RAISE : T_SURF, 10);
@@ -1196,28 +1211,33 @@ static void draw_foot(int force)
 {
     static const khint_t H_SEQ[3] = {{KC_KEYS, "STEPS"}, {KC_OCTPM, "BAR"}, {KC_GLO, "SHIFT"}};
     static const khint_t H_MIX[3] = {{KC_K14, "LEVEL"}, {KC_OCTPM, "BANK"}, {KC_GLO, "PAN"}};
+    static const khint_t H_MIXPAN[3] = {{KC_K14, "PAN"}, {KC_OCTPM, "BANK"}, {KC_GLO, "LEVEL"}};
     static const khint_t H_NR[3] = {{KC_KEYS, "PADS"}, {KC_K1, "RATE"}, {KC_ARP, "OFF"}};
     static const khint_t H_SAVE[3] = {{KC_OCTUP, "DO IT"}, {KC_K1, "SLOT"}, {KC_OCTDN, "BACK"}};
     static const khint_t H_PAGE[3] = {{KC_ALGO, "SOUND"}, {KC_PRESETS, "PRESET"}, {KC_GLO, "SHIFT"}};
     static const khint_t H_SHIFT[3] = {{KC_K14, "ROW B"}, {KC_KEYS, "MUTE"}, {KC_PLAY, "TOP"}};
     char b[32];
     uint32_t sig;
-    const khint_t *h = ui.shift ? H_SHIFT : ui.page == PG_SEQ ? H_SEQ : ui.page == PG_MIX ? H_MIX :
+    const khint_t *h = ui.shift ? H_SHIFT : ui.page == PG_SEQ ? H_SEQ : ui.page == PG_MIX ? (ui.mixpan ? H_MIXPAN : H_MIX) :
                        ui.page == PG_NR ? H_NR : ui.page == PG_SAVE ? H_SAVE : H_PAGE;
     str_cpy(b, PG_NAME[ui.page % PG_N], sizeof b);
     if (ui.page == PG_MIX)
-        str_cat(b, ui.bank ? " 5-8" : " 1-4", sizeof b);
+        str_cat(b, ui.mixpan ? (ui.bank ? " 5-8 PAN" : " 1-4 PAN") : ui.bank ? " 5-8" : " 1-4", sizeof b);
     if (ui.page == PG_SEQ && ui.acc_mode)
         str_cat(b, " ACC", sizeof b);
     if (ui.shift)
         str_cat(b, " B", sizeof b);
-    sig = hsh(ui.page * 31u + ui.shift * 101u, b);
+    sig = hsh(ui.page * 31u + ui.shift * 101u + ui.mixpan * 7u, b);
     if (!force && sig == ui.sig[6])
         return;
     ui.sig[6] = sig;
     cv_begin(240, H_FOOT, T_BG);
     cv_keycap(6, 2, ui.shift ? KC_GLO : PAGE_KC[ui.page % PG_N], T_KEY, T_INK, T_BG);
     cv_text(52, CAP_IN(M, 18), &AF_M, b, ui.shift ? T_ACCENT : T_TEXT);
+    if (ui.page == PG_MIX && !ui.shift) {        /* the MIXER's two pages: dots, the one shown lit */
+        cv_rrect(218, 7, 6, 6, 3, ui.mixpan ? T_LINE : T_THEME, T_BG);
+        cv_rrect(227, 7, 6, 6, 3, ui.mixpan ? T_THEME : T_LINE, T_BG);
+    }
     cv_key_row(6, 234, 21, h, 3u, 7u, T_BG);
     cv_blit(0, Y_FOOT);
 }
