@@ -53,6 +53,7 @@
 #include "fm1_flash.h"
 #include "oc_tables.h"
 #include "lxr_transients.h"
+#include "own_transients.h"
 
 #include "libc.c"
 #include "lcd.c"

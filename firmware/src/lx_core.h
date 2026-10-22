@@ -20,21 +20,30 @@ enum { K_DRUM, K_SNARE, K_CLAP, K_HATC, K_HATO, K_CYM, K_N };
 static const uint8_t TRK_KIND[NTRK] = {K_DRUM, K_SNARE, K_CLAP, K_HATC, K_HATO, K_DRUM, K_DRUM, K_CYM};
 static const char *const TRK_NAME[NTRK] = {"KICK", "SNARE", "CLAP", "CL HAT", "OP HAT", "TOM", "RIM", "CYMBAL"};
 static const char *const TRK_SHORT[NTRK] = {"BD", "SD", "CP", "CH", "OH", "TM", "RS", "CY"};
-/* the sample layer: off, the LXR's SNAP (a pitch snap of the synth layer), then its twelve transient samples */
+/* the sample layer: off, the LXR's SNAP (a pitch snap of the synth layer), the LXR's twelve transient samples, then
+ * sixteen of the sound's own (tools/gen_own_transients.py) */
 enum { TR_OFF, TR_SNAP, TR_SMP0 };
-#define TR_N (TR_SMP0 + 12)
+#define TR_OWN0 (TR_SMP0 + 12)
+#define TR_N (TR_OWN0 + 16)
+typedef struct { uint8_t dest, wave, rate; int8_t depth; } lfo_t;   /* LD_*, LW_*, LR_* (with the tempo), -64..63 */
 
 typedef struct {                 /* a sound; values 0..127 unless noted */
     uint8_t p[8];                /* the synth layer: eight parameters by kind (lx_synth.c LX_LABEL) */
     uint8_t smp, slvl, spitch, sdec;   /* the sample layer: TR_*, level, pitch (64 = as recorded), decay (127 = whole) */
     uint8_t syn;                 /* the synth layer's level */
-    uint8_t level, dly, rev;
+    uint8_t level, dly, rev, drv;   /* the sends: delay, reverb, drive */
     int8_t pan;                  /* -64..63 */
-    uint8_t lfo_rate, lfo_depth, lfo_dest, lfo_wave;   /* LD_*, LW_* */
-    uint8_t preset;              /* PRESETS: the variation it was rolled from (0 = the factory sound) */
+    lfo_t lfo[2];
+    uint8_t preset;              /* the variation it was rolled from (0 = the factory sound) */
 } sound_t;
-enum { LD_OFF, LD_PITCH, LD_FILTER, LD_LEVEL, LD_PAN, LD_N };
+enum { LD_OFF, LD_PITCH, LD_FILTER, LD_DECAY, LD_LEVEL, LD_PAN, LD_SAMPLE, LD_N };
 enum { LW_SINE, LW_TRI, LW_SAW, LW_SQR, LW_SH, LW_N };
+enum { LR_16, LR_8, LR_4, LR_2, LR_1BAR, LR_2BAR, LR_4BAR, LR_8BAR, LR_N };   /* the LFO's cycle, with the tempo */
+static const uint8_t LR_STEPS[LR_N] = {1, 2, 4, 8, 16, 32, 64, 128};         /* (16ths) */
+enum { DM_SOFT, DM_HARD, DM_FOLD, DM_N };                                    /* the drive bus */
+enum { Q_16, Q_8, Q_4, Q_N };                                                /* recording: the grid */
+static const uint8_t Q_STEPS[Q_N] = {1, 2, 4};
+enum { CLICK_OFF, CLICK_REC, CLICK_ON, CLICK_N };
 
 /* a step: 0 = rest, else bits 0..6 the velocity (1..127), bit 7 the accent */
 #define S_ACC 0x80u
@@ -52,13 +61,17 @@ typedef struct {
     uint8_t chain;               /* patterns chained from chain0 (1 = the pattern loops) */
     uint8_t chain0;
     uint8_t rec, erase;          /* REC armed; SHIFT + REC: the armed mode is ERASE */
-    uint8_t click;               /* the metronome */
+    uint8_t click;               /* the metronome: CLICK_* */
+    uint8_t qgrid, qround;       /* recording: the grid (Q_*), to the nearest point (0) or the one before (1) */
     uint8_t midi_ch;             /* MIDI IN: 0 every channel, 1..16 */
     uint8_t theme;
     int8_t tune;                 /* the kit's tune, -24..24 semitones */
     uint8_t ddec;                /* the kit's decay, 64 = as the sounds have it */
     uint8_t mute, solo;          /* bit t: track t */
-    uint8_t dly_div, dly_fb, rev_size, rev_damp;   /* the global FX */
+    /* the global FX (stored with the kit) */
+    uint8_t drv_mode, drv_amt, drv_tone, drv_lvl;  /* the drive bus: DM_*, gain, tone, return */
+    uint8_t dly_div, dly_fb, dly_tone, dly_lvl;    /* the delay: time (16ths), feedback, tone, return */
+    uint8_t rev_size, rev_damp, rev_lvl;           /* the reverb */
     uint16_t master_q12;
     uint32_t step, pos;          /* the global 16th, samples into it */
     uint32_t pstep;              /* 16ths since the pattern began */

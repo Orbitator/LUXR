@@ -102,11 +102,31 @@ int main(int argc, char **argv)
         CHECK(peak_out > 0.01f, "the sample layer of %s sounds alone (peak %.4f)", TRK_NAME[t], peak_out);
         snd[t].syn = 127;
     }
-    /* PRESETS rolls a sound; a few bars of them */
-    host_turn(EN_PRESET, 7);
-    CHECK(snd[0].preset == 7u, "PRESETS: preset %u", snd[0].preset);
-    for (t = 0; t < NTRK; t++)
-        sound_preset(t, 11u + t);
+    /* sixteen own transients a sound, every one of them sounds (the synth layer off) */
+    {
+        uint32_t k, quiet = 0;
+        for (t = 0; t < NTRK; t++) {
+            snd[t].syn = 0;
+            snd[t].slvl = 127;
+            for (k = 0; k < 16u; k++) {
+                snd[t].smp = (uint8_t)(TR_OWN0 + k);
+                reset_count();
+                ev_push(EV_HIT, t, 120);
+                host_run(60, watch, 0);
+                quiet += peak_out < 0.01f;
+            }
+            sound_init(t);
+        }
+        CHECK(!quiet && TR_N - TR_OWN0 >= 16, "16 own transients for each sound, all sound (%u quiet)", quiet);
+    }
+    /* SELECT rolls a new sound for the selected one: always with a transient sample */
+    for (t = 0; t < 40u; t++) {
+        sel_track((int32_t)(t % NTRK));
+        host_turn(EN_SELECT, 1);
+        CHECK(snd[song.sel].smp >= TR_SMP0 && snd[song.sel].slvl > 0, "SELECT: %s without a sample (%u)", TRK_NAME[song.sel],
+              snd[song.sel].smp);
+    }
+    sel_track(0);
     host_run(2 * BAR_MS, watch, 0);
     if (wav) {
         frames0 = (uint32_t)((ftell(wav) - 44) / 4);
@@ -320,7 +340,7 @@ int main(int argc, char **argv)
     host_ppm(path);
     host_tap(B_PLAY);
 
-    /* 7. the store: save, change, load */
+    /* 7. the store: SAVE writes kit + patterns (K2: or one of them), PRESETS loads the patches (SHIFT: patterns only) */
     host_boot(5);
     snd[2].level = 33;
     pat[3].s[4][9] = 77;
@@ -328,17 +348,45 @@ int main(int argc, char **argv)
     host_turn(EN_K1, 2);                         /* slot 3 */
     host_tap(B_OCTUP);
     CHECK(ui.used[2], "saved into slot 3");
-    snd[2].level = 99;
-    pat[3].s[4][9] = 0;
-    host_turn(EN_K2, 1);                         /* LOAD */
-    host_tap(B_OCTUP);
-    CHECK(snd[2].level == 33u && pat[3].s[4][9] == 77u, "loaded back (%u %u)", snd[2].level, pat[3].s[4][9]);
     snprintf(path, sizeof path, "%s/lx_store.ppm", dir);
     host_ppm(path);
+    snd[2].level = 44;
+    pat[3].s[4][9] = 55;
+    host_turn(EN_K1, 2);                         /* slot 5: the kit only (its patterns: the ones now, none stored) */
+    host_turn(EN_K2, 1);
+    CHECK(ui.swhat == SW_KIT, "K2: KIT");
+    host_tap(B_OCTUP);
+    CHECK(ui.used[4], "kit saved into slot 5");
+    snd[2].level = 99;
+    pat[3].s[4][9] = 0;
+    ui.patch = 3;                                /* PRESETS from slot 4 on: the next patch in use is 5 */
+    host_turn(EN_PRESET, 1);
+    CHECK(ui.patch == 4u && snd[2].level == 44u, "PRESETS: patch 5 loaded (kit %u)", snd[2].level);
+    host_turn(EN_PRESET, -1);
+    CHECK(ui.patch == 2u && snd[2].level == 33u && pat[3].s[4][9] == 77u, "PRESETS back: patch 3 (%u %u)", snd[2].level,
+          pat[3].s[4][9]);
+    snd[2].level = 99;
+    pat[3].s[4][9] = 0;
+    h_pressed |= 1u << B_GLO; h_held |= 1u << B_GLO;   /* SHIFT + PRESETS: the patterns only */
+    host_run(300, 0, 0);
+    host_turn(EN_PRESET, 1);                     /* patch 5's patterns (55), the kit as it is (99) */
+    h_held &= ~(1u << B_GLO);
+    host_run(40, 0, 0);
+    CHECK(ui.patch == 4u && pat[3].s[4][9] == 55u && snd[2].level == 99u, "SHIFT + PRESETS: patterns only (%u %u %u)",
+          ui.patch, pat[3].s[4][9], snd[2].level);
+    host_tap(B_SAVE);
+    host_turn(EN_K1, -2);                        /* slot 3 again, the patterns only: its kit stays */
+    host_turn(EN_K2, 1);
+    pat[3].s[4][9] = 66;
+    host_tap(B_OCTUP);
+    snd[2].level = 1;
+    proj_load(2, SW_ALL);
+    CHECK(snd[2].level == 33u && pat[3].s[4][9] == 66u, "SAVE PATTERN kept the slot's kit (%u %u)", snd[2].level, pat[3].s[4][9]);
+    host_tap(B_SAVE);
     host_tap(B_OCTDN);
     CHECK(ui.page != PG_SAVE, "OCT- leaves the store");
-    host_boot(6);                                /* a new boot sees the slot */
-    CHECK(ui.used[2] && ui.slot == 2u, "after a boot: slot 3 in use, selected");
+    host_boot(6);                                /* a new boot sees the slots */
+    CHECK(ui.used[2] && ui.used[4] && ui.slot == 2u, "after a boot: slots 3 and 5 in use, 3 selected");
 
     /* 8. the other pages' screens */
     host_tap(B_EDIT);
@@ -349,12 +397,116 @@ int main(int argc, char **argv)
     CHECK(ui.page == PG_SAMPLE, "EDIT again: the sample layer");
     snprintf(path, sizeof path, "%s/lx_sample.ppm", dir);
     host_ppm(path);
+    host_tap(B_EDIT);
+    CHECK(ui.page == PG_SND, "EDIT a third time: the sound's mix and sends");
+    host_tap(B_EDIT);
+    CHECK(ui.page == PG_VOICE, "EDIT again: back to the synth layer");
     host_tap(B_HOME);
     snprintf(path, sizeof path, "%s/lx_kit.ppm", dir);
     host_ppm(path);
     host_tap(B_FX);
     host_tap(B_OCTUP);
     CHECK(song.sel == 1u, "OCT+ on FX: the next sound");
+
+    /* 10. FX: sends, DRIVE (3 modes), DELAY, REVERB pages; the drive bus sounds */
+    host_boot(7);
+    host_tap(B_FX);
+    CHECK(ui.page == PG_FXS, "FX: the sends");
+    host_turn(EN_K1, 100);
+    CHECK(snd[0].drv == 100u, "FX sends K1: kick drive send %u", snd[0].drv);
+    host_tap(B_FX);
+    CHECK(ui.page == PG_FXD, "FX again: DRIVE");
+    host_turn(EN_K1, 2);
+    CHECK(song.drv_mode == DM_FOLD, "DRIVE MODE: FOLD");
+    snprintf(path, sizeof path, "%s/lx_drive.ppm", dir);
+    host_ppm(path);
+    host_tap(B_FX);
+    CHECK(ui.page == PG_FXDL, "FX again: DELAY");
+    host_tap(B_FX);
+    CHECK(ui.page == PG_FXR, "FX again: REVERB");
+    host_tap(B_FX);
+    CHECK(ui.page == PG_FXS, "FX again: back to the sends");
+    {
+        float dry, wet;
+        uint32_t m;
+        snd[0].drv = 0;
+        for (m = 0; m < 2u; m++) {
+            if (m) snd[0].drv = 127;
+            reset_count();
+            ev_push(EV_HIT, 0, 120);
+            host_run(300, watch, 0);
+            if (m) wet = (float)sum_sq; else dry = (float)sum_sq;
+        }
+        CHECK(wet > dry * 1.05f, "the drive send adds the drive bus (%.1f -> %.1f)", dry, wet);
+    }
+
+    /* 11. LFO: two a sound, in time with the tempo */
+    host_tap(B_LFO);
+    CHECK(ui.page == PG_LFO1, "LFO: LFO 1");
+    host_turn(EN_K1, LD_PITCH);
+    host_turn(EN_K3, -2);                        /* 1 BAR -> 1/4 */
+    host_turn(EN_K4, 20);
+    CHECK(snd[0].lfo[0].dest == LD_PITCH && snd[0].lfo[0].rate == LR_4 && snd[0].lfo[0].depth == 52, "LFO 1: %u %u %d",
+          snd[0].lfo[0].dest, snd[0].lfo[0].rate, snd[0].lfo[0].depth);
+    snprintf(path, sizeof path, "%s/lx_lfo.ppm", dir);
+    host_ppm(path);
+    host_tap(B_LFO);
+    CHECK(ui.page == PG_LFO2, "LFO again: LFO 2");
+    host_turn(EN_K1, LD_PAN);
+    host_turn(EN_K4, -96);
+    CHECK(snd[0].lfo[1].dest == LD_PAN && snd[0].lfo[1].depth == -64, "LFO 2: PAN, depth %d", snd[0].lfo[1].depth);
+
+    /* 12. SEQ + SHIFT: KNOB 1 doubles the pattern (COPY x2: the notes too) or halves it */
+    host_boot(8);                                /* (it starts on SEQ) */
+    h_pressed |= 1u << B_GLO; h_held |= 1u << B_GLO;
+    host_run(300, 0, 0);
+    host_turn(EN_K1, 1);
+    CHECK(pat_len(PAT) == 32u && PAT->s[0][16] == PAT->s[0][0] && PAT->s[0][16], "x2 with COPY: 32 steps, bar 2 a copy");
+    host_turn(EN_K2, -1);                        /* COPY off */
+    host_turn(EN_K1, 1);
+    CHECK(pat_len(PAT) == 64u && !PAT->s[0][32] && PAT->s[0][16], "x2 without COPY: 64 steps, bars 3-4 empty");
+    host_turn(EN_K1, 1);
+    CHECK(pat_len(PAT) == 64u, "64 steps at most");
+    host_turn(EN_K1, -1);
+    CHECK(pat_len(PAT) == 32u, "turned back: half (%u)", pat_len(PAT));
+    h_held &= ~(1u << B_GLO);
+    host_run(40, 0, 0);
+
+    /* 13. SEQ again: LIVE, the eight sounds at once; with REC + PLAY written, quantized; REC held: QUANTIZE */
+    host_boot(9);
+    memset(pat[0].s, 0, sizeof pat[0].s);
+    host_tap(B_SEQ);                             /* (it starts on SEQ: a tap is the second press) */
+    CHECK(ui.page == PG_LIVE, "SEQ again: LIVE");
+    reset_count();
+    h_keys |= key_white(0) | key_white(1) | key_white(3) | key_white(15);
+    host_run(60, watch, 0);
+    h_keys = 0;
+    host_run(40, watch, 0);
+    CHECK(hits[0] == 1u && hits[1] == 1u && hits[3] == 1u && hits[7] == 1u, "four pads at once: four sounds (%u %u %u %u)",
+          hits[0], hits[1], hits[3], hits[7]);
+    snprintf(path, sizeof path, "%s/lx_live.ppm", dir);
+    host_ppm(path);
+    h_pressed |= 1u << B_REC; h_held |= 1u << B_REC;   /* REC held: QUANTIZE (and not armed) */
+    host_run(500, 0, 0);
+    h_held &= ~(1u << B_REC);
+    host_run(40, 0, 0);
+    CHECK(ui.page == PG_REC && !song.rec, "REC held: QUANTIZE, not armed (page %u rec %u)", ui.page, song.rec);
+    host_turn(EN_K1, 2);
+    CHECK(song.qgrid == Q_4, "QUANTIZE GRID 1/4");
+    snprintf(path, sizeof path, "%s/lx_quant.ppm", dir);
+    host_ppm(path);
+    host_tap(B_SEQ);
+    host_tap(B_SEQ);
+    host_tap(B_REC);
+    CHECK(song.rec, "REC tapped: armed");
+    host_tap(B_PLAY);
+    host_run(BAR_MS / 16u * 5u + 30u, 0, 0);     /* step 6 (index 5): to the beat before it (BEFORE) or after (NEAREST) */
+    host_key(key_white(1));
+    host_run(BAR_MS, 0, 0);
+    CHECK(pat[0].s[1][4] && !pat[0].s[1][5], "the live hit on step 6 quantized to 1/4: step 5 (%u %u)", pat[0].s[1][4],
+          pat[0].s[1][5]);
+    host_tap(B_PLAY);
+    host_tap(B_REC);
 
     /* 9. UBOOT: OCT- and OCT+ 5 s */
     h_pressed |= 3u << B_OCTDN; h_held |= 3u << B_OCTDN;

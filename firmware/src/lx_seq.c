@@ -23,7 +23,6 @@ static volatile uint8_t seq_start;               /* PLAY pressed: step 1 at the 
 static uint32_t song_abs;                        /* samples since PLAY (the note repeat's grid) */
 static volatile uint8_t hit_flash;               /* bit t: track t was hit (the UI clears it) */
 
-static uint32_t step_base(void) { return (uint32_t)FS * 15u / (song.bpm ? song.bpm : 120u); }
 static uint32_t step_len(uint32_t step)          /* samples of 16th `step`, swung */
 {
     uint32_t base = step_base(), sw = base * song.swing / 200u;
@@ -44,12 +43,14 @@ static uint32_t rec_writes;                      /* (the tests and the screen) *
 static void rec_hit(uint32_t t, uint32_t vel, uint32_t acc)
 {
     pattern_t *p = PAT;
-    uint32_t len = clamp(p->len[t], 1, NSTEP), g = song.pstep;
-    if (song.pos > step_len(song.step) / 2u) {   /* nearer the next step */
-        g++;
-        rec_skip[t] = (uint8_t)(g % len + 1u);
-    }
-    p->s[t][g % len] = (uint8_t)(clamp((int32_t)vel, 1, 127) | (acc ? S_ACC : 0u));
+    uint32_t len = clamp(p->len[t], 1, NSTEP), g = song.pstep, q = Q_STEPS[song.qgrid % Q_N], r = g % q, at = g - r;
+    uint32_t sl = step_len(song.step);
+    /* the grid point: the nearest one (QUANTIZE ROUND NEAREST), or the one the hit came after (BEFORE) */
+    if (!song.qround && 2u * (r * sl + song.pos) > q * sl)
+        at += q;
+    if (at > g)                                  /* written ahead of the playhead: it sounded already, it does not play again */
+        rec_skip[t] = (uint8_t)(at % len + 1u);
+    p->s[t][at % len] = (uint8_t)(clamp((int32_t)vel, 1, 127) | (acc ? S_ACC : 0u));
     rec_writes++;
 }
 static int erasing(void) { return song.rec && song.erase && song.playing; }
@@ -153,11 +154,9 @@ static void track_step(uint32_t t)
     pattern_t *p = PAT;
     uint32_t len = clamp(p->len[t], 1, NSTEP), idx = song.pstep % len;
     uint8_t s = p->s[t][idx];
-    if (rec_skip[t]) {
-        uint32_t k = rec_skip[t];
+    if (rec_skip[t] == idx + 1u) {               /* written ahead: it sounded already (the pad) */
         rec_skip[t] = 0;
-        if (k == idx + 1u)                       /* written just before: it sounded already (the pad) */
-            return;
+        return;
     }
     if (erasing() && (((nr.held | nr.latched) >> t) & 1u)) {   /* ERASE: the held pads' steps go */
         p->s[t][idx] = 0;
@@ -207,6 +206,7 @@ static void seq_block(uint32_t n)
         song.pat_next = 0xFF;
         song.step = song.pos = song.pstep = 0;
         song_abs = 0;
+        lfo_clk = 0;                             /* (the LFOs from the bar PLAY began) */
         song.playing = 1;
         for (t = 0; t < NTRK; t++) {
             rec_skip[t] = 0;

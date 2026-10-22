@@ -76,37 +76,48 @@ static inline int32_t svf_lp(voice_t *v, int32_t x, int32_t f, int32_t q)   /* (
 }
 
 /* ------------------------------------------------------------------ LFOs --- */
-static uint32_t lfo_ph[NTRK];
-static int32_t lfo_v[NTRK], lfo_sh[NTRK];
-static void lfo_block(void)                   /* once a block: lfo_v Q15 */
+/* two LFOs a sound, in time with the tempo (their cycle LR_*: 1/16 .. 8 bars, from the bar PLAY began), bipolar depth */
+static uint32_t lfo_clk;                         /* samples since PLAY (stopped: free running) */
+static uint32_t lfo_was[NTRK][2];
+static int32_t lfo_v[NTRK][2], lfo_sh[NTRK][2];
+static uint32_t step_base(void) { return (uint32_t)FS * 15u / (song.bpm ? song.bpm : 120u); }
+static void lfo_block(uint32_t n)                /* once a block: lfo_v Q15 */
 {
-    uint32_t t;
-    for (t = 0; t < NTRK; t++) {
-        const sound_t *s = &snd[t];
-        uint32_t was = lfo_ph[t], ph;
-        int32_t v;
-        if (s->lfo_dest == LD_OFF || !s->lfo_depth) {
-            lfo_v[t] = 0;
-            continue;
+    uint32_t t, k, base = step_base();
+    lfo_clk += n;
+    for (t = 0; t < NTRK; t++)
+        for (k = 0; k < 2u; k++) {
+            const lfo_t *l = &snd[t].lfo[k];
+            uint32_t per, ph;
+            int32_t v;
+            if (l->dest == LD_OFF || !l->depth) {
+                lfo_v[t][k] = 0;
+                continue;
+            }
+            per = base * LR_STEPS[l->rate % LR_N];
+            ph = ((lfo_clk % per) / ((per >> 16) + 1u)) << 16;   /* (the phase, 2^32 a cycle, no 64-bit divide) */
+            switch (l->wave) {
+            case LW_TRI: v = (int32_t)(ph >> 15); v = v < 65536 ? v - 32768 : 98303 - v; break;
+            case LW_SAW: v = (int32_t)(ph >> 16) - 32768; break;
+            case LW_SQR: v = ph & 0x80000000u ? -32767 : 32767; break;
+            case LW_SH:
+                if (ph < lfo_was[t][k])          /* a new cycle: a new value */
+                    lfo_sh[t][k] = (int32_t)(rng() >> 17) - 16384;
+                v = lfo_sh[t][k] * 2;
+                break;
+            default: v = sine(ph); break;
+            }
+            lfo_was[t][k] = ph;
+            lfo_v[t][k] = clamp(v, -32767, 32767);
         }
-        ph = lfo_ph[t] += LFO_INC[s->lfo_rate & 127];
-        switch (s->lfo_wave) {
-        case LW_TRI: v = (int32_t)(ph >> 15); v = v < 65536 ? v - 32768 : 98303 - v; break;
-        case LW_SAW: v = (int32_t)(ph >> 16) - 32768; break;
-        case LW_SQR: v = ph & 0x80000000u ? -32767 : 32767; break;
-        case LW_SH:
-            if (ph < was)
-                lfo_sh[t] = (int32_t)(rng() >> 17) - 16384;
-            v = lfo_sh[t] * 2;
-            break;
-        default: v = sine(ph); break;
-        }
-        lfo_v[t] = clamp(v, -32767, 32767);
-    }
 }
-static inline int32_t lfo_amt(uint32_t t, uint32_t d, int32_t range)   /* +-range at full depth */
+static inline int32_t lfo_amt(uint32_t t, uint32_t d, int32_t range)   /* both LFOs on dest d: +-range at full depth */
 {
-    return snd[t].lfo_dest == d ? ((lfo_v[t] >> 7) * snd[t].lfo_depth >> 7) * range >> 8 : 0;
+    int32_t a = 0, k;
+    for (k = 0; k < 2; k++)
+        if (snd[t].lfo[k].dest == d)
+            a += ((lfo_v[t][k] >> 7) * snd[t].lfo[k].depth >> 6) * range >> 8;
+    return a;
 }
 
 /* ----------------------------------------------------------------- voices --- */
@@ -154,6 +165,9 @@ static void lx_render(uint32_t t, voice_t *v, int32_t *out, uint32_t n)
     int32_t gain = v->vel + (v->acc ? 30 : 0), drive = 16 + p[7] / 4, syn = s->syn;
     int32_t tune = clamp(song.tune, -24, 24) * 16 + lfo_amt(t, LD_PITCH, 12 * 16), lcut = lfo_amt(t, LD_FILTER, 64);
     int32_t ka, kp = lx_k(15), kc = lx_k(12), kn = 0, kt = 0, ks, kd, f = 0, q = 50000, click = 0, noise = 0, color = 0;
+    int32_t slvl = clamp(s->slvl + lfo_amt(t, LD_SAMPLE, 127), 0, 127);
+    const int8_t *tr = s->smp >= TR_OWN0 ? OWN_TRANS[t][(s->smp - TR_OWN0) % OWN_TRANS_N]   /* the sample layer's */
+                     : s->smp >= TR_SMP0 ? LXR_TRANS[(s->smp - TR_SMP0) % LXR_TRANS_N] : 0;
     uint32_t didx;
     switch (kind) {
     case K_DRUM:
@@ -202,7 +216,7 @@ static void lx_render(uint32_t t, voice_t *v, int32_t *out, uint32_t n)
         noise = p[6];
         break;
     }
-    ka = lx_k(didx);
+    ka = lx_k((uint32_t)clamp((int32_t)didx + lfo_amt(t, LD_DECAY, 30), 0, 127));
     if (kind == K_SNARE && kn < ka)              /* (the snare's body lasts as long as the longer of tone and noise) */
         ka = kn;
     if (song.ddec && song.ddec != 64)            /* the kit's DECAY: all sounds longer / shorter */
@@ -212,8 +226,8 @@ static void lx_render(uint32_t t, voice_t *v, int32_t *out, uint32_t n)
     for (i = 0; i < n; i++) {
         int32_t a = v->amp, y = 0, nz = (int32_t)(xrand(&v->noise) >> 17) - 16384, layer = 0;
         uint32_t tt = v->t++, snap = 0;
-        if (s->smp == TR_SNAP && s->slvl)         /* SNAP: up to 4x the pitch at the hit, gone in a few ms */
-            snap = (uint32_t)((v->snap * s->slvl) >> 15);
+        if (s->smp == TR_SNAP && slvl)            /* SNAP: up to 4x the pitch at the hit, gone in a few ms */
+            snap = (uint32_t)((v->snap * slvl) >> 15);
         switch (kind) {
         case K_DRUM: {
             uint32_t pi = inc + (inc >> 4) * (uint32_t)((v->penv * p[2]) >> 15) + (inc >> 5) * snap;
@@ -260,12 +274,12 @@ static void lx_render(uint32_t t, voice_t *v, int32_t *out, uint32_t n)
         if (snap)
             v->snap = lx_dec(v->snap, ks);
         y = (y * syn) >> 7;
-        if (s->smp >= TR_SMP0 && v->tph < ((uint32_t)LXR_TRANS_LEN << 20)) {   /* the sample layer */
+        if (tr && v->tph < ((uint32_t)LXR_TRANS_LEN << 20)) {   /* the sample layer (all 2205 samples long) */
             uint32_t k = v->tph >> 20;
-            int32_t x = LXR_TRANS[(s->smp - TR_SMP0) % LXR_TRANS_N][k] * 256;
+            int32_t x = tr[k] * 256;
             if (k > LXR_TRANS_LEN - 256u)        /* (the samples end abruptly: a 6 ms fade) */
                 x = x * (int32_t)(LXR_TRANS_LEN - k) >> 8;
-            layer = (((x * v->tenv) >> 15) * s->slvl) >> 7;
+            layer = (((x * v->tenv) >> 15) * slvl) >> 7;
             if (s->sdec < 127u)
                 v->tenv = lx_dec(v->tenv, kd);
             v->tph += v->tinc;
@@ -280,7 +294,7 @@ static void lx_render(uint32_t t, voice_t *v, int32_t *out, uint32_t n)
         }
         out[i] += (((y * a) >> 15) * gain) >> 7;
         v->amp = lx_dec(v->amp, ka);
-        if (v->amp < 8 && tt > 1400u && (s->smp < TR_SMP0 || v->tph >= ((uint32_t)LXR_TRANS_LEN << 20) || !s->slvl)) {
+        if (v->amp < 8 && tt > 1400u && (!tr || v->tph >= ((uint32_t)LXR_TRANS_LEN << 20) || !slvl)) {
             v->active = 0;
             break;
         }
@@ -308,9 +322,12 @@ static const uint8_t LX_RANGE[NTRK][8][2] = {
     {{60, 110}, {5, 35}, {0, 90}, {5, 40}, {0, 127}, {0, 90}, {20, 100}, {0, 70}},
     {{30, 90}, {50, 95}, {10, 110}, {20, 100}, {30, 100}, {10, 70}, {0, 50}, {0, 40}},
 };
-static const uint8_t TR_FACTORY[NTRK][2] = {     /* the sample layer: sample, level */
-    {TR_SMP0 + 0, 40}, {TR_SMP0 + 9, 40}, {TR_SMP0 + 7, 60}, {TR_SMP0 + 6, 30},
-    {TR_OFF, 40}, {TR_SMP0 + 10, 40}, {TR_SMP0 + 4, 80}, {TR_OFF, 40},
+static const uint8_t TR_FACTORY[NTRK][2] = {     /* the sample layer: one of the sound's own, its level */
+    {TR_OWN0 + 0, 50}, {TR_OWN0 + 0, 45}, {TR_OWN0 + 0, 60}, {TR_OWN0 + 0, 40},
+    {TR_OWN0 + 0, 40}, {TR_OWN0 + 0, 45}, {TR_OWN0 + 0, 70}, {TR_OWN0 + 0, 40},
+};
+static const uint8_t TR_LXR_FIT[NTRK][3] = {     /* the LXR transients that suit each sound (CLK CK2 TIK KIK RIM DRP HAT CLP KK2 SNR TOM SP2) */
+    {0, 3, 8}, {9, 11, 2}, {7, 9, 2}, {6, 2, 1}, {6, 11, 1}, {10, 2, 5}, {4, 5, 1}, {6, 11, 2},
 };
 static void sound_preset(uint32_t t, uint32_t k)   /* track t's sound k: 0 the factory one, else rolled (k the seed) */
 {
@@ -322,25 +339,35 @@ static void sound_preset(uint32_t t, uint32_t k)   /* track t's sound k: 0 the f
     }
     if (k && TRK_KIND[t] == K_DRUM && t != 6u && (xrand(&x) & 3u) == 0u)
         s->p[4] = 26;                            /* a triangle drum now and then */
-    s->smp = k ? (uint8_t)(xrand(&x) % 3u == 0u ? TR_FACTORY[t][0] : TR_SMP0 + xrand(&x) % 12u) : TR_FACTORY[t][0];
-    s->slvl = k ? (uint8_t)(20u + xrand(&x) % 70u) : TR_FACTORY[t][1];
+    /* the sample layer always plays: mostly one of the sound's own sixteen, now and then a fitting LXR one */
+    if (!k)
+        s->smp = TR_FACTORY[t][0];
+    else if (xrand(&x) % 4u)
+        s->smp = (uint8_t)(TR_OWN0 + xrand(&x) % 16u);
+    else
+        s->smp = (uint8_t)(TR_SMP0 + TR_LXR_FIT[t][xrand(&x) % 3u]);
+    s->slvl = k ? (uint8_t)(35u + xrand(&x) % 76u) : TR_FACTORY[t][1];
     s->spitch = k ? (uint8_t)(40u + xrand(&x) % 50u) : 64;
-    s->sdec = 127;
+    s->sdec = k && xrand(&x) % 3u == 0u ? (uint8_t)(50u + xrand(&x) % 70u) : 127;
     s->preset = (uint8_t)k;
 }
-static void sound_init(uint32_t t)               /* the whole sound: the factory one, centred, no LFO */
+static void sound_init(uint32_t t)               /* the whole sound: the factory one, centred, the LFOs off */
 {
     sound_t *s = &snd[t % NTRK];
+    uint32_t k;
     sound_preset(t, 0);
     s->syn = 127;
     s->level = 100;
     s->pan = (int8_t)((const int8_t[NTRK]){0, 0, 6, -12, -12, 14, 10, 16})[t % NTRK];
     s->dly = 0;
     s->rev = t == 2u || t == 7u ? 30 : 8;
-    s->lfo_rate = 60;
-    s->lfo_depth = 0;
-    s->lfo_dest = LD_OFF;
-    s->lfo_wave = LW_SINE;
+    s->drv = 0;
+    for (k = 0; k < 2u; k++) {
+        s->lfo[k].dest = LD_OFF;
+        s->lfo[k].wave = LW_SINE;
+        s->lfo[k].rate = LR_1BAR;
+        s->lfo[k].depth = 32;
+    }
 }
 
 /* -------------------------------------------------------------- effects --- */
@@ -361,11 +388,12 @@ static void fx_block(int32_t *L, int32_t *R, const int32_t *dsend, const int32_t
     static const uint8_t DIV16[6] = {2, 3, 4, 6, 8, 12};   /* the delay in 16ths: 1/8 3/16 1/4 3/8 1/2 3/4 */
     uint32_t i, k, dt = (uint32_t)(FS * 15u * DIV16[song.dly_div % 6u] / (song.bpm ? song.bpm : 120u));
     int32_t dfb = song.dly_fb * 27 / 127, rfb = 22 + song.rev_size * 9 / 127, rd = 1 + song.rev_damp / 43;
+    int32_t dk = 16 + song.dly_tone * 240 / 127, dl = song.dly_lvl, rl = song.rev_lvl;   /* TONE: the repeats' brightness */
     if (dt >= DLY_N)
         dt = DLY_N - 1u;
     for (i = 0; i < n; i++) {
         int32_t d = dly_buf[(dly_w - dt) & (DLY_N - 1u)], r = 0, a, in = rsend[i] >> 2, ap;
-        dly_lp += (d - dly_lp) >> 2;             /* darker repeats */
+        dly_lp += ((d - dly_lp) * dk) >> 8;      /* darker repeats */
         dly_buf[dly_w++ & (DLY_N - 1u)] = (int16_t)s16(dsend[i] + ((dly_lp * dfb) >> 5));
         for (k = 0; k < RV_C; k++) {             /* parallel combs with damping */
             int16_t *b = rv_comb[k];
@@ -386,7 +414,7 @@ static void fx_block(int32_t *L, int32_t *R, const int32_t *dsend, const int32_t
             if (++rv_ai[k] >= RV_APLEN[k])
                 rv_ai[k] = 0;
         }
-        L[i] += r + d;
+        L[i] += ((r * rl) >> 7) + ((d * dl) >> 7);   /* the returns' LEVEL */
         {
             int32_t rr = r;
             for (k = 2; k < 4u; k++) {
@@ -398,8 +426,34 @@ static void fx_block(int32_t *L, int32_t *R, const int32_t *dsend, const int32_t
                 if (++rv_ai[k] >= RV_APLEN[k])
                     rv_ai[k] = 0;
             }
-            R[i] += rr + ((d * 7) >> 3);
+            R[i] += ((rr * rl) >> 7) + ((d * 7 * dl) >> 10);
         }
+    }
+}
+
+/* the drive bus: the sounds' DRIVE sends through SOFT (tanh), HARD (a clip) or FOLD (a wave folder), its TONE (a low-pass),
+ * back at LEVEL in the middle */
+static int32_t drv_lp;
+static void drive_block(int32_t *L, int32_t *R, const int32_t *dv, uint32_t n)
+{
+    int32_t g = 16 + song.drv_amt * 2, tk = 8 + song.drv_tone * 248 / 127, lvl = song.drv_lvl, T = 20000;
+    uint32_t i, k;
+    for (i = 0; i < n; i++) {
+        int32_t x = clamp((dv[i] * g) >> 4, -262143, 262143), y;
+        switch (song.drv_mode) {
+        case DM_HARD: y = clamp(x, -T, T); break;
+        case DM_FOLD:
+            y = x;
+            for (k = 0; k < 6u && (y > T || y < -T); k++)   /* folded back at +-T */
+                y = y > T ? 2 * T - y : -2 * T - y;
+            y = clamp(y, -T, T);
+            break;
+        default: y = sat(x); break;
+        }
+        drv_lp += ((y - drv_lp) * tk) >> 8;
+        y = (drv_lp * lvl) >> 7;
+        L[i] += y;
+        R[i] += y;
     }
 }
 
@@ -408,15 +462,15 @@ static void seq_block(uint32_t n);               /* lx_seq.c: the steps of this 
 static int32_t peak[NTRK];                       /* the mixer's meters (Q15, decaying in the UI) */
 static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the master into out: stereo, Q15 */
 {
-    int32_t tb[CTL], L[CTL], R[CTL], ds[CTL], rs[CTL];
+    int32_t tb[CTL], L[CTL], R[CTL], ds[CTL], rs[CTL], dv[CTL];
     uint32_t i, t, m = song.master_q12;
     seq_block(n);
-    lfo_block();
+    lfo_block(n);
     for (i = 0; i < n; i++)
-        L[i] = R[i] = ds[i] = rs[i] = 0;
+        L[i] = R[i] = ds[i] = rs[i] = dv[i] = 0;
     for (t = 0; t < NTRK; t++) {
         const sound_t *s = &snd[t];
-        int32_t g, pan, pl, pr, dg = s->dly, rg = s->rev, pk = 0;
+        int32_t g, pan, pl, pr, dg = s->dly, rg = s->rev, vg = s->drv, pk = 0;
         if (!voice[t].active)
             continue;
         for (i = 0; i < n; i++)
@@ -435,6 +489,7 @@ static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the 
             R[i] += (x * pr) >> 7;
             ds[i] += (x * dg) >> 8;
             rs[i] += (x * rg) >> 7;
+            dv[i] += (x * vg) >> 7;
             if (x > pk) pk = x;
             else if (-x > pk) pk = -x;
         }
@@ -442,7 +497,8 @@ static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the 
             peak[t] = pk;
     }
     fx_block(L, R, ds, rs, n);
-    if (song.playing && song.click && song.step % 4u == 0u) {   /* the metronome */
+    drive_block(L, R, dv, n);
+    if (song.playing && (song.click == CLICK_ON || (song.click == CLICK_REC && song.rec)) && song.step % 4u == 0u) {
         uint32_t bar = song.pstep % 16u == 0u, p0 = song.pos >= n ? song.pos - n : 0u;
         for (i = 0; i < n; i++) {
             uint32_t pp = p0 + i;
