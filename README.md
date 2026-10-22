@@ -177,3 +177,9 @@ festgelegt, deshalb erzeugt ein GCC-Build aus demselben Startwert andere Songs a
 
 `companion/index.html` (Chrome/Edge, Web MIDI): ONE CLICK und alles Weitere vom Browser aus, Pattern-Ansicht und
 -Bearbeitung. Protokoll: `firmware/src/oc_proto.c`.
+
+## Build auf GitHub und Update-Seite
+
+`.github/workflows/build.yml` baut bei jedem Push auf `main` die Firmware (JieLi-Toolchain + AC79-SDK) und veröffentlicht
+die Admin-Seite zusammen mit `oneclick.fwsc` auf GitHub Pages (Einstellungen › Pages › Source: „GitHub Actions“).
+Die Seite `https://<user>.github.io/oneclick-fm1/` lädt die Firmware dieses Builds selbst; in Chrome/Edge öffnen, FM-1 per USB verbinden, „Installieren“.

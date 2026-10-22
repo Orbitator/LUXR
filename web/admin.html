@@ -89,6 +89,7 @@ details > summary { cursor: pointer; font-weight: 600; }
       <li>„Installieren“: das FM-1 prüft das Paket, startet den Update-Lader und schreibt es (etwa 2 Minuten).</li>
       <li>Danach startet es neu; die Seite prüft, dass es die neue Kennung meldet.</li>
     </ol>
+    <p id="pkgSrc" class="hint"></p>
     <input id="pkgFile" type="file" accept=".fwsc">
     <dl id="pkgInfo" hidden>
       <dt>Datei</dt><dd id="pName">–</dd>
@@ -435,13 +436,15 @@ $("smpClear").onclick = async () => {
 
 /* ---- 2: the package */
 $("pkgFile").onchange = async () => {
+  const f = $("pkgFile").files[0]; if (f) await usePkg(new Uint8Array(await f.arrayBuffer()), f.name);
+};
+async function usePkg(bytes, name) {
   pkg = null; lock(false);
-  const f = $("pkgFile").files[0]; if (!f) return;
   try {
-    const bytes = new Uint8Array(await f.arrayBuffer()), product = productOf(bytes);
+    const product = productOf(bytes);
     const ldr = new TextDecoder("latin1").decode(bytes).includes("FELUCCA-LOADER-1");
     $("pkgInfo").hidden = false;
-    $("pName").textContent = f.name; $("pId").textContent = product; $("pSize").textContent = `${bytes.length.toLocaleString("de-DE")} Bytes`;
+    $("pName").textContent = name; $("pId").textContent = product; $("pSize").textContent = `${bytes.length.toLocaleString("de-DE")} Bytes`;
     $("pSha").textContent = await sha256hex(bytes); $("pLdr").textContent = ldr ? "eigener (Felucca-Lader)" : "fehlt";
     if (!/^[\x20-\x7e]{3,32}$/.test(product)) throw new Error("Keine gültige .fwsc-Datei.");
     if (!/^FM-1_8\d\d$/.test(product)) throw new Error(`Kennung ${product}: kein ONE-CLICK-Paket (FM-1_8xx). Für die Original-Firmware Abschnitt 4 nutzen.`);
@@ -450,7 +453,18 @@ $("pkgFile").onchange = async () => {
     status(`Paket ${product} geprüft.`, "ok");
   } catch (e) { status(e.message, "err"); }
   lock(false);
-};
+}
+/* served by the GitHub build (Pages): the firmware of the same build lies next to the page and is loaded at once */
+(async () => {
+  if (!/^https?:$/.test(location.protocol)) return;
+  try {
+    const r = await fetch("oneclick.fwsc", { cache: "no-store" });
+    if (!r.ok) return;
+    const b = await fetch("build.json", { cache: "no-store" }).then((x) => x.ok ? x.json() : {}).catch(() => ({}));
+    await usePkg(new Uint8Array(await r.arrayBuffer()), "oneclick.fwsc" + (b.date ? ` · Build ${b.date} (${String(b.commit || "").slice(0, 7)})` : ""));
+    $("pkgSrc").textContent = "Die Firmware dieses Builds ist schon geladen. Eine andere Datei kann trotzdem gewählt werden.";
+  } catch (_) { /* no firmware next to the page */ }
+})();
 $("pOk").onchange = () => lock(false);
 async function run(image, product) {
   lock(true); $("bar").value = 0;

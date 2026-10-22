@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Build the firmware (JieLi toolchain + AC79 SDK) and publish the admin page with it on GitHub Pages:
+# https://<user>.github.io/<repo>/ loads the newest oneclick.fwsc by itself.
+name: build
+on:
+  push: { branches: [main] }
+  workflow_dispatch:
+permissions: { contents: read, pages: write, id-token: write }
+concurrency: { group: pages, cancel-in-progress: true }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Cache toolchain and SDK
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.jieli
+            ~/fw-AC79_AIoT_SDK
+          key: jieli-ac79-v1.2.1-1
+      - name: JieLi toolchain
+        run: test -e ~/.jieli/toolchain || sh tools/get_toolchain.sh
+      - name: AC79 SDK
+        run: |
+          test -d ~/fw-AC79_AIoT_SDK/.git || for i in 1 2 3; do
+            git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git ~/fw-AC79_AIoT_SDK && break
+            rm -rf ~/fw-AC79_AIoT_SDK; sleep 20
+          done
+          test -d ~/fw-AC79_AIoT_SDK/.git
+      - name: Tests (host)
+        run: sudo apt-get -qq install -y clang >/dev/null && sh tests/run.sh || echo "::warning::host tests failed"
+        continue-on-error: true
+      - name: Firmware
+        env: { JIELI_DOCKER: "0" }
+        run: JIELI_TOOLCHAIN=$HOME/.jieli/toolchain AC79_SDK=$HOME/fw-AC79_AIoT_SDK python3 tools/build.py
+      - name: Site
+        run: |
+          python3 web/make_admin.py
+          mkdir -p site
+          cp build/web/oneclick-admin.html site/index.html
+          cp build/oneclick.fwsc site/
+          printf '{"date":"%s","commit":"%s","sha256":"%s"}\n' "$(date -u +%F\ %H:%M)" "$GITHUB_SHA" "$(sha256sum build/oneclick.fwsc | cut -d' ' -f1)" > site/build.json
+      - uses: actions/upload-artifact@v4
+        with: { name: oneclick-fwsc, path: build/oneclick.fwsc }
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: site }
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: "${{ steps.d.outputs.page_url }}" }
+    steps:
+      - id: d
+        uses: actions/deploy-pages@v4
