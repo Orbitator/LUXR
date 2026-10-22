@@ -5,7 +5,7 @@ name: build
 on:
   push: { branches: [main] }
   workflow_dispatch:
-permissions: { contents: read, pages: write, id-token: write }
+permissions: { contents: write, pages: write, id-token: write }
 concurrency: { group: pages, cancel-in-progress: true }
 jobs:
   build:
@@ -39,8 +39,9 @@ jobs:
         run: |
           set -o pipefail
           JIELI_TOOLCHAIN=$HOME/.jieli/toolchain AC79_SDK=$HOME/fw-AC79_AIoT_SDK python3 tools/build.py 2>&1 | tee build.log && exit 0
-          # the log's end as one annotation (readable without signing in)
-          echo "::error title=build.py::$(grep -v '^\s*$' build.log | tail -n 70 | cut -c1-300 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+          # the log on the branch ci-log (readable without the web UI)
+          git config user.name ci; git config user.email ci@users.noreply.github.com
+          git checkout -q --orphan ci-log && git rm -rqf --cached . && git add -f build.log && git commit -qm "build log $GITHUB_SHA" && git push -qf origin ci-log
           exit 1
       - name: Site
         run: |
