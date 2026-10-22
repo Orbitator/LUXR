@@ -5,7 +5,7 @@
  * UBOOT, the USB soft key -> UBOOT, the M-UPGRADE handshake and update (ota.c). These are how a broken firmware is
  * replaced without opening the FM-1: do not take them out.] */
 #ifndef APP_BANNER
-#define APP_BANNER "ONE CLICK"                   /* the boot screen (lxrfm1.c: LXR FM-1) */
+#define APP_BANNER "ONE CLICK"                   /* the boot screen (lxrfm1.c: LUXR) */
 #endif
 extern uint32_t _data_start[], _data_end[], _data_load[], _bss_start[], _bss_end[];
 extern uint32_t _pool_start[], _pool_end[], _rt_start[], _rt_end[], _rt_load[];

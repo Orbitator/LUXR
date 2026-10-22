@@ -1,4 +1,4 @@
-# LXR FM-1
+# LUXR
 
 Eine zweite Firmware aus diesem Repository: eine Drum-Machine für den M-VAVE FM-1 mit **acht Sounds** im Stil der
 Sonic Potions LXR (die Klangarchitektur der LXR-Web-Drums bzw. der LXR-Engine von ONE CLICK, hier eine Stimme pro
@@ -91,19 +91,19 @@ endet nach seiner längsten Spur. STORE speichert alles (16 Patterns, Kit, Tempo
 ## Bauen
 
 ```
-JIELI_TOOLCHAIN=~/.jieli/toolchain AC79_SDK=~/fw-AC79_AIoT_SDK python3 tools/build.py --app lxr   # -> build/lxr-fm1.fwsc
-python3 tools/fm1_install.py build/lxr-fm1.fwsc
+JIELI_TOOLCHAIN=~/.jieli/toolchain AC79_SDK=~/fw-AC79_AIoT_SDK python3 tools/build.py --app lxr   # -> build/luxr.fwsc
+python3 tools/fm1_install.py build/luxr.fwsc
 ```
 
 `tools/gen_lxr_transients.py` holt dabei die Transienten aus dem LXR-Quelltext (`$LXR_SRC`, sonst ein Klon von
 github.com/SonicPotions/LXR nach `build/ext/LXR`) und schreibt `build/gen/lxr_transients.h`. Kennung FM-1_870 (Release
 X.Y: FM-1_87Y) – die Update-Seite / Firmware-Werkstatt nimmt sie wie ONE CLICK an (FM-1_8xx). Auf GitHub baut der
-Workflow sie mit und legt sie als Actions-Artefakt `lxr-fm1-fwsc` ab (nicht auf Pages).
+Workflow sie mit und legt sie als Actions-Artefakt `luxr-fwsc` ab (nicht auf Pages).
 
 Tests auf dem Rechner: `tests/run.sh` (oder nur `cc … tests/test_lx.c && build/test_lx build/lx`: Klang, Sequencer,
 Note Repeat, Aufnahme, Erase, Patterns, Speicher, UBOOT-Countdown; Screenshots der Seiten und `lxr_demo.wav`).
 
-Speicher: derselbe Bereich wie ONE CLICK (0x97000–0xE0000). Wer zwischen ONE CLICK und LXR FM-1 wechselt, verliert die
+Speicher: derselbe Bereich wie ONE CLICK (0x97000–0xE0000). Wer zwischen ONE CLICK und LUXR wechselt, verliert die
 dort gespeicherten Daten der anderen Firmware (sie erkennt fremde Daten und ignoriert sie).
 
 ## Lizenz – bitte lesen
@@ -111,6 +111,6 @@ dort gespeicherten Daten der anderen Firmware (sie erkennt fremde Daten und igno
 Der Code dieser Firmware ist GPL-3.0 wie der Rest des Repositorys. **Die Transienten-Samples sind es nicht:** sie stammen
 aus der Firmware der Sonic Potions LXR (© 2013 Julian Schmidt), deren Lizenz die kommerzielle Nutzung verbietet und mit
 der GPL nicht verträglich ist. Deshalb liegen sie nicht im Repository, sondern werden beim Bauen geholt. Ein damit
-gebautes `lxr-fm1.fwsc` ist nur für den **persönlichen, nicht-kommerziellen Gebrauch** – nicht verkaufen und nicht als
+gebautes `luxr.fwsc` ist nur für den **persönlichen, nicht-kommerziellen Gebrauch** – nicht verkaufen und nicht als
 GPL-Firmware weitergeben. Ohne Samples (Sample-Layer auf OFF/SNAP) wäre die Firmware reines GPL; das ist hier nicht
 vorgesehen, weil der Sample-Layer ausdrücklich die Original-Samples nutzen soll.

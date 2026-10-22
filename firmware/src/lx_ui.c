@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * LXR FM-1: the panel and the screen (after Felucca's conventions and ONE CLICK's layout). The full map: README-LXR.md.
+ * LUXR: the panel and the screen (after Felucca's conventions and ONE CLICK's layout). The full map: README-LUXR.md.
  *
  *   KNOBS   SELECT tempo (SHIFT: swing) · ALGORITHM the sound 1..8 (SHIFT: the pattern) · PRESETS the sound's presets
  *           (SHIFT: the sample layer's sample) · KNOB 1..4 the page's four cards, SHIFT the page's second row;
@@ -49,7 +49,7 @@ static const uint16_t TRK_COL[NTRK] = {RGB(255, 96, 110), RGB(255, 170, 40), RGB
 #define C_REC RGB(255, 72, 60)
 
 enum { PG_KIT, PG_SEQ, PG_VOICE, PG_SAMPLE, PG_LFO, PG_FX, PG_PAT, PG_NR, PG_MIX, PG_SAVE, PG_N };
-static const char *const PG_NAME[PG_N] = {"KIT", "SEQUENCER", "SYNTH LAYER", "SAMPLE LAYER", "LFO", "FX", "PATTERNS",
+static const char *const PG_NAME[PG_N] = {"LUXR KIT", "SEQUENCER", "SYNTH LAYER", "SAMPLE LAYER", "LFO", "FX", "PATTERNS",
                                           "NOTE REPEAT", "MIXER", "STORE"};
 static const uint8_t PAGE_BTN[PG_N] = {B_HOME, B_SEQ, B_EDIT, B_ENV, B_LFO, B_FX, B_SCL, B_ARP, B_GLO, B_SAVE};
 static const uint8_t PAGE_KC[PG_N] = {KC_HOME, KC_SEQ, KC_EDIT, KC_ENV, KC_LFO, KC_FX, KC_SCL, KC_ARP, KC_GLO, KC_SAVE};
@@ -79,7 +79,7 @@ static const char *const N_SACT[] = {"SAVE", "LOAD", "LOAD KIT"};
 static const char *const N_MIDICH[] = {"ALL", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14",
                                        "15", "16"};
 static const char *const N_WAVE[] = {"SINE", "TRI", "SAW", "SQUARE", "NOISE"};
-static const char *const N_VERSION[] = {OC_VERSION};
+static const char *const N_VERSION[] = {"LUXR " OC_VERSION};
 static const char *N_TR[TR_N];
 static const char *N_THEME[UI_NPALETTES];
 #define NSLOT 8u

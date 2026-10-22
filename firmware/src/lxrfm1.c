@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * LXR FM-1: a drum machine for the M-VAVE FM-1 (eight LXR-style sounds with the LXR's transient samples as their
+ * LUXR: a drum machine for the M-VAVE FM-1 (eight LXR-style sounds with the LXR's transient samples as their
  * sample layer), one compilation unit as oneclick.c: Felucca's platform as ONE CLICK uses it (the HAL, USB-MIDI, the
  * update entry, UBOOT, the store, the display), the lx_*.c app instead of the oc_*.c one.
  * build/gen/lxr_transients.h (tools/gen_lxr_transients.py) carries the Sonic Potions LXR licence, not the GPL: a
- * firmware built with it is for personal, non-commercial use (README-LXR.md). */
+ * firmware built with it is for personal, non-commercial use (README-LUXR.md). */
 #ifndef FELUCCA_FLASH
 #define FELUCCA_FLASH 1
 #endif
@@ -34,7 +34,7 @@
 #ifndef OC_VERSION
 #define OC_VERSION "v0.1"
 #endif
-#define APP_BANNER "LXR FM-1"
+#define APP_BANNER "LUXR"
 
 #include <stdint.h>
 #include "fm1_time.h"

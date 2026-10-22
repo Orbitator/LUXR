@@ -6,7 +6,7 @@
 
   tools/build.py [--release X.Y[-suffix]] [--app lxr]
 
---app lxr builds LXR FM-1 instead (firmware/src/lxrfm1.c, identity FM-1_87Y, lxr-fm1.fwsc): its sample layer
+--app lxr builds LUXR instead (firmware/src/lxrfm1.c, identity FM-1_87Y, luxr.fwsc): its sample layer
 needs the Sonic Potions LXR sources ($LXR_SRC, else cloned into build/ext/LXR), whose licence is not the GPL.
 
 Outputs in build/: oneclick.bin (app), loader/ota.bin (update loader),
@@ -345,11 +345,11 @@ def main():
     ap.add_argument("--release", metavar="X.Y", help="release build: identity FM-1_9XY, version string vX.Y")
     ap.add_argument("--sdk", type=Path, help="JieLi AC79 SDK checkout (default: $AC79_SDK)")
     ap.add_argument("--app", choices=("oneclick", "lxr"), default="oneclick",
-                    help="oneclick (default) or lxr: LXR FM-1, the drum machine with the LXR's transient samples")
+                    help="oneclick (default) or lxr: LUXR, the drum machine with the LXR's transient samples")
     a = ap.parse_args()
     APP = a.app
     if APP == "lxr":
-        UNIT, NAME, PRODUCT = "lxrfm1", "lxr-fm1", "FM-1_870"
+        UNIT, NAME, PRODUCT = "lxrfm1", "luxr", "FM-1_870"
     if a.gen:
         generate()
         return
@@ -358,7 +358,7 @@ def main():
         m = re.fullmatch(r"(\d)\.(\d)(?:\.\d){0,2}(-[A-Za-z0-9]+)?", a.release)
         if not m:
             raise SystemExit(f"--release {a.release}: use X.Y, X.Y.Z, X.Y.Z.W or X.Y-suffix, one digit each")
-        PRODUCT = "FM-1_8" + (m[1] + m[2] if APP != "lxr" else "7" + m[2])   # (LXR FM-1: FM-1_87Y)
+        PRODUCT = "FM-1_8" + (m[1] + m[2] if APP != "lxr" else "7" + m[2])   # (LUXR: FM-1_87Y)
         VERSION = "v" + a.release.lower()      # e.g. v1.0, v1.1-rc1
         name = f"{NAME}-{a.release}.fwsc"
     fm1pkg_make.SDK = a.sdk

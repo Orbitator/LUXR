@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * LXR FM-1: core types. A drum machine of eight sounds (tracks), each an LXR-style synth voice with a sample layer
+ * LUXR: core types. A drum machine of eight sounds (tracks), each an LXR-style synth voice with a sample layer
  * (the original LXR transient samples, build/gen/lxr_transients.h), sixteen patterns of up to 64 steps a track
  * (four bars, each track its own length). One voice per track, as on a drum machine. Fixed point (no FPU). */
 #include <stdint.h>

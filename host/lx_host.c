@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * LXR FM-1 on a computer: the app's sources (sound, sequencer, UI) against a simulated panel and screen, for the tests
+ * LUXR on a computer: the app's sources (sound, sequencer, UI) against a simulated panel and screen, for the tests
  * and the demo renders. No hardware code here.
  *   cc -O2 -Ibuild/gen -Ifirmware/src -o build/X host/X.c   (build/gen: tools/build.py --app lxr --gen) */
 #include <stdint.h>

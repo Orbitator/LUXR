@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LXR FM-1: the original LXR transient samples as a C header.
+"""LUXR: the original LXR transient samples as a C header.
 
   tools/gen_lxr_transients.py OUT.h [--lxr DIR]
 

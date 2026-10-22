@@ -43,7 +43,7 @@ jobs:
         run: |
           set -o pipefail
           export JIELI_TOOLCHAIN=$HOME/.jieli/toolchain AC79_SDK=$HOME/fw-AC79_AIoT_SDK
-          # ONE CLICK, then LXR FM-1 (the drum machine with the LXR's transient samples: README-LXR.md)
+          # ONE CLICK, then LUXR (the drum machine with the LXR's transient samples: README-LUXR.md)
           { python3 tools/build.py && python3 tools/build.py --app lxr; } 2>&1 | tee build.log && exit 0
           # the log on the branch ci-log (readable without the web UI)
           git config user.name ci; git config user.email ci@users.noreply.github.com
@@ -55,7 +55,7 @@ jobs:
           python3 web/make_admin.py
           mkdir -p site
           cp build/web/oneclick-admin.html site/index.html
-          cp build/oneclick.fwsc site/          # (lxr-fm1.fwsc not on Pages: the LXR samples' licence, README-LXR.md)
+          cp build/oneclick.fwsc site/          # (luxr.fwsc not on Pages: the LXR samples' licence, README-LUXR.md)
           printf '{"date":"%s","commit":"%s","sha256":"%s"}\n' "$(date -u +%F\ %H:%M)" "$GITHUB_SHA" "$(sha256sum build/oneclick.fwsc | cut -d' ' -f1)" > site/build.json
       - name: Firmware branch (the newest .fwsc as a plain git file)
         if: github.ref == 'refs/heads/main'
@@ -66,7 +66,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: oneclick-fwsc, path: build/oneclick.fwsc }
       - uses: actions/upload-artifact@v4
-        with: { name: lxr-fm1-fwsc, path: build/lxr-fm1.fwsc }
+        with: { name: luxr-fwsc, path: build/luxr.fwsc }
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main'
         with: { path: site }

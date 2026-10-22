@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * LXR FM-1: the sound. Eight voices, one a track, each two layers as on the Sonic Potions LXR:
+ * LUXR: the sound. Eight voices, one a track, each two layers as on the Sonic Potions LXR:
  *   the synth layer   in the manner of the LXR's voices (oc_synth.c's LXR engine, here a voice per track): DRUM (an
  *                     oscillator with pitch envelope, FM, click, drive), SNARE (tone + noise), CLAP (noise bursts),
  *                     HAT (three FM'd squares through a high-pass, closed / open) and CYMBAL;

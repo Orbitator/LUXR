@@ -4,7 +4,7 @@ set -e
 cd "$(dirname "$0")/.."
 mkdir -p build/gen
 python3 tools/build.py --gen >/dev/null
-python3 tools/build.py --app lxr --gen >/dev/null     # (+ the LXR's transient samples: LXR FM-1)
+python3 tools/build.py --app lxr --gen >/dev/null     # (+ the LXR's transient samples: LUXR)
 CF="-std=gnu99 -Ibuild/gen -Ifirmware/src"
 cc -O1 -g -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -fsanitize=address,undefined -fno-sanitize=shift \
    $CF -o build/test_oc tests/test_oc.c -lm
@@ -12,7 +12,7 @@ build/test_oc
 # the firmware unit and the loader, type-checked for a 32-bit freestanding target (the JieLi toolchain builds them)
 clang --target=i686-unknown-none-elf -ffreestanding -fsyntax-only -Wall -Wno-unused-function -Ifirmware/hal $CF firmware/src/oneclick.c
 clang --target=i686-unknown-none-elf -ffreestanding -fsyntax-only -Wno-unused-function -Ifirmware/hal $CF firmware/loader/loader.c
-# LXR FM-1: the app on the computer (sound, sequencer, panel, store; screenshots, demo WAV), its firmware unit type-checked
+# LUXR: the app on the computer (sound, sequencer, panel, store; screenshots, demo WAV), its firmware unit type-checked
 mkdir -p build/lx
 cc -O1 -g -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Wno-sign-compare -fsanitize=address,undefined \
    -fno-sanitize=shift $CF -o build/test_lx tests/test_lx.c -lm

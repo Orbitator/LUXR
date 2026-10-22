@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * LXR FM-1: the app on the computer (sound, sequencer, panel, store), screenshots of its pages and a demo WAV.
+ * LUXR: the app on the computer (sound, sequencer, panel, store), screenshots of its pages and a demo WAV.
  *   test_lx OUTDIR          (OUTDIR/lxr_demo.wav, OUTDIR/lx_<page>.ppm) */
 #include "../host/lx_host.c"
 

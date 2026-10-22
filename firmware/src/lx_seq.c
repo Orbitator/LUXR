@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * LXR FM-1: the sequencer, run by the audio ISR once a block (mix_block -> seq_block). A global 16th clock (BPM,
+ * LUXR: the sequencer, run by the audio ISR once a block (mix_block -> seq_block). A global 16th clock (BPM,
  * SWING); each track plays its step of the pattern (16ths since the pattern began % its LEN). A pattern ends after
  * its longest track; then the cued pattern follows, or the next one of the CHAIN.
  * Note repeat (ARP): the pads repeat at RATE while held (LATCH: until pressed again), on the clock's grid while
