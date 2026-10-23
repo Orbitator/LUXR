@@ -111,6 +111,14 @@ static uint32_t locks_of(uint32_t pn, uint32_t t)
     return n;
 }
 
+static void shift_turn(uint32_t enc, int32_t d)   /* a knob turned with GLO held (SHIFT) */
+{
+    h_pressed |= 1u << B_GLO; h_held |= 1u << B_GLO;
+    host_run(300, 0, 0);
+    host_turn(enc, d);
+    h_held &= ~(1u << B_GLO);
+    host_run(40, 0, 0);
+}
 static void shift_key(uint32_t mask)             /* a key with GLO held (SHIFT) */
 {
     h_pressed |= 1u << B_GLO; h_held |= 1u << B_GLO;
@@ -518,9 +526,9 @@ int main(int argc, char **argv)
     snd[2].level = 99;
     pat[3].s[4][9] = 0;
     ui.patch = 3;                                /* PRESETS from slot 4 on: the next patch in use is 5 */
-    host_turn(EN_PRESET, 1);
+    shift_turn(EN_PRESET, 1);
     CHECK(ui.patch == 4u && snd[2].level == 44u, "PRESETS: patch 5 loaded (kit %u)", snd[2].level);
-    host_turn(EN_PRESET, -1);
+    shift_turn(EN_PRESET, -1);
     CHECK(ui.patch == 2u && snd[2].level == 33u && pat[3].s[4][9] == 77u, "PRESETS back: patch 3 (%u %u)", snd[2].level,
           pat[3].s[4][9]);
     CHECK(ui.loaded == 3u, "PRESETS: the patch loaded marked (%u)", ui.loaded);
@@ -535,10 +543,17 @@ int main(int argc, char **argv)
     snd[2].level = 99;
     pat[3].s[4][9] = 0;
     ui.lwhat = SW_PAT;                           /* STORE, KNOB 3 on PATTERN: PRESETS loads the patterns only */
-    host_turn(EN_PRESET, 1);                     /* patch 5's patterns (55), the kit as it is (99) */
+    shift_turn(EN_PRESET, 1);                    /* patch 5's patterns (55), the kit as it is (99) */
     CHECK(ui.patch == 4u && pat[3].s[4][9] == 55u && snd[2].level == 99u, "PRESETS, LOADS PATTERN: patterns only (%u %u %u)",
           ui.patch, pat[3].s[4][9], snd[2].level);
     ui.lwhat = SW_ALL;
+    {                                            /* PRESETS alone: the slot chosen, nothing loaded */
+        uint32_t s0 = ui.slot, p0 = ui.patch;
+        snd[2].level = 12;
+        host_turn(EN_PRESET, 3);
+        CHECK(ui.slot == (s0 + 3u) % NSLOT && ui.patch == p0 && snd[2].level == 12u, "PRESETS: slot %u chosen, nothing loaded", ui.slot + 1u);
+        host_turn(EN_PRESET, -3);
+    }
     if (ui.page != PG_SAVE) host_tap(B_SAVE);    /* (SAVE again would show NEW PATCH) */
     host_turn(EN_K1, -2);                        /* slot 3 again, the patterns only: its kit stays */
     host_turn(EN_K2, 1);

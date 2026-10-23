@@ -2,7 +2,7 @@
  * LUXR: the panel and the screen (after Felucca's conventions and ONE CLICK's layout). The full map: README.md.
  *
  *   KNOBS   SELECT the sound 1..8 (SHIFT: the pattern) · ALGORITHM a new sound for the selected one, rolled (SHIFT:
- *           the sample layer's samples in turn, the synth layer kept) · PRESETS the stored patches (what STORE's KNOB 3 says: kit + patterns, kit, patterns) · KNOB 1..4 the page's
+ *           the sample layer's samples in turn, the synth layer kept) · PRESETS the slot (as STORE's KNOB 1); SHIFT: the stored patches loaded (what STORE's KNOB 3 says) · KNOB 1..4 the page's
  *           four cards, SHIFT the page's second row · MASTER volume
  *   SHIFT   GLO held (from 250 ms, or at once when another control is used while it is down). GLO tapped: the MIXER,
  *           tapped again its page 2 (PAN) and back.
@@ -2815,8 +2815,19 @@ static void ui_input(void)
         if (ui.shift) pset(P_PAT, pget(P_PAT) + e[EN_SELECT]);
         else sel_track((int32_t)song.sel + e[EN_SELECT]);
     }
-    if (e[EN_PRESET])                            /* PRESETS: the stored patches, loaded as STORE's KNOB 3 says (KIT+PAT) */
-        patch_turn(e[EN_PRESET], ui.lwhat);
+    if (e[EN_PRESET]) {                          /* PRESETS: the slot chosen (as STORE's KNOB 1); SHIFT: the stored patches,
+                                                  * loaded as STORE's KNOB 3 says (KIT+PAT) */
+        if (ui.shift) {
+            patch_turn(e[EN_PRESET], ui.lwhat);
+        } else {
+            char m[28];
+            ui.slot = (uint8_t)(((int32_t)ui.slot + e[EN_PRESET] % (int32_t)NSLOT + (int32_t)NSLOT) % (int32_t)NSLOT);
+            str_cpy(m, "SLOT ", sizeof m);
+            fmt_u(m + str_len(m), ui.slot + 1u);
+            str_cat(m, ui.used[ui.slot] ? " (IN USE)" : " (EMPTY)", sizeof m);
+            ui_say(m);
+        }
+    }
     for (k = 0; k < 4u; k++) {
         uint32_t id = knob_id(k);
         int32_t d = e[EN_K1 + k];
@@ -3263,8 +3274,8 @@ static void g_store(void)
     }
     g_label(12, 96, ui.swhat == SW_KIT ? "OCT+ SAVES THE KIT" : ui.swhat == SW_PAT ? "OCT+ SAVES THE PATTERNS" :
             "OCT+ SAVES KIT + PATTERNS", T_MID);
-    g_label(12, 109, ui.lwhat == SW_KIT ? "K4 + PRESETS LOAD THE KIT" : ui.lwhat == SW_PAT ? "K4 + PRESETS LOAD PATTERNS" :
-            "K4 + PRESETS LOAD KIT + PAT", T_MID);
+    g_label(12, 109, ui.lwhat == SW_KIT ? "K4 / SHIFT+PRESETS: THE KIT" : ui.lwhat == SW_PAT ? "K4 / SHIFT+PRESETS: PATTERNS" :
+            "K4 / SHIFT+PRESETS: KIT + PAT", T_MID);
 }
 static void g_live(void)                         /* LIVE: the eight pads (lit as they are hit), their accented row */
 {
@@ -3793,7 +3804,7 @@ static void draw_foot(int force)
     static const khint_t H_MIXPAN[3] = {{KC_K14, "PAN"}, {KC_OCTPM, "BANK"}, {KC_GLO, "LEVEL"}};
     static const khint_t H_NR[3] = {{KC_KEYS, "PADS"}, {KC_K1, "RATE"}, {KC_ARP, "OFF"}};
     static const khint_t H_SAVE[3] = {{KC_OCTUP, "SAVE"}, {KC_K4, "LOAD"}, {KC_OCTDN, "BACK"}};
-    static const khint_t H_PAGE[3] = {{KC_SELECT, "SOUND"}, {KC_ALGO, "NEW"}, {KC_PRESETS, "PATCH"}};
+    static const khint_t H_PAGE[3] = {{KC_SELECT, "SOUND"}, {KC_ALGO, "NEW"}, {KC_PRESETS, "SLOT"}};
     static const khint_t H_LIVE[3] = {{KC_KEYS, "PADS"}, {KC_REC, "REC"}, {KC_SEQ, "STEPS"}};
     static const khint_t H_REC[3] = {{KC_K1, "GRID"}, {KC_K2, "TO"}, {KC_REC, "ARM"}};
     static const khint_t H_SHIFT[3] = {{KC_K14, "ROW B"}, {KC_KEYS, "MUTE"}, {KC_PLAY, "TOP"}};
