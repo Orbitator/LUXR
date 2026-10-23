@@ -2442,8 +2442,8 @@ static void oct_key(int up)
         proj_save(ui.slot, ui.swhat);
         return;
     }
-    if (ui.page == PG_MIX) {
-        ui.bank = (uint8_t)(up ? 1u : 0u);
+    if (ui.page == PG_MIX) {                     /* MIXER: OCT- the levels, OCT+ the pans (SELECT: the bank) */
+        ui.mixpan = (uint8_t)(up ? 1u : 0u);
         return;
     }
     if (ui.page == PG_SEQ) {
@@ -2817,7 +2817,9 @@ static void ui_input(void)
             ui_say("NEW SOUND");
         }
     }
-    if (e[EN_SELECT] && ui.page == PG_SAVE && !ui.shift) {   /* STORE: SELECT the row of nine (1-9 .. 28-36), the column kept */
+    if (e[EN_SELECT] && ui.page == PG_MIX && !ui.shift) {   /* MIXER: SELECT sounds 1-4 / 5-8 */
+        ui.bank = (uint8_t)(e[EN_SELECT] > 0 ? 1u : 0u);
+    } else if (e[EN_SELECT] && ui.page == PG_SAVE && !ui.shift) {   /* STORE: SELECT the row of nine (1-9 .. 28-36), the column kept */
         char m[28];
         uint32_t row = (uint32_t)(((int32_t)(ui.slot / 9u) + e[EN_SELECT] % 4 + 4) % 4);
         ui.slot = (uint8_t)(row * 9u + ui.slot % 9u);
@@ -2925,7 +2927,7 @@ static void ui_leds(void)
                  (b == B_REC && song.rec && (!song.erase || blink)) ||
                  (b == B_OCTDN && (ui.page == PG_SEQ || ui.lockmode) && ui.bar > 0u) ||
                  (b == B_OCTUP && (ui.page == PG_SEQ || ui.lockmode) && ui.bar + 1u < nbars(t)) ||
-                 (b == B_OCTDN && ui.page == PG_MIX && !ui.bank) || (b == B_OCTUP && ui.page == PG_MIX && ui.bank);
+                 (b == B_OCTDN && ui.page == PG_MIX && !ui.mixpan) || (b == B_OCTUP && ui.page == PG_MIX && ui.mixpan);
         io_led_button(b, on);
     }
     for (k = 0; k < 27u; k++) {
@@ -3815,8 +3817,8 @@ static void draw_graph(int force)
 static void draw_foot(int force)
 {
     static const khint_t H_SEQ[3] = {{KC_KEYS, "STEPS"}, {KC_OCTPM, "BAR"}, {KC_GLO, "SHIFT"}};
-    static const khint_t H_MIX[3] = {{KC_K14, "LEVEL"}, {KC_OCTPM, "BANK"}, {KC_GLO, "PAN"}};
-    static const khint_t H_MIXPAN[3] = {{KC_K14, "PAN"}, {KC_OCTPM, "BANK"}, {KC_GLO, "LEVEL"}};
+    static const khint_t H_MIX[3] = {{KC_K14, "LEVEL"}, {KC_SELECT, "1-4/5-8"}, {KC_OCTUP, "PAN"}};
+    static const khint_t H_MIXPAN[3] = {{KC_K14, "PAN"}, {KC_SELECT, "1-4/5-8"}, {KC_OCTDN, "LEVEL"}};
     static const khint_t H_NR[3] = {{KC_KEYS, "PADS"}, {KC_K1, "RATE"}, {KC_ARP, "OFF"}};
     static const khint_t H_SAVE[3] = {{KC_OCTUP, "SAVE"}, {KC_K4, "LOAD"}, {KC_OCTDN, "BACK"}};
     static const khint_t H_PAGE[3] = {{KC_SELECT, "SOUND"}, {KC_ALGO, "NEW"}, {KC_PRESETS, "SLOT"}};
