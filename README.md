@@ -81,7 +81,7 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | FX (2.) | DRIVE (global, im Kit) | Modus (SOFT, HARD, FOLD), Stärke, Ton, Pegel | |
 | FX (3.) | DELAY (global, im Kit) | **Modus** (MONO, STEREO: links und rechts je eine Zeit, PINGPONG: die Wiederholungen wechseln die Seite), Zeit (1/8 … 3/4; in STEREO die linke), Zeit rechts (STEREO), Feedback | |
 | FX (4.) | DELAY 2 | Ton, Pegel | |
-| FX (5.) | REVERB (global, im Kit) | Größe (Nachhallzeit), Dämpfung, Pegel, **Pre-Delay** (OFF … 180 ms) – ein Plate-Hall nach Dattorro | |
+| FX (5.) | REVERB (global, im Kit) | Größe (Nachhallzeit; 0 = kein Nachhall), Dämpfung, Pegel, **Pre-Delay** (OFF … 180 ms) – ein Plate-Hall nach Dattorro | |
 | FX (6.) | **MASTER** | Filter (links der Mitte Tiefpass, rechts Hochpass, Mitte aus), Resonanz – per CC anlernbar, nicht gespeichert | |
 | SCL | PATTERNS | Pattern (spielend: wechselt am Pattern-Ende), Chain (spielt N Patterns nacheinander), **Copy** (ein Dreh kopiert das angezeigte Pattern), **Paste** (ein Dreh fügt es ins angezeigte Pattern ein). **Weiße Tasten:** Taste k = Pattern k; eine Taste halten und eine zweite drücken = Chain vom kleineren bis zum größeren (2 + 5: 2-3-4-5) | |
 | SCL (2.) | **SONG** | Zeile (1–32), ihr Pattern, ihre Wiederholungen (1–16), Song an / aus. **Weiße Tasten:** nacheinander gedrückt ergeben sie die Zeilen des Songs (die erste Taste nach dem Öffnen der Seite beginnt einen neuen Song, SONG geht an) | Anzahl Zeilen, am Ende: LOOP / STOP |

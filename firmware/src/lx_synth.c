@@ -496,7 +496,7 @@ static void fx_block(int32_t *L, int32_t *R, const int32_t *dsl, const int32_t *
     uint32_t dt = (uint32_t)(FS * 15u * DIV16[song.dly_div % 6u] / bpm);
     uint32_t dt2 = mode == DL_STEREO ? (uint32_t)(FS * 15u * DIV16[song.dly_div2 % 6u] / bpm) : dt;
     int32_t dfb = song.dly_fb * 27 / 127, dk = 16 + song.dly_tone * 240 / 127, dl = song.dly_lvl, rl = song.rev_lvl;
-    int32_t decay = 13000 + song.rev_size * 18000 / 127;     /* 0.40 .. 0.95 */
+    int32_t decay = song.rev_size * 30800 / 127;             /* 0 .. 0.94 (SIZE 0: one pass through the tank, no tail) */
     int32_t damp = 32767 - song.rev_damp * 26000 / 127;      /* (the damping's pass: 1.0 .. 0.2) */
     int32_t md1, md2;
     uint32_t pre = (uint32_t)song.rev_pre * 7938u / 127u;   /* (0 .. 180 ms) */
@@ -552,8 +552,8 @@ static void fx_block(int32_t *L, int32_t *R, const int32_t *dsl, const int32_t *
             - ln_tap(&rv_ld1, 2949) - ln_tap(&rv_la2, 277) - ln_tap(&rv_ld2, 1580);
         rr_ = ln_tap(&rv_ld1, 523) + ln_tap(&rv_ld1, 5374) - ln_tap(&rv_la2, 1820) + ln_tap(&rv_ld2, 3961)
             - ln_tap(&rv_rd1, 3128) - ln_tap(&rv_ra2, 496) - ln_tap(&rv_rd2, 179);
-        L[i] += ((((rl_ * 5) >> 3) * rl) >> 7) + ((d * dl) >> 7);   /* the returns' LEVEL */
-        R[i] += ((((rr_ * 5) >> 3) * rl) >> 7) + ((dR * dl) >> 7);
+        L[i] += ((((rl_ * 3) >> 3) * rl) >> 7) + ((d * dl) >> 7);   /* the returns' LEVEL (the reverb 4 dB lower than before) */
+        R[i] += ((((rr_ * 3) >> 3) * rl) >> 7) + ((dR * dl) >> 7);
     }
 }
 

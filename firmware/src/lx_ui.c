@@ -1249,7 +1249,7 @@ static void kit_factory(void)
     song.ddec = 64;
     song.drv_mode = DM_SOFT; song.drv_amt = 40; song.drv_tone = 90; song.drv_lvl = 100;
     song.dly_div = 1; song.dly_div2 = 2; song.dly_mode = DL_MONO; song.dly_fb = 50; song.dly_tone = 60; song.dly_lvl = 110;
-    song.rev_size = 70; song.rev_damp = 30; song.rev_lvl = 110; song.rev_pre = 0;
+    song.rev_size = 50; song.rev_damp = 40; song.rev_lvl = 90; song.rev_pre = 0;
 }
 /* NEW PATCH: stopped, 16 empty patterns of len steps at speed spd, the tempo, no song; the factory kit or (keep) the
  * one there. Nothing is saved: SAVE puts it in a slot. */
