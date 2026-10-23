@@ -454,6 +454,15 @@ int main(int argc, char **argv)
     host_turn(EN_PRESET, -1);
     CHECK(ui.patch == 2u && snd[2].level == 33u && pat[3].s[4][9] == 77u, "PRESETS back: patch 3 (%u %u)", snd[2].level,
           pat[3].s[4][9]);
+    CHECK(ui.loaded == 3u, "PRESETS: the patch loaded marked (%u)", ui.loaded);
+    host_run(3000, 0, 0);                        /* (the message gone: the header shows it, red) */
+    ui_draw(1);
+    {
+        uint32_t i, red = 0;
+        for (i = 0; i < 240u * 24u; i++)
+            red += (screen[i] >> 11) > 20u && ((screen[i] >> 5) & 63u) < 24u && i % 240u > 60u;   /* (not the sound's chip) */
+        CHECK(red > 10u, "header: the patch loaded, red (%u px)", red);
+    }
     snd[2].level = 99;
     pat[3].s[4][9] = 0;
     h_pressed |= 1u << B_GLO; h_held |= 1u << B_GLO;   /* SHIFT + PRESETS: the patterns only */

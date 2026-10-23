@@ -250,7 +250,8 @@ static const uint8_t PAGE_P[PG_N][8] = {
 };
 
 static struct {
-    uint8_t page, back, hot, uboot, force, shift, bar, bank, cur, acc_mode, follow, slot, swhat, lwhat, patch;
+    uint8_t page, back, hot, uboot, force, shift, bar, bank, cur, acc_mode, follow, slot, swhat, lwhat, patch,
+        loaded;                                  /* the patch loaded (or saved) last: its slot + 1, 0: none */
     uint8_t glo_used, arp_from, rec_long, copy, lvel, eu[NTRK];
     uint8_t mixpan;                              /* the MIXER's page 2: KNOB 1..4 the pans */
     uint16_t wheld, wkeep, sedit;                /* SEQ: white keys held, kept when let go, held long (STEP EDIT) */
@@ -1025,6 +1026,7 @@ static void proj_save(uint32_t slot, uint32_t what)   /* SW_ALL, or the kit / th
     }
     ui.used[slot % NSLOT] = 1;
     ui.slot = ui.patch = (uint8_t)slot;
+    ui.loaded = (uint8_t)(slot + 1u);
     settings_save();
     {
         char m[28];
@@ -1046,6 +1048,7 @@ static int proj_load(uint32_t slot, uint32_t what)   /* SW_ALL: kit and patterns
     if (what != SW_KIT)
         dec_blob(&proj_buf, 1);
     ui.patch = (uint8_t)slot;
+    ui.loaded = (uint8_t)(slot + 1u);
     str_cpy(m, what == SW_PAT ? "PATTERNS " : what == SW_KIT ? "KIT " : "PATCH ", sizeof m);
     fmt_u(m + str_len(m), slot + 1u);
     ui_say(m);
@@ -1300,6 +1303,7 @@ static void patch_new(uint32_t len, int32_t spd, uint32_t bpm, uint32_t keep)
     song.mute = song.solo = 0;
     if (!keep)
         kit_factory();
+    ui.loaded = 0;
     ui.bar = 0;
     ui.rot = 0;
     memset(ui.eu, 0, sizeof ui.eu);
@@ -2576,7 +2580,7 @@ static void draw_head(int force)
     uint32_t sig = t * 7u + song.playing * 131u + song.bpm * 1009u + (ui.msg_t ? hsh(5u, ui.msg) : 0u) +
                    ui.shift * 7333u + song.rec * 191u + song.erase * 4099u + blink * 37u + song.pat * 7919u +
                    (song.pat_next < NPAT ? song.pat_next * 104729u + 3u : 0u) + ui.bar * 271u + nbars(t) * 6151u +
-                   (mode ? hsh(9u, mode) : 0u) + song.clk_src * 5u + (song.smode ? song.srow * 61u + 17u : 0u);
+                   (mode ? hsh(9u, mode) : 0u) + song.clk_src * 5u + (song.smode ? song.srow * 61u + 17u : 0u) + ui.loaded * 92821u;
     int32_t x;
     if (!force && sig == ui.sig[0])
         return;
@@ -2611,6 +2615,13 @@ static void draw_head(int force)
         if (mode)
             str_cpy(b, mode, sizeof b);
         cv_text_r(170, CAP_IN(S, H_HEAD), &AF_S, b, mode ? T_ACCENT : T_MID, T_BG);
+        if (ui.loaded) {                         /* the patch loaded: its number, red (where the name leaves room) */
+            int32_t xr = 170 - (int32_t)text_w(&AF_S, b) - 6;
+            b[0] = '#';
+            fmt_u(b + 1, ui.loaded);
+            if (xr - (int32_t)text_w(&AF_S, b) > x + (song.rec ? 40 : 4))
+                cv_text_r(xr, CAP_IN(S, H_HEAD), &AF_S, b, C_REC, T_BG);
+        }
         fmt_u(b, song.bpm);
         cv_text_r(220, CAP_IN(M, H_HEAD), &AF_M, b, song.clk_src == CK_EXT ? T_ACCENT : T_THEME, T_BG);
     }
@@ -2782,29 +2793,37 @@ static void g_sample(void)                       /* SAMPLE LAYER: the transient'
     str_cat(b, mach ? "  CLASSIC MACHINE" : s->smp >= TR_OWN0 ? "  OWN TRANSIENT" : "  LXR TRANSIENT", sizeof b);
     g_label(10, 104, b, T_MID);
 }
-static void g_mixer(void)                        /* MIXER: eight strips, the bank's four lit */
+static void g_mixer(void)                        /* MIXER: the bank's four strips, each under its card */
 {
-    uint32_t t;
-    for (t = 0; t < NTRK; t++) {
-        const sound_t *s = &snd[t];
-        int32_t x = 10 + (int32_t)t * 28, h = s->level * 76 / 127, pk = clamp(peak[t] * 76 / 20000, 0, 76);
-        int inb = t / 4u == ui.bank, on = trk_audible(t);
-        uint16_t c = on ? TRK_COL[t] : T_DIM;
-        if (inb)
-            cv_rrect(x - 3, 2, 26, 118, 3, T_RAISE, T_SURF);
-        cv_rrect(x + 2, 8, 6, 78, 2, T_LINE, inb ? T_RAISE : T_SURF);
-        cv_rrect(x + 2, 86 - h, 6, h < 2 ? 2 : h, 2, c, T_LINE);
-        cv_rect(x + 11, 86 - pk, 4, pk, on ? T_THEME : T_DIM);
+    uint32_t c, t;
+    for (c = 0; c < 4u; c++) {
+        const sound_t *s;
+        int32_t x, h, pk, on;
+        uint16_t col;
+        t = (ui.bank * 4u + c) % NTRK;
+        s = &snd[t];
+        x = CARD_X(c);
+        h = s->level * 76 / 127;
+        pk = clamp(peak[t] * 76 / 20000, 0, 76);
+        on = trk_audible(t);
+        col = on ? TRK_COL[t] : T_DIM;
+        cv_rrect(x + 1, 3, CARD_W - 2, 114, 4, T_RAISE, T_SURF);
+        cv_rrect(x + 14, 8, 10, 78, 3, T_LINE, T_RAISE);              /* the level */
+        cv_rrect(x + 14, 86 - h, 10, h < 3 ? 3 : h, 3, col, T_LINE);
+        cv_rect(x + 30, 8, 8, 78, T_SURF);                              /* the meter: this sound's output */
+        cv_rect(x + 30, 86 - pk, 8, pk, on ? T_THEME : T_DIM);
         if (ui.mixpan) {                         /* PAN: a bar from the centre, the strip's colour */
-            int32_t pw = s->pan * 10 / 64;
-            cv_rect(x - 1, 94, 22, 1, T_LINE);
-            cv_rect(pw < 0 ? x + 10 + pw : x + 10, 91, pw < 0 ? -pw + 1 : pw + 1, 7, c);
+            int32_t pw = s->pan * 20 / 64;
+            cv_rect(x + 6, 94, 45, 1, T_LINE);
+            cv_rect(pw < 0 ? x + 28 + pw : x + 28, 91, pw < 0 ? -pw + 1 : pw + 1, 7, col);
         } else {
-            cv_rect(x + 10 + s->pan * 9 / 64, 92, 2, 5, T_MID);
+            cv_rect(x + 28 + s->pan * 20 / 64, 92, 2, 5, T_MID);
         }
-        cv_text_fit(x, 100, &AF_S, TRK_SHORT[t], on ? T_TEXT : T_DIM, inb ? T_RAISE : T_SURF, 22);
-        if ((song.mute >> t) & 1u) cv_text_fit(x + 1, 108 + 2, &AF_S, "M", C_REC, inb ? T_RAISE : T_SURF, 10);
-        if ((song.solo >> t) & 1u) cv_text_fit(x + 11, 108 + 2, &AF_S, "S", T_ACCENT, inb ? T_RAISE : T_SURF, 10);
+        cv_text_in(x, 100, CARD_W, &AF_S, TRK_SHORT[t], on ? T_TEXT : T_DIM, T_RAISE);
+        if ((song.mute >> t) & 1u) cv_text_fit(x + 6, 100, &AF_S, "M", C_REC, T_RAISE, 10);
+        if ((song.solo >> t) & 1u) cv_text_fit(x + 44, 100, &AF_S, "S", T_ACCENT, T_RAISE, 10);
+    }
+    for (t = 0; t < NTRK; t++) {                 /* (every meter falls, the other bank's too) */
         if (peak[t] > 0) peak[t] -= peak[t] / 6 + 40;
         if (peak[t] < 0) peak[t] = 0;
     }
@@ -2850,9 +2869,12 @@ static void g_store(void)
         uint16_t c = i == ui.slot ? T_THEME : T_RAISE;
         cv_rrect(x, y, 29, 36, 4, c, T_SURF);
         fmt_u(b, i + 1u);
-        cv_text_in(x, y + 5, 29, &AF_M, b, i == ui.slot ? T_INK : ui.used[i] ? T_TEXT : T_DIM, c);
+        int ld = ui.loaded == i + 1u;            /* (the patch loaded: red) */
+        if (ld && i != ui.slot)
+            cv_rrect(x, y, 29, 36, 4, C_REC, T_SURF), cv_rrect(x + 2, y + 2, 25, 32, 3, c, C_REC);
+        cv_text_in(x, y + 5, 29, &AF_M, b, ld && i != ui.slot ? C_REC : i == ui.slot ? T_INK : ui.used[i] ? T_TEXT : T_DIM, c);
         if (ui.used[i])
-            cv_rect(x + 7, y + 28, 15, 3, i == ui.slot ? T_INK : T_THEME);
+            cv_rect(x + 7, y + 28, 15, 3, ld ? C_REC : i == ui.slot ? T_INK : T_THEME);
     }
     g_label(12, 96, ui.swhat == SW_KIT ? "OCT+ SAVES THE KIT" : ui.swhat == SW_PAT ? "OCT+ SAVES THE PATTERNS" :
             "OCT+ SAVES KIT + PATTERNS", T_MID);
@@ -3253,7 +3275,7 @@ static uint32_t graph_sig(void)
     if (ui.page == PG_SAVE) {
         for (i = 0; i < NSLOT; i++)
             h = h * 3u + ui.used[i];
-        return h + ui.slot * 11u + ui.swhat * 101u + ui.lwhat * 7u;
+        return h + ui.slot * 11u + ui.swhat * 101u + ui.lwhat * 7u + ui.loaded * 3001u;
     }
     for (i = 0; i < NLOCK; i++)                  /* (the locks) */
         h = h * 3u + plk[song.pat % NPAT][i].key * plk[song.pat % NPAT][i].pid;
