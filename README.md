@@ -61,7 +61,7 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | Taste | Seite | Knöpfe 1–4 | mit SHIFT |
 |---|---|---|---|
 | HOME | KIT | Tempo, Swing, Tune (alle), Decay (alle) | MIDI-Kanal, Theme, Version |
-| HOME (halten) | **SYSTEM** | Version, belegte Plätze und freier Speicher, Audio-Last, Akkuspannung (geschätzt, unkalibriert), About | |
+| HOME (halten) | **SYSTEM** (ohne Kopfzeile, oben das LUXR-Logo) | Version, belegte Plätze und freier Speicher, Audio-Last, Akkuspannung (geschätzt, unkalibriert), About | |
 | SEQ | SEQUENCER | Länge der Spur, Velocity des letzten Steps, Rotate, Euclid | **PAT LEN: jeder Dreh verdoppelt die Patternlänge (zurück: halbiert)**, **COPY x2: Noten in die neuen Takte kopieren (an/aus)**, Accent des letzten Steps |
 | SEQ (2.) | **LIVE PADS** | Pad-Velocity, Quantize-Raster, -Richtung, Metronom | |
 | EDIT | SYNTH 1-4 | Synth-Parameter 1–4 | Parameter 5–8 |

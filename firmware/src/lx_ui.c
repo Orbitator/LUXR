@@ -214,6 +214,7 @@ static struct {
     uint8_t home_long;
     char msg[28];
     uint32_t sig[8];                             /* the areas: 0 header, 1..4 cards, 5 graph, 6 footer, 7 uboot */
+    uint8_t logo;                                /* the SYSTEM page's logo is on the screen (header and cards are not) */
     uint32_t keys, held_prev;
     uint8_t used[NSLOT];                         /* the store's slots in use */
     uint32_t lit_t[NTRK];                        /* LIVE: when each sound was last hit (its pad lit a moment) */
@@ -1857,6 +1858,31 @@ static void g_info(void)                         /* SYSTEM: the version, the mem
     g_label(10, 90, "MADE BY HOLODECK-AUDIOTOOLS.COM", T_ACCENT);
     g_label(10, 104, "BATTERY: ESTIMATE, NOT CALIBRATED", T_DIM);
 }
+#include "ui_logo.h"                             /* LOGO_W x LOGO_H, LOGO_RLE (tools/gen_logo.py) */
+#define C_LOGO RGB(240, 140, 52)                 /* the logo's orange marks */
+/* SYSTEM: the logo where the header and the cards are (no header on this page); the letters in TEXT, the marks in
+ * a fixed orange (MONO: ACCENT), each a 4-bit coverage over BG */
+static void draw_logo(int force)
+{
+    uint16_t lut[256];
+    const uint8_t *p = LOGO_RLE, *e = LOGO_RLE + sizeof LOGO_RLE;
+    uint32_t i = 0, v, sig = 0x10600001u + ux.gen * 7u, x0 = (240u - LOGO_W) / 2u, y0 = (Y_GRAPH - LOGO_H) / 2u;
+    uint16_t org = ux.mono ? T_ACCENT : C_LOGO;
+    if (!force && sig == ui.sig[0])
+        return;
+    ui.sig[0] = sig;
+    for (v = 0; v < 256u; v++)
+        lut[v] = swap16(ux_mix(ux_mix(T_BG, T_TEXT, (int32_t)(v >> 4) * 100 / 15), org, (int32_t)(v & 15u) * 100 / 15));
+    cv_begin(240, Y_GRAPH, T_BG);
+    for (; p + 1 < e; p += 2) {
+        uint32_t n = p[0];
+        v = p[1];
+        for (; n; n--, i++)
+            if (v)
+                cv_px[(y0 + i / LOGO_W) * 240u + x0 + i % LOGO_W] = lut[v];
+    }
+    cv_blit(0, 0);
+}
 static uint32_t graph_sig(void)
 {
     uint32_t h = ui.page * 7u + ui.shift * 3u + song.sel * 131u + ui.bar * 17u + song.pat * 7919u + ui.cur * 37u;
@@ -1999,6 +2025,21 @@ static void ui_draw(int force)
     }
     if (ui.sig[7]) {
         ui.sig[7] = 0;
+        force = 1;
+    }
+    if (ui.page == PG_INFO) {                     /* SYSTEM: the logo, no header, no cards */
+        if (!ui.logo)
+            force = 1;
+        ui.logo = 1;
+        if (force)
+            lcd_fill(0, Y_GRAPH + H_GRAPH, 240, Y_FOOT - Y_GRAPH - H_GRAPH, T_BG);
+        draw_logo(force);
+        draw_graph(force);
+        draw_foot(force);
+        return;
+    }
+    if (ui.logo) {                                /* (back from SYSTEM: everything again) */
+        ui.logo = 0;
         force = 1;
     }
     if (force) {

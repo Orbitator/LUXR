@@ -105,7 +105,8 @@ def generate():
     cmds = [[tools / "gen_aa_font.py", GEN / "ui_fonts.h", "--preset", "inter-tight"],
             [tools / "gen_aa_keycaps.py", GEN / "ui_keycaps.h"],
             [tools / "gen_ui_palettes.py", GEN / "ui_palettes.h"],
-            [tools / "gen_tables.py", GEN / "oc_tables.h"]]
+            [tools / "gen_tables.py", GEN / "oc_tables.h"],
+            [tools / "gen_logo.py", GEN / "ui_logo.h"]]               # (the logo on LUXR's SYSTEM page)
     if APP == "lxr":                 # the LXR's transient samples (their own licence: not in this repository)
         cmds.append([tools / "gen_lxr_transients.py", GEN / "lxr_transients.h"])
         cmds.append([tools / "gen_own_transients.py", GEN / "own_transients.h"])   # (+ sixteen of each sound's own)
