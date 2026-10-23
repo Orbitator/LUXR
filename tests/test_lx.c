@@ -1482,6 +1482,23 @@ int main(int argc, char **argv)
         host_key(key_white(5));
         host_run(200, watch, 0);
         CHECK(ui.slot == 5u && hits[5] == 0u, "STORE: key 6 chooses slot 6, no sound (%u)", ui.slot);
+        snd[1].level = 77;                       /* a patch in slot 4: key 4 loads it */
+        proj_save(3, SW_ALL);
+        snd[1].level = 20;
+        host_key(key_white(3));
+        CHECK(ui.slot == 3u && snd[1].level == 77u && ui.loaded == 4u, "STORE: key 4, a slot in use: its patch loaded (%u)", snd[1].level);
+        memset(h_store + ST_PROJ(3), 0xFF, SLOT_SZ);
+        ui.used[3] = 0;
+        ui.loaded = 0;
+        host_turn(EN_SELECT, 2);                 /* SELECT: the row 19-27 */
+        CHECK(ui.slot == 21u && ui.page == PG_SAVE, "STORE, SELECT +2: row 19-27, the column kept (slot %u)", ui.slot + 1u);
+        host_key(key_white(2));
+        CHECK(ui.slot == 20u, "key 3 in that row: slot 21 (%u)", ui.slot + 1u);
+        host_key(key_white(10));
+        CHECK(ui.slot == 20u, "key 11: none (nine a row)");
+        host_turn(EN_SELECT, -3);                /* (back past the first: the last row) */
+        CHECK(ui.slot == 29u, "SELECT -3: row 28-36 (slot %u)", ui.slot + 1u);
+        ui.slot = 5;
         host_tap(B_SCL);
         CHECK(ui.page == PG_PAT, "SCL: PATTERNS");
         host_key(key_white(3));

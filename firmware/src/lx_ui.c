@@ -2287,14 +2287,20 @@ static void black_key(uint32_t b)
 static void page_key(uint32_t w, int down)
 {
     char m[28];
-    if (ui.page == PG_SAVE) {                    /* key k: slot k of the sixteen KNOB 1 is in (1..16, 17..32, 33..36) */
-        w += ui.slot / 16u * 16u;
-        if (down && w < NSLOT) {
+    if (ui.page == PG_SAVE) {                    /* keys 1..9: the slots of the row SELECT shows (1-9 .. 28-36), loaded */
+        if (w >= 9u)
+            return;
+        w += ui.slot / 9u * 9u;
+        if (down && w < NSLOT) {                 /* a slot in use: loaded at once (as KNOB 3 says); empty: chosen */
             ui.slot = (uint8_t)w;
-            str_cpy(m, "SLOT ", sizeof m);
-            fmt_u(m + str_len(m), w + 1u);
-            str_cat(m, ui.used[w] ? " (IN USE)" : " (EMPTY)", sizeof m);
-            ui_say(m);
+            if (ui.used[w]) {
+                proj_load(w, ui.lwhat);
+            } else {
+                str_cpy(m, "SLOT ", sizeof m);
+                fmt_u(m + str_len(m), w + 1u);
+                str_cat(m, " (EMPTY)", sizeof m);
+                ui_say(m);
+            }
         }
         return;
     }
@@ -2811,7 +2817,16 @@ static void ui_input(void)
             ui_say("NEW SOUND");
         }
     }
-    if (e[EN_SELECT]) {                          /* SELECT: the sound 1..8; SHIFT: the pattern */
+    if (e[EN_SELECT] && ui.page == PG_SAVE && !ui.shift) {   /* STORE: SELECT the row of nine (1-9 .. 28-36), the column kept */
+        char m[28];
+        uint32_t row = (uint32_t)(((int32_t)(ui.slot / 9u) + e[EN_SELECT] % 4 + 4) % 4);
+        ui.slot = (uint8_t)(row * 9u + ui.slot % 9u);
+        str_cpy(m, "SLOTS ", sizeof m);
+        fmt_u(m + str_len(m), row * 9u + 1u);
+        str_cat(m, "-", sizeof m);
+        fmt_u(m + str_len(m), row * 9u + 9u);
+        ui_say(m);
+    } else if (e[EN_SELECT]) {                   /* SELECT: the sound 1..8; SHIFT: the pattern */
         if (ui.shift) pset(P_PAT, pget(P_PAT) + e[EN_SELECT]);
         else sel_track((int32_t)song.sel + e[EN_SELECT]);
     }
@@ -2923,8 +2938,8 @@ static void ui_leds(void)
                  (w == BK_NUDGE && (ui.shift ? ui.follow : ui.lockmode == LM_NUDGE)) ||
                  (w == BK_FILL && (ui.shift ? song.playing && song.pstep % 4u == 0u && song.pos < FS / 20u : song.fill));
         } else if (!ui.shift && ui.page == PG_SAVE) {   /* the slots: lit in use, the one chosen blinking */
-            uint32_t sl = ui.slot / 16u * 16u + w;
-            on = sl < NSLOT && (sl == ui.slot ? blink : ui.used[sl]);
+            uint32_t sl = ui.slot / 9u * 9u + w;
+            on = w < 9u && sl < NSLOT && (sl == ui.slot ? blink : ui.used[sl]);
         } else if (!ui.shift && ui.page == PG_PAT) {    /* the patterns: lit in the chain, the one playing blinking */
             on = (w + NPAT - song.chain0) % NPAT < song.chain;
             if (w == song.pat)
@@ -3255,11 +3270,11 @@ static void g_patterns(void)                     /* PATTERNS: 16, the one playin
 static void g_store(void)
 {
     uint32_t i;
-    for (i = 0; i < NSLOT; i++) {                /* four rows of nine; a bar under the ones in use; the white keys' sixteen
-                                                  * a shade lighter; the patch loaded red */
+    for (i = 0; i < NSLOT; i++) {                /* four rows of nine; a bar under the ones in use; the row on the white
+                                                  * keys (SELECT) a shade lighter; the patch loaded red */
         int32_t x = 8 + (int32_t)(i % 9u) * 25, y = 4 + (int32_t)(i / 9u) * 22;
         char b[12];
-        int ld = ui.loaded == i + 1u, keys = i / 16u == ui.slot / 16u;
+        int ld = ui.loaded == i + 1u, keys = i / 9u == ui.slot / 9u;
         uint16_t c = i == ui.slot ? T_THEME : keys ? T_RAISE : ux_mix(T_SURF, T_RAISE, 45);
         if (ld && i != ui.slot) {
             cv_rrect(x, y, 23, 19, 3, C_REC, T_SURF);
