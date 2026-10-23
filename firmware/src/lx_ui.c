@@ -2455,6 +2455,16 @@ static void g_grid(void)                         /* the eight tracks, the bar sh
                 cv_rect(x + 2, y + 12, 6, 1, T_ACCENT);
         }
     }
+    {                                            /* the bars of the selected track: a dot each, the one shown red, the one
+                                                  * playing ringed */
+        uint32_t n = nbars(song.sel), b, pb = tpos(song.sel) / 16u;
+        int32_t w = 24, g = 8, x0 = 120 - ((int32_t)n * w + ((int32_t)n - 1) * g) / 2;
+        for (b = 0; b < n; b++) {                /* (shown: red; playing: light; the rest: dark) */
+            int32_t x = x0 + (int32_t)b * (w + g);
+            uint16_t c = b == ui.bar % n ? C_REC : song.playing && b == pb ? ux_mix(T_SURF, T_TEXT, 70) : T_RAISE;
+            cv_rrect(x, 115, w, 6, 3, c, T_SURF);
+        }
+    }
 }
 static void g_params(void)                       /* SYNTH LAYER: the eight parameters as bars */
 {

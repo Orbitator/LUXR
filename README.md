@@ -97,7 +97,7 @@ gezählt: 1:2 im 1., 3., 5. …, 2:2 im 2., 4. …), dann **FILL** (spielt nur, 
 (nur ohne FILL); KNOB 3 Pan nur für diesen Step (SOUND = der Pan des Sounds, sonst
 L48 L32 L16 C R16 R32 R48); KNOB 4 **Substeps** (OFF, 2 … 6: so viele Schläge gleichmäßig über den Step verteilt).
 Mehrere gehaltene Steps werden zusammen bearbeitet. Im Raster sind Steps mit Probability oder Bedingung blasser,
-Substeps teilen die Zelle, ein eigenes Pan ist ein Punkt, ein Step mit Locks hat eine Kerbe oben links, ein
+Unter dem Raster zeigt je ein Balken einen Takt der Spur: rot der angezeigte, hell der laufende. Substeps teilen die Zelle, ein eigenes Pan ist ein Punkt, ein Step mit Locks hat eine Kerbe oben links, ein
 verschobener (NUDGE) sitzt etwas früher oder später in seiner Spalte. (Accents setzt der Accent-Modus, SHIFT + C#5.)
 **Auf allen anderen Seiten** spielen F3–C4 die Sounds 1–8 (D4–G5 dieselben mit Accent), mit REC + PLAY aufgenommen; die
 LEDs leuchten beim Anschlag. Auf den Seiten eines Sounds (SYNTH, SAMPLE, SOUND MIX, LFO, FX SENDS) wählt der Anschlag den
