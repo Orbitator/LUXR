@@ -15,7 +15,7 @@
  *           else the sound before / after. Both held 5 s: UBOOT.
  *   WHITE   the 16 steps of the bar shown (C#5: accents) · LIVE: F3..C4 sounds 1..8, D4..G5 the same accented ·
  *           NOTE REPEAT: F3..C4 the pads, D4..G5 the rate · SHIFT: F3..C4 mute sounds 1..8, D4..G5 solo them
- *   BLACK   F#3 sound◂ G#3 sound▸ A#3 mute C#4 solo D#4 audition F#4 copy G#4 paste A#4 clear C#5 P-LOCK D#5 NUDGE
+ *   BLACK   F#3 sound◂ G#3 sound▸ A#3 mute C#4 solo D#4 random mute F#4 copy G#4 paste A#4 clear C#5 P-LOCK D#5 NUDGE
  *           F#5 FILL (held); SHIFT: undo redo, all on, solo off, new sound, copy / paste / clear the pattern, accent mode,
  *           follow, tap tempo. P-LOCK / NUDGE: the white keys are the steps on every page (a step held + a knob: its lock /
  *           its timing); P-LOCK + REC + PLAY: the knobs write locks (motion rec)
@@ -1637,7 +1637,7 @@ static uint32_t key_place(uint32_t k)
     }
     return key_black(k) ? b : w;
 }
-enum { BK_PREV, BK_NEXT, BK_MUTE, BK_SOLO, BK_AUDITION, BK_COPY, BK_PASTE, BK_CLEAR, BK_PLOCK, BK_NUDGE, BK_FILL, BK_N };
+enum { BK_PREV, BK_NEXT, BK_MUTE, BK_SOLO, BK_AUDITION /* (D#4: RANDOM MUTE) */, BK_COPY, BK_PASTE, BK_CLEAR, BK_PLOCK, BK_NUDGE, BK_FILL, BK_N };
 
 static void sel_track(int32_t t)
 {
@@ -1674,13 +1674,29 @@ static void black_key(uint32_t b)
         if (ui.shift) { song.solo = 0; ui_say("SOLO OFF"); }
         else { song.solo ^= (uint8_t)(1u << t); ui_say((song.solo >> t) & 1u ? "SOLO" : "SOLO OFF"); }
         break;
-    case BK_AUDITION:
-        if (ui.shift) {                          /* a new sound for the track */
+    case BK_AUDITION:                            /* RANDOM MUTE: the other sounds muted by chance (the one selected stays) */
+        if (ui.shift) {                          /* (SHIFT: a new sound for the track, silently) */
             undo_take();
             sound_preset(t, 1u + rng() % 99u);
             ui_say("NEW SOUND");
+            break;
         }
-        ev_push(EV_HIT, t, 100);
+        {
+            uint32_t mk, k, n, tries = 0;
+            do {                                 /* 1 .. 6 of the other seven, never the same set twice in a row */
+                for (mk = 0, n = 0, k = 0; k < NTRK; k++)
+                    if (k != t && rng() % 100u < 40u) {
+                        mk |= 1u << k;
+                        n++;
+                    }
+            } while ((n < 1u || n > 6u || mk == song.mute) && ++tries < 32u);
+            song.mute = (uint8_t)mk;
+            song.solo = 0;
+            str_cpy(m, "RANDOM MUTE: ", sizeof m);
+            fmt_u(m + str_len(m), n);
+            str_cat(m, " OFF", sizeof m);
+            ui_say(m);
+        }
         break;
     case BK_COPY:
         if (ui.shift) {

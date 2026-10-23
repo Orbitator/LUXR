@@ -35,7 +35,7 @@ Seite SAMPLE: Sample, Level, Pitch (25 … 175 %), Decay (FULL = ganzes Sample);
 (Einsprungpunkt, davor grau), Tone (LP = Tiefpass, HP = Hochpass), Bend (Pitch-Hüllkurve des Samples: + von oben herab,
 − von unten herauf), Synth (Pegel des Synth-Layers – auf 0 spielt nur das Sample). Wie an der LXR wird das Sample vor
 der Amp-Hüllkurve eingemischt. Jeder Werks- und jeder gewürfelte Sound spielt immer ein Transienten-Sample.
-Das Drehen an Knöpfen spielt den Sound nicht an (anspielen: weiße Taste des Sounds oder D#4).
+Das Drehen an Knöpfen spielt den Sound nicht an (anspielen: die weiße Taste des Sounds auf einer Seite außer SEQ).
 
 **Pro Sound außerdem** (wie in der Web-App): Volume, Pan, Sends für Delay, Reverb und Drive (EDIT dreimal: SOUND MIX) und
 **zwei LFOs** (LFO, nochmal: LFO 2) mit Ziel (Pitch, Filter, Decay, Level, Pan, Sample), Welle (Sinus, Dreieck, Säge,
@@ -115,7 +115,7 @@ Mit REC + PLAY wird jeder Schlag aufgenommen, auf das Raster aus QUANTIZE (REC h
 | G#3 | Sound vor | Redo |
 | A#3 | Mute des Sounds | alle wieder an |
 | C#4 | Solo des Sounds | Solo aus |
-| D#4 | Sound anspielen | neuer (gewürfelter) Sound |
+| D#4 | **RANDOM MUTE**: schaltet zufällig 1–6 der anderen Sounds stumm (der gewählte bleibt an; jeder Druck ein neuer Satz, A#3 + SHIFT holt alle zurück) | neuer (gewürfelter) Sound, ohne Anspielen |
 | F#4 | Takt kopieren | ganzes Pattern kopieren |
 | G#4 | Takt einfügen | ganzes Pattern einfügen |
 | A#4 | Spur löschen | ganzes Pattern löschen |

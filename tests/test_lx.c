@@ -1308,6 +1308,23 @@ int main(int argc, char **argv)
         CHECK(pat[3].s[2][2] == 0u && pat[5].len[4] == 32u && pat[5].spd[4] == -1 && song.bpm == 140u && snd[0].p[0] == 9u,
               "NEW PATCH: empty, 32 steps, 3/4X, 140 BPM, the kit kept (%u %d %u)", pat[5].len[4], pat[5].spd[4], song.bpm);
     }
+    host_boot(35);
+    {                                            /* D#4: RANDOM MUTE, the selected sound stays, no sound played */
+        uint32_t k, m0;
+        song.sel = 2;
+        reset_count();
+        host_key(key_blk(BK_AUDITION));
+        host_run(200, watch, 0);
+        m0 = song.mute;
+        CHECK(m0 && !((m0 >> 2) & 1u) && hits[2] == 0u, "D#4: random mute %02X, the clap on, nothing played", m0);
+        for (k = 0; k < 5u; k++) {
+            host_key(key_blk(BK_AUDITION));
+            CHECK(song.mute != m0 && !((song.mute >> 2) & 1u), "D#4 again: another set (%02X)", song.mute);
+            m0 = song.mute;
+        }
+        shift_key(key_blk(BK_MUTE));
+        CHECK(!song.mute, "SHIFT + A#3: all on again");
+    }
     host_boot(33);
     host_tap(B_SEQ);
     {                                            /* the screens of every page (doc/screens) */
