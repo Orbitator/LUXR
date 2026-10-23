@@ -243,6 +243,8 @@ static struct {
     uint8_t lockmode;                            /* LM_*: the white keys are steps on every page (P-LOCK, NUDGE) */
     uint8_t learn, lpid, ltrk;                   /* CC LEARN: 1 on (a knob turned arms it), 2 armed: the next CC maps */
     uint8_t scur;                                /* SONG: the row shown */
+    uint8_t restoring, rs_slot, rs_done;         /* patches coming in over USB (the update page): the loading screen */
+    uint32_t rs_off, rs_t;
     char msg[28];
     uint32_t sig[8];                             /* the areas: 0 header, 1..4 cards, 5 graph, 6 footer, 7 uboot */
     uint8_t logo;                                /* the SYSTEM page's logo is on the screen (header and cards are not) */
@@ -1957,6 +1959,21 @@ static void ui_input(void)
             rng_state ^= fm1_ms * 2654435761u + 1u;
         }
     }
+    if (ui.restoring && fm1_ms - ui.rs_t > 2500u) {   /* the restore is over (nothing for 2.5 s): the patch in, the GUI */
+        uint32_t s0 = ui.used[ui.patch % NSLOT] ? ui.patch % NSLOT : 0u;
+        char m[28];
+        ui.restoring = 0;
+        if (ui.used[s0])
+            proj_load(s0, SW_ALL);
+        undo.n_undo = undo.n_redo = 0;
+        str_cpy(m, "PATCHES RESTORED: ", sizeof m);
+        fmt_u(m + str_len(m), ui.rs_done);
+        ui_say(m);
+        ui.force = 1;
+        ui.logo = 0;
+    }
+    if (ui.restoring)                            /* (meanwhile the panel waits: what was pressed is dropped) */
+        return;
     while (cc_r != cc_w) {                       /* MIDI IN controllers: the CC map, LEARN */
         uint32_t c = ccq[cc_r % CCQ];
         RING_PUBLISH();
@@ -2671,26 +2688,50 @@ static void g_mfx(void)                          /* MASTER: the filter's curve *
 #define C_LOGO RGB(240, 140, 52)                 /* the logo's orange marks */
 /* SYSTEM: the logo where the header and the cards are (no header on this page); the letters in TEXT, the marks in
  * a fixed orange (MONO: ACCENT), each a 4-bit coverage over BG */
-static void draw_logo(int force)
+static void logo_paint(uint32_t y0)              /* the logo into the canvas (begun 240 wide), its top at y0 */
 {
     uint16_t lut[256];
     const uint8_t *p = LOGO_RLE, *e = LOGO_RLE + sizeof LOGO_RLE;
-    uint32_t i = 0, v, sig = 0x10600001u + ux.gen * 7u, x0 = (240u - LOGO_W) / 2u, y0 = (Y_GRAPH - LOGO_H) / 2u;
+    uint32_t i = 0, v, x0 = (240u - LOGO_W) / 2u;
     uint16_t org = ux.mono ? T_ACCENT : C_LOGO;
-    if (!force && sig == ui.sig[0])
-        return;
-    ui.sig[0] = sig;
     for (v = 0; v < 256u; v++)
         lut[v] = swap16(ux_mix(ux_mix(T_BG, T_TEXT, (int32_t)(v >> 4) * 100 / 15), org, (int32_t)(v & 15u) * 100 / 15));
-    cv_begin(240, Y_GRAPH, T_BG);
     for (; p + 1 < e; p += 2) {
         uint32_t n = p[0];
         v = p[1];
         for (; n; n--, i++)
-            if (v)
+            if (v && y0 + i / LOGO_W < cv_h)
                 cv_px[(y0 + i / LOGO_W) * 240u + x0 + i % LOGO_W] = lut[v];
     }
+}
+static void draw_logo(int force)
+{
+    uint32_t sig = 0x10600001u + ux.gen * 7u;
+    if (!force && sig == ui.sig[0])
+        return;
+    ui.sig[0] = sig;
+    cv_begin(240, Y_GRAPH, T_BG);
+    logo_paint((Y_GRAPH - LOGO_H) / 2u);
     cv_blit(0, 0);
+}
+/* the loading screen: the logo, a bar (pct 0..100), what is happening. At power-on (oc_main.c: until the patch is
+ * loaded and the audio runs) and while an update page restores the patches (until they are all in and loaded). */
+static void boot_screen(uint32_t pct, const char *label)
+{
+    static uint32_t gen = 0xFFFFFFFFu;
+    int32_t w = 160, f = (int32_t)(pct > 100u ? 100u : pct) * w / 100;
+    if (gen != ux.gen) {                         /* (first, or a new palette: the whole screen) */
+        gen = ux.gen;
+        lcd_fill(0, 0, 240, 240, T_BG);
+    }
+    cv_begin(240, 124, T_BG);
+    logo_paint(0);
+    cv_text_in(0, 68, 240, &AF_S, "A Sonic Potions LXR-Adaption", T_TEXT, T_BG);
+    cv_rrect(40, 92, w, 6, 3, T_LINE, T_BG);
+    if (f > 0)
+        cv_rrect(40, 92, f < 6 ? 6 : f, 6, 3, ux.mono ? T_ACCENT : C_LOGO, T_LINE);
+    cv_text_in(0, 106, 240, &AF_S, label ? label : "", T_MID, T_BG);
+    cv_blit(0, 58);
 }
 static uint32_t graph_sig(void)
 {
@@ -2845,6 +2886,23 @@ static void draw_uboot(int force)
 static void ui_draw(int force)
 {
     uint32_t i;
+    if (ui.restoring) {                          /* patches coming in: the loading screen */
+        static uint32_t last;
+        char b[28];
+        uint32_t pct = ui.rs_off * 100u / sizeof(proj_t), sg = ui.rs_done * 1000u + ui.rs_slot * 101u + pct + ux.gen * 7u;
+        if (sg != last || force) {
+            last = sg;
+            str_cpy(b, "RESTORING PATCH ", sizeof b);
+            fmt_u(b + str_len(b), ui.rs_slot + 1u);
+            if (ui.rs_done) {
+                str_cat(b, " (", sizeof b);
+                fmt_u(b + str_len(b), ui.rs_done);
+                str_cat(b, " DONE)", sizeof b);
+            }
+            boot_screen(pct, b);
+        }
+        return;
+    }
     if (ui.force) {
         ui.force = 0;
         force = 1;
@@ -2967,6 +3025,14 @@ static int proto_frame(const uint8_t *p, uint32_t n)
         proto_reply(0x43, px_raw, 5u + m);
         return 1;
     case 0x44:
+        if (!ui.restoring) {                     /* a restore begins: stopped, the loading screen until it is over */
+            ui.restoring = 1;
+            ui.rs_done = 0;
+            seq_play(0);
+        }
+        ui.rs_slot = (uint8_t)slot;
+        ui.rs_off = off;
+        ui.rs_t = fm1_ms;
         code = k >= 5u && off + (k - 5u) <= sizeof stage ? 0 : 2;
         if (!code)
             memcpy(stage + off, px_raw + 5, k - 5u);
@@ -2980,8 +3046,10 @@ static int proto_frame(const uint8_t *p, uint32_t n)
                 ui.used[slot] = 1;
         }
         proto_reply(0x47, &code, 1);
-        if (!code)
-            ui_say("PATCH RESTORED");
+        if (!code && ui.rs_done < 255u)
+            ui.rs_done++;
+        ui.rs_off = 0;
+        ui.rs_t = fm1_ms;
         return 1;
     }
     return 0;
@@ -3033,9 +3101,12 @@ static void ui_init(void)
     memset(ccmap, 0, sizeof ccmap);
     seq_reset();
     demo_pattern(&pat[0]);
+    boot_screen(15, "READING THE STORE");
     store_scan();                                 /* the settings (theme, MIDI IN, metronome), the slots in use */
+    boot_screen(40, ui.used[0] ? "LOADING PATCH 1" : "FACTORY KIT");
     if (ui.used[0])                               /* at power-on: patch 1, kit and patterns */
         proj_load(0, SW_ALL);
+    boot_screen(65, "STARTING THE SOUND");
     palette_set(song.theme);
     undo.n_undo = undo.n_redo = 0;
     ui.page = ui.back = PG_SEQ;

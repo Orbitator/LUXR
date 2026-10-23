@@ -35,6 +35,7 @@
 #define OC_VERSION "v0.1"
 #endif
 #define APP_BANNER "LUXR"
+#define APP_BOOT_SCREEN 1                 /* oc_main.c: the logo with a loading bar (lx_ui.c boot_screen) */
 
 #include <stdint.h>
 #include "fm1_time.h"

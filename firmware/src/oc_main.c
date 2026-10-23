@@ -165,7 +165,11 @@ static void fm1_main(void)
     }
     lcd_init();
     palette_set(PAL_AMBER);                       /* (the banners' colours before ui_init) */
+#ifdef APP_BOOT_SCREEN
+    boot_screen(5, "FM-1 " OC_VERSION);           /* (lx_ui.c: the logo and a loading bar) */
+#else
     oc_banner(APP_BANNER, "FM-1 " OC_VERSION);
+#endif
     fm1_input_init();
     fm1_adc_init();
     panel_init();
@@ -177,7 +181,18 @@ static void fm1_main(void)
     fm1_guard_lock_top();
     fm1_irq_enable_all();
     irq_live = 1;
+#ifdef APP_BOOT_SCREEN
+    {                                             /* the sound running a moment before the panel is */
+        uint32_t k;
+        for (k = 1; k <= 4u; k++) {
+            fm1_delay_ms(100);
+            fm1_wdt_feed();
+            boot_screen(65u + k * 35u / 4u, k < 4u ? "STARTING THE SOUND" : "READY");
+        }
+    }
+#else
     fm1_delay_ms(400);
+#endif
     ui_draw(1);
     for (;;) {
         uint32_t m = fm1_ms;

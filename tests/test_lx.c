@@ -890,6 +890,19 @@ int main(int argc, char **argv)
                 unpack7(h_sent + 5, h_sent_n - 6, raw, sizeof raw);
             }
             CHECK(raw[0] == 0 && ui.used[12], "an LXP3 backup restored into slot 13, converted");
+            CHECK(ui.restoring && ui.rs_done == 2u, "restoring: the loading screen, 2 patches in (%u)", ui.rs_done);
+            ui_draw(0);
+            snprintf(path, sizeof path, "%s/lx_restore.ppm", dir);
+            host_ppm(path);
+            snd[3].p[0] = 0;
+            host_run(1000, 0, 0);
+            CHECK(ui.restoring, "still restoring a second later");
+            host_run(2000, 0, 0);
+            CHECK(!ui.restoring && !strncmp(ui.msg, "PATCHES RESTORED", 16) && snd[3].p[0] == 13u,
+                  "2.5 s quiet: the restore is over, the patch loaded again (%s)", ui.msg);
+            boot_screen(65, "STARTING THE SOUND");
+            snprintf(path, sizeof path, "%s/lx_boot.ppm", dir);
+            host_ppm(path);
         }
     }
 
