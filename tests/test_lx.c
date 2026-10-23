@@ -1329,12 +1329,15 @@ int main(int argc, char **argv)
               "kept: the lock, substeps 3 and NUDGE -5, SPEED 3/4X");
         CHECK(snd[1].och == 7u && snd[1].onote == 40u && song.slen == 3u && song.smode && srows[2].pat == 9u && srows[2].rep == 4u,
               "kept: the snare's MIDI OUT, the song's rows");
-        /* a full pattern of every step (the old formats' worst): still fits */
+        /* every step of all sixteen patterns set (64 steps, extras, substeps): past an 8 KiB slot; four of them: fits */
         for (t = 0; t < NTRK; t++)
             for (i = 0; i < NSTEP; i++)
                 for (k = 0; k < NPAT; k++) { pat[k].s[t][i] = 77; pat[k].x[t][i] = 9; pat[k].r[t][i] = 2; pat[k].len[t] = 64; }
         proj_save(4, SW_ALL);
-        CHECK(!strncmp(ui.msg, "PATCH SAVED", 11), "every step of every pattern set: saved (%s)", ui.msg);
+        CHECK(!ui.used[4] && !strncmp(ui.msg, "PATCH TOO FULL", 14), "every step of all 16 patterns: too full (%s)", ui.msg);
+        for (k = 4; k < NPAT; k++) { memset(pat[k].s, 0, sizeof pat[k].s); memset(pat[k].x, 0, sizeof pat[k].x); memset(pat[k].r, 0, sizeof pat[k].r); }
+        proj_save(4, SW_ALL);
+        CHECK(ui.used[4] && !strncmp(ui.msg, "PATCH SAVED", 11), "every step of 4 patterns, 64 steps each: saved (%s)", ui.msg);
         /* an LXP6 patch as the firmware before wrote it */
         memset(&o, 0, sizeof o);
         o.magic = MAGIC_P6;
@@ -1366,6 +1369,7 @@ int main(int argc, char **argv)
         CHECK(pat[0].s[1][2] && hits[1] == 0u, "SEQ: a step set without a sound (%u)", hits[1]);
         host_tap(B_SAVE);
         CHECK(ui.page == PG_SAVE, "SAVE: STORE");
+        ui.slot = 0;
         host_turn(EN_K1, 6);                     /* slot 7, empty */
         snd[0].p[0] = 3;
         host_turn(EN_K4, 1);
@@ -1501,6 +1505,84 @@ int main(int argc, char **argv)
             CHECK(ui.used[8] && !proj_load(8, SW_ALL) && snd[4].p[0] == 24u && snd[4].level == 70u && snd[4].och == 3u &&
                   snd[4].atk == 0u && snd[4].rel == 60u && pat[2].s[5][6] == 44u, "LXP7 slot 9: read, the envelope as before");
         }
+    }
+    {                                            /* LAYOUT 2 (14 slots of 20 KiB, LXP9) -> 3 (36 of 8 KiB) at the boot */
+        static uint8_t raw[0x5000];
+        static set_rec_t st;
+        static const uint32_t SL[3] = {0, 6, 13};
+        uint32_t i, bl;
+        memset(h_store, 0xFF, sizeof h_store);
+        memset(&st, 0, sizeof st);
+        st.magic = MAGIC_SET; st.layout = 2; st.slot = 6;
+        memcpy(h_store + ST_SET, &st, sizeof st);
+        for (i = 0; i < 3u; i++) {
+            memset(pat, 0, sizeof pat);
+            memset(plk, 0, sizeof plk);
+            for (bl = 0; bl < NPAT; bl++) memset(pat[bl].len, 16, NTRK);
+            pat[1].s[3][5] = (uint8_t)(50u + i);
+            snd[2].level = (uint8_t)(60u + i);
+            kit_take(&proj_buf.k);
+            pat_take(&proj_buf);
+            bl = proj_buf.blen;
+            memset(raw, 0xFF, sizeof raw);
+            wr32(raw, MAGIC_P9);
+            wr32(raw + 4, 0x5000u);
+            raw[12] = (uint8_t)bl; raw[13] = (uint8_t)(bl >> 8); raw[14] = raw[15] = 0;
+            memcpy(raw + 16, &proj_buf.k, sizeof(kit_rec_t));
+            memcpy(raw + 16 + sizeof(kit_rec_t), proj_buf.blob, bl);
+            wr32(raw + 8, fnv(raw + 12, 4u + sizeof(kit_rec_t) + bl));
+            memcpy(h_store + ST_L2(SL[i]), raw, sizeof raw);
+        }
+        host_boot(41);
+        for (i = 0, bl = 0; i < NSLOT; i++) bl += ui.used[i];
+        CHECK(bl == 3u && ui.used[0] && ui.used[6] && ui.used[13] && !ui.used[15], "LAYOUT 3: the three patches moved, nothing else (%u)", bl);
+        for (i = 0; i < 3u; i++)
+            CHECK(!proj_load(SL[i], SW_ALL) && pat[1].s[3][5] == 50u + i && snd[2].level == 60u + i, "slot %u: its patch (%u %u)",
+                  SL[i] + 1u, pat[1].s[3][5], snd[2].level);
+        CHECK(((const set_rec_t *)(h_store + ST_SET))->layout == LAYOUT, "the settings: LAYOUT 3");
+        {                                        /* an LXP9 patch past 8 KiB as it was packed (every step one by one):
+                                                  * read into the patterns and packed again on the way */
+            static uint8_t blob[0x5000];
+            uint32_t o = 0, pn, t, k, tail;
+            memset(pat, 0, sizeof pat);
+            memset(plk, 0, sizeof plk);
+            for (pn = 0; pn < NPAT; pn++) memset(pat[pn].len, 16, NTRK);
+            song.bpm = 133;
+            pat_take(&proj_buf);                 /* (empty patterns: 20 bytes each, then the tail) */
+            tail = proj_buf.blen - NPAT * 20u;
+            for (pn = 0; pn < NPAT; pn++) {
+                blob[o++] = 0;
+                for (t = 0; t < NTRK; t++) blob[o++] = 16;
+                for (t = 0; t < NTRK; t++) blob[o++] = 0;
+                blob[o++] = (uint8_t)(NTRK * 16u); blob[o++] = 0;
+                for (t = 0; t < NTRK; t++)
+                    for (k = 0; k < 16u; k++) {
+                        uint32_t key = t << 6 | k;
+                        blob[o++] = (uint8_t)key; blob[o++] = (uint8_t)(key >> 8);
+                        blob[o++] = (uint8_t)(10u + pn + k); blob[o++] = 0; blob[o++] = k == 3u ? 2u : 0u;
+                    }
+                blob[o++] = 0;
+            }
+            memcpy(blob + o, proj_buf.blob + NPAT * 20u, tail);
+            o += tail;
+            CHECK(o > PBLOB, "the old blob: past a slot now (%u > %u)", o, (uint32_t)PBLOB);
+            memset(raw, 0xFF, sizeof raw);
+            wr32(raw, MAGIC_P9);
+            wr32(raw + 4, 0x5000u);
+            raw[12] = (uint8_t)o; raw[13] = (uint8_t)(o >> 8); raw[14] = raw[15] = 0;
+            kit_take((kit_rec_t *)(raw + 16));
+            memcpy(raw + 16 + sizeof(kit_rec_t), blob, o);
+            wr32(raw + 8, fnv(raw + 12, 4u + sizeof(kit_rec_t) + o));
+            memset(pat, 0, sizeof pat);
+            song.bpm = 90;
+            CHECK(!proj_convert(raw, sizeof raw) && proj_buf.blen <= PBLOB, "converted: packed again (%u B)", proj_buf.blen);
+            store_write(ST_PROJ(20), &proj_buf, sizeof proj_buf);
+            ui.used[20] = 1;
+            CHECK(!proj_load(20, SW_ALL) && pat[7].s[5][9] == 26u && pat[15].r[2][3] == 2u && pat[0].s[0][15] == 25u && song.bpm == 133u,
+                  "its patterns, steps and tempo as they were (%u %u %u)", pat[7].s[5][9], pat[15].r[2][3], song.bpm);
+        }
+        CHECK(ST_PROJ(NSLOT) <= sizeof h_store && NSLOT == 36u, "36 slots in the store");
+        memset(h_store, 0xFF, sizeof h_store);
     }
     host_boot(39);
     {                                            /* the metronome audible; the reverb's pre-delay; new sounds: no sends */

@@ -118,7 +118,7 @@ static const char *const N_LEARN[] = {"OFF", "ON", "CLEAR"};
 static const char *const N_SEND[] = {"LOOP", "STOP"};
 static const char *const N_NKIT[] = {"FACTORY", "KEEP"};
 static const char *N_THEME[UI_NPALETTES];
-#define NSLOT 14u
+#define NSLOT 36u                                /* (8 KiB each; LAYOUT 2 had 14 of 20 KiB) */
 #define NMAP_UI 32                               /* (= NMAP: the CC map's entries) */
 static const pdesc_t PD[P_COUNT] = {
     [P_BPM] = {"TEMPO", FM_BPM, 60, 200, 0},
@@ -359,13 +359,18 @@ static void fmt_u(char *b, uint32_t v);
  * saved again); LXP1..3 (eight slots of 12 KiB) moved to this layout at the first boot (layout 2 in the settings); any
  * of them taken by a restore over USB. */
 #define ST_SET 0x0000u
-#define ST_PROJ(i) (0x1000u + 0x5000u * (uint32_t)(i))
+#define SLOT_SZ 0x2000u
+#define ST_PROJ(i) (0x1000u + SLOT_SZ * (uint32_t)(i))
+#define ST_L2(i) (0x1000u + 0x5000u * (uint32_t)(i))   /* (LAYOUT 2: 14 slots of 20 KiB) */
+#define NSLOT_L2 14u
+#define ST_END 0x49000u
 #define ST_OLD(i) (0x1000u + 0x3000u * (uint32_t)(i))   /* (LXP1..3) */
 #define NSLOT_OLD 8u
 #define MAGIC_SET 0x3354584Cu                    /* "LXT3": + the MIDI clock, the CC map */
 #define MAGIC_SET2 0x3254584Cu                   /* "LXT2" */
 #define MAGIC_SET1 0x3154584Cu                   /* "LXT1" (LUXR's first) */
-#define MAGIC_PROJ 0x3950584Cu                   /* "LXP9": the reverb's pre-delay, and room in the kit for more */
+#define MAGIC_PROJ 0x4150584Cu                   /* "LXPA": LXP9 in a slot of 8 KiB */
+#define MAGIC_P9 0x3950584Cu                     /* "LXP9": the reverb's pre-delay, and room in the kit for more (20 KiB) */
 #define MAGIC_P8 0x3850584Cu                     /* (the sounds' envelope: attack, release, gate) */
 #define MAGIC_P7 0x3750584Cu                     /* (packed patterns, the locks, NUDGE, the speeds, the song, MIDI OUT) */
 #define MAGIC_P6 0x3650584Cu                     /* (the conditions A:B, the delay's modes) */
@@ -375,7 +380,7 @@ static void fmt_u(char *b, uint32_t v);
 #define MAGIC_P1 0x3150584Cu
 #define MAGIC_P2 0x3250584Cu
 #define MAGIC_P3 0x3350584Cu
-#define LAYOUT 2u
+#define LAYOUT 3u                                /* 3: 36 slots of 8 KiB (2: 14 of 20 KiB, 1: 8 of 12 KiB) */
 #define NMAP 32u
 enum { SW_ALL, SW_KIT, SW_PAT };
 typedef struct { uint8_t ch, cc, pid, trk; } ccmap_t;   /* a controller (channel 0..15, number) onto a parameter (of a sound) */
@@ -452,11 +457,12 @@ typedef struct {                                 /* the kit: LXP8's (the same by
     uint8_t rsv[15];                             /* (zero) */
 } kit_rec_t;
 typedef char kit9_fits[sizeof(kit_rec_t) == sizeof(kit8_t) + 16u ? 1 : -1];
-#define PBLOB (0x5000u - 16u - (uint32_t)sizeof(kit_rec_t))
+#define PBLOB (SLOT_SZ - 16u - (uint32_t)sizeof(kit_rec_t))
+#define PBLOB9 (0x5000u - 16u - (uint32_t)sizeof(kit_rec_t))
 typedef struct { uint32_t magic, size, sum; uint16_t blen, pad; kit_rec_t k; uint8_t blob[PBLOB]; } proj_t;
-typedef char proj_fits[sizeof(proj_t) == 0x5000u && sizeof(proj_t) >= sizeof(proj6_t) && ST_PROJ(NSLOT) <= 0x49000u ? 1 : -1];
+typedef char proj_fits[sizeof(proj_t) == SLOT_SZ && ST_PROJ(NSLOT) <= ST_END && ST_L2(NSLOT_L2) <= ST_END ? 1 : -1];
 static proj_t proj_buf __attribute__((section(".pool")));
-static uint8_t stage[sizeof(proj_t)] __attribute__((section(".pool"), aligned(4)));   /* a patch as stored (any format): USB, moving */
+static uint8_t stage[0x5000] __attribute__((section(".pool"), aligned(4)));   /* a patch as stored (any format): USB, moving */
 static pattern_t cv_pat __attribute__((section(".pool")));               /* a pattern on its way (converting, loading) */
 static int store_write(uint32_t off, const void *src, uint32_t n)   /* whole sectors from off, erased, then written */
 {
@@ -492,11 +498,13 @@ static void settings_save(void)
     store_write(ST_SET, &st, sizeof st);
 }
 static int proj_convert(const uint8_t *raw, uint32_t n);
-static int proj_read(uint32_t slot)              /* into proj_buf (from any format); 0 = a patch is there */
+static int proj_read_at(uint32_t off)           /* into proj_buf (from any format); 0 = a patch is there */
 {
-    return io_store_read(ST_PROJ(slot), stage, sizeof stage) || proj_convert(stage, sizeof stage);
+    uint32_t n = ST_END - off < sizeof stage ? ST_END - off : (uint32_t)sizeof stage;
+    return io_store_read(off, stage, n) || proj_convert(stage, n);
 }
-static int slot_magic(uint32_t m) { return m == MAGIC_PROJ || m == MAGIC_P8 || m == MAGIC_P7 || m == MAGIC_P6 || m == MAGIC_P5 || m == MAGIC_P4; }
+static int proj_read(uint32_t slot) { return proj_read_at(ST_PROJ(slot)); }
+static int slot_magic(uint32_t m) { return m == MAGIC_PROJ || m == MAGIC_P9 || m == MAGIC_P8 || m == MAGIC_P7 || m == MAGIC_P6 || m == MAGIC_P5 || m == MAGIC_P4; }
 static uint32_t rd32(const uint8_t *b) { return b[0] | (uint32_t)b[1] << 8 | (uint32_t)b[2] << 16 | (uint32_t)b[3] << 24; }
 
 /* ---- the blob: the patterns packed, then the rest of them
@@ -521,18 +529,60 @@ static int r3_ok(const pattern_t *p)             /* the substeps alone, 0..5 (mo
             return 0;
     return 1;
 }
+static uint32_t trk_ext(const pattern_t *p, uint32_t t)   /* the track's last step set + 1 (0: none) */
+{
+    uint32_t i = NSTEP;
+    while (i && !p->s[t][i - 1u])
+        i--;
+    return i;
+}
+static void enc_bits(const pattern_t *p, uint32_t t, uint32_t ext, int extras)   /* a bit a step to ext: set (or set with extras) */
+{
+    uint32_t i, k;
+    for (i = 0; i < ext; i += 8u) {
+        uint32_t v = 0;
+        for (k = 0; k < 8u && i + k < ext; k++)
+            if (p->s[t][i + k] && (!extras || p->x[t][i + k] || p->r[t][i + k]))
+                v |= 1u << k;
+        bw_put(v);
+    }
+}
 static void enc_pattern(const pattern_t *p, const lock_t *lk)
 {
-    uint32_t t, i, k, n = 0, nl = 0, sp, d3 = r3_ok(p);
+    uint32_t t, i, k, n = 0, nl = 0, sp, d3 = r3_ok(p), cp = NTRK, dn = d3 ? 1216u : 1536u, mode;
     for (k = 0; k < NTRK * NSTEP; k++)
         n += (&p->s[0][0])[k] != 0u;
     sp = 2u + 5u * n;
-    bw_put(sp <= (d3 ? 1216u : 1536u) ? 0u : d3 ? 1u : 2u);
+    for (t = 0; t < NTRK; t++) {                 /* mode 3 (LXPA): a track to its last step: bits of the steps set, their
+                                                  * values, bits of those with extras, the extras (the shortest, mostly) */
+        uint32_t ext = trk_ext(p, t);
+        cp += 2u * ((ext + 7u) / 8u);
+        for (i = 0; i < ext; i++)
+            if (p->s[t][i])
+                cp += 1u + (p->x[t][i] || p->r[t][i] ? 2u : 0u);
+    }
+    mode = cp <= sp && cp <= dn ? 3u : sp <= dn ? 0u : d3 ? 1u : 2u;
+    bw_put(mode);
     for (t = 0; t < NTRK; t++)
         bw_put(p->len[t]);
     for (t = 0; t < NTRK; t++)
         bw_put((uint8_t)p->spd[t]);
-    if (sp <= (d3 ? 1216u : 1536u)) {
+    if (mode == 3u) {
+        for (t = 0; t < NTRK; t++) {
+            uint32_t ext = trk_ext(p, t);
+            bw_put(ext);
+            enc_bits(p, t, ext, 0);
+            for (i = 0; i < ext; i++)
+                if (p->s[t][i])
+                    bw_put(p->s[t][i]);
+            enc_bits(p, t, ext, 1);
+            for (i = 0; i < ext; i++)
+                if (p->s[t][i] && (p->x[t][i] || p->r[t][i])) {
+                    bw_put(p->x[t][i]);
+                    bw_put(p->r[t][i]);
+                }
+        }
+    } else if (mode == 0u) {
         bw_put16(n);
         for (t = 0; t < NTRK; t++)
             for (i = 0; i < NSTEP; i++)
@@ -601,12 +651,9 @@ static int enc_end(proj_t *r)                    /* 0 = it fits */
     return bw.over ? -1 : 0;
 }
 /* the blob read back: apply 0 only checks it; 1 into the patterns, their locks, the song (0 = ok) */
-static int dec_blob(const proj_t *r, int apply)
+static int dec_blob_raw(const uint8_t *b, uint32_t n, int apply)
 {
-    const uint8_t *b = r->blob;
-    uint32_t n = r->blen, o = 0, i, t, k, m, cnt;
-    if (n > PBLOB)
-        return -1;
+    uint32_t o = 0, i, t, k, m, cnt;
 #define NEED(c) do { if (o + (c) > n) return -1; } while (0)
     for (i = 0; i < NPAT; i++) {
         pattern_t *p = &cv_pat;
@@ -617,7 +664,34 @@ static int dec_blob(const proj_t *r, int apply)
             p->len[t] = (uint8_t)clamp(b[o++], 1, NSTEP);
         for (t = 0; t < NTRK; t++)
             p->spd[t] = (int8_t)clamp((int8_t)b[o++], SPD_MIN, SPD_MAX);
-        if (m == 0u) {
+        if (m == 3u) {
+            for (t = 0; t < NTRK; t++) {
+                uint32_t ext, nb, on, ex;
+                NEED(1u);
+                ext = b[o++];
+                if (ext > NSTEP)
+                    return -1;
+                nb = (ext + 7u) / 8u;
+                NEED(nb);
+                on = o;
+                o += nb;
+                for (k = 0; k < ext; k++)
+                    if ((b[on + k / 8u] >> (k % 8u)) & 1u) {
+                        NEED(1u);
+                        p->s[t][k] = b[o++];
+                    }
+                NEED(nb);
+                ex = o;
+                o += nb;
+                for (k = 0; k < ext; k++)
+                    if ((b[ex + k / 8u] >> (k % 8u)) & 1u) {
+                        NEED(2u);
+                        p->x[t][k] = b[o];
+                        p->r[t][k] = b[o + 1u];
+                        o += 2u;
+                    }
+            }
+        } else if (m == 0u) {
             NEED(2u);
             cnt = b[o] | (uint32_t)b[o + 1] << 8;
             o += 2u;
@@ -698,6 +772,27 @@ static int dec_blob(const proj_t *r, int apply)
 #undef NEED
     return 0;
 }
+static int dec_blob(const proj_t *r, int apply)
+{
+    return r->blen > PBLOB ? -1 : dec_blob_raw(r->blob, r->blen, apply);
+}
+static int pat_take(proj_t *r);
+static int blob_into(proj_t *r, const uint8_t *b, uint32_t bl)   /* a blob of a format before into r: as it is when it
+                                                  * fits, else read into the patterns and packed again (0 = ok) */
+{
+    if (bl <= PBLOB) {
+        memcpy(r->blob, b, bl);
+        r->blen = (uint16_t)bl;
+        r->pad = 0;
+        r->magic = MAGIC_PROJ;
+        r->size = sizeof *r;
+        r->sum = proj_sum(r);
+        return dec_blob(r, 0) ? -2 : 0;
+    }
+    if (dec_blob_raw(b, bl, 0) || dec_blob_raw(b, bl, 1))
+        return -2;
+    return pat_take(r) ? -3 : 0;
+}
 
 /* ---- the formats before, into LXP7 (proj_buf) */
 static void sound_from6(sound_t *d, const sound6_t *o, uint32_t t)
@@ -777,25 +872,27 @@ static int proj_convert(const uint8_t *raw, uint32_t n)
         memcpy(r, raw, sizeof *r);
         return r->size == sizeof *r && r->blen <= PBLOB && r->sum == proj_sum(r) && !dec_blob(r, 0) ? 0 : -2;
     }
+    if (magic == MAGIC_P9) {                     /* LXP9 (20 KiB): its kit, its blob as it is, if it fits 8 KiB */
+        uint32_t bl = n >= 16u ? (uint32_t)(raw[12] | raw[13] << 8) : 0u;
+        if (n < 16u + sizeof(kit_rec_t) + bl || rd32(raw + 4) != 0x5000u || bl > PBLOB9 ||
+            rd32(raw + 8) != fnv(raw + 12, 4u + sizeof(kit_rec_t) + bl))
+            return -2;
+        memcpy(&r->k, raw + 16, sizeof(kit_rec_t));
+        return blob_into(r, raw + 16u + sizeof(kit_rec_t), bl);
+    }
     if (magic == MAGIC_P8) {                     /* LXP8: its kit (no pre-delay), its blob as it is */
         uint32_t bl = n >= 16u ? (uint32_t)(raw[12] | raw[13] << 8) : 0u;
-        if (n < 16u + sizeof(kit8_t) + bl || rd32(raw + 4) != 0x5000u || bl > PBLOB8 || bl > PBLOB ||
+        if (n < 16u + sizeof(kit8_t) + bl || rd32(raw + 4) != 0x5000u || bl > PBLOB8 ||
             rd32(raw + 8) != fnv(raw + 12, 4u + sizeof(kit8_t) + bl))
             return -2;
         memset(&r->k, 0, sizeof r->k);
         memcpy(&r->k, raw + 16, sizeof(kit8_t));
-        memcpy(r->blob, raw + 16u + sizeof(kit8_t), bl);
-        r->blen = (uint16_t)bl;
-        r->pad = 0;
-        r->magic = MAGIC_PROJ;
-        r->size = sizeof *r;
-        r->sum = proj_sum(r);
-        return dec_blob(r, 0) ? -2 : 0;
+        return blob_into(r, raw + 16u + sizeof(kit8_t), bl);
     }
     if (magic == MAGIC_P7) {                     /* LXP7: its kit (no envelope yet), its blob as it is */
         static kit7_t k7;
         uint32_t bl = n >= 16u ? (uint32_t)(raw[12] | raw[13] << 8) : 0u;
-        if (n < 16u + sizeof k7 + bl || rd32(raw + 4) != 0x5000u || bl > PBLOB7 || bl > PBLOB ||
+        if (n < 16u + sizeof k7 + bl || rd32(raw + 4) != 0x5000u || bl > PBLOB7 ||
             rd32(raw + 8) != fnv(raw + 12, 4u + sizeof k7 + bl))
             return -2;
         memcpy(&k7, raw + 16, sizeof k7);
@@ -809,13 +906,7 @@ static int proj_convert(const uint8_t *raw, uint32_t n)
         r->k.drv_tone = k7.drv_tone; r->k.drv_lvl = k7.drv_lvl; r->k.dly_div = k7.dly_div; r->k.dly_fb = k7.dly_fb;
         r->k.dly_tone = k7.dly_tone; r->k.dly_lvl = k7.dly_lvl; r->k.rev_size = k7.rev_size; r->k.rev_damp = k7.rev_damp;
         r->k.rev_lvl = k7.rev_lvl; r->k.dly_mode = k7.dly_mode; r->k.dly_div2 = k7.dly_div2;
-        memcpy(r->blob, raw + 16u + sizeof k7, bl);
-        r->blen = (uint16_t)bl;
-        r->pad = 0;
-        r->magic = MAGIC_PROJ;
-        r->size = sizeof *r;
-        r->sum = proj_sum(r);
-        return dec_blob(r, 0) ? -2 : 0;
+        return blob_into(r, raw + 16u + sizeof k7, bl);
     }
     memset(&k6, 0, sizeof k6);
     memset(&g, 0, sizeof g);
@@ -916,11 +1007,40 @@ static void store_migrate(void)                  /* LXP1..3 (eight slots of 12 K
             continue;
         if (io_store_read(ST_OLD(i), stage, 9000u) || proj_convert(stage, 9000u))
             continue;
-        if (!store_write(ST_PROJ(i), &proj_buf, sizeof proj_buf))
+        if (!store_write(ST_L2(i), &proj_buf, sizeof proj_buf))   /* (LAYOUT 2's place: moved on below) */
             moved++;
     }
     if (moved)
         ui_say("PATCHES KEPT");
+}
+static void store_migrate3(void)                 /* LAYOUT 2 (14 slots of 20 KiB) -> 3 (36 of 8 KiB), slot by slot from the
+                                                  * first: slot i's new place ends before the old slot i + 1 begins */
+{
+    uint32_t i, moved = 0, lost = 0;
+    char m[28];
+    for (i = 0; i < NSLOT; i++) {
+        uint32_t mg = 0, done = 0;
+        if (i < NSLOT_L2 && io_store_read(ST_L2(i), &mg, 4) == 0 && slot_magic(mg)) {
+            int rc = proj_read_at(ST_L2(i));
+            if (!rc && !store_write(ST_PROJ(i), &proj_buf, sizeof proj_buf)) {
+                moved++;
+                done = 1;
+            } else {
+                lost++;
+            }
+        }
+        mg = 0;
+        if (!done && io_store_read(ST_PROJ(i), &mg, 4) == 0 && mg != 0xFFFFFFFFu)
+            io_store_erase(ST_PROJ(i));          /* (what was there before: an empty slot now) */
+    }
+    str_cpy(m, "PATCHES MOVED: ", sizeof m);
+    fmt_u(m + str_len(m), moved);
+    if (lost) {
+        str_cat(m, ", LOST ", sizeof m);
+        fmt_u(m + str_len(m), lost);
+    }
+    if (moved || lost)
+        ui_say(m);
 }
 static void store_scan(void)
 {
@@ -932,7 +1052,9 @@ static void store_scan(void)
     }
     if (io_store_read(ST_SET, &st, sizeof st) == 0 && (st.magic == MAGIC_SET || st.magic == MAGIC_SET2 || st.magic == MAGIC_SET1) &&
         (st.magic == MAGIC_SET1 || st.layout != LAYOUT)) {   /* a store of the formats before: moved, once */
-        store_migrate();
+        if (st.magic == MAGIC_SET1 || st.layout < 2u)
+            store_migrate();
+        store_migrate3();
         if (st.magic == MAGIC_SET1)
             st.qgrid = st.qround = 0;
         if (st.magic != MAGIC_SET) {
@@ -2012,7 +2134,8 @@ static void black_key(uint32_t b)
 static void page_key(uint32_t w, int down)
 {
     char m[28];
-    if (ui.page == PG_SAVE) {                    /* key k: slot k (1..14) */
+    if (ui.page == PG_SAVE) {                    /* key k: slot k of the sixteen KNOB 1 is in (1..16, 17..32, 33..36) */
+        w += ui.slot / 16u * 16u;
         if (down && w < NSLOT) {
             ui.slot = (uint8_t)w;
             str_cpy(m, "SLOT ", sizeof m);
@@ -2569,7 +2692,8 @@ static void ui_leds(void)
                  (w == BK_NUDGE && (ui.shift ? ui.follow : ui.lockmode == LM_NUDGE)) ||
                  (w == BK_FILL && (ui.shift ? song.playing && song.pstep % 4u == 0u && song.pos < FS / 20u : song.fill));
         } else if (!ui.shift && ui.page == PG_SAVE) {   /* the slots: lit in use, the one chosen blinking */
-            on = w < NSLOT && (w == ui.slot ? blink : ui.used[w]);
+            uint32_t sl = ui.slot / 16u * 16u + w;
+            on = sl < NSLOT && (sl == ui.slot ? blink : ui.used[sl]);
         } else if (!ui.shift && ui.page == PG_PAT) {    /* the patterns: lit in the chain, the one playing blinking */
             on = (w + NPAT - song.chain0) % NPAT < song.chain;
             if (w == song.pat)
@@ -2893,18 +3017,22 @@ static void g_patterns(void)                     /* PATTERNS: 16, the one playin
 static void g_store(void)
 {
     uint32_t i;
-    for (i = 0; i < NSLOT; i++) {                /* two rows of seven; a bar under the ones in use */
-        int32_t x = 10 + (int32_t)(i % 7u) * 32, y = 8 + (int32_t)(i / 7u) * 42;
+    for (i = 0; i < NSLOT; i++) {                /* four rows of nine; a bar under the ones in use; the white keys' sixteen
+                                                  * a shade lighter; the patch loaded red */
+        int32_t x = 8 + (int32_t)(i % 9u) * 25, y = 4 + (int32_t)(i / 9u) * 22;
         char b[12];
-        uint16_t c = i == ui.slot ? T_THEME : T_RAISE;
-        cv_rrect(x, y, 29, 36, 4, c, T_SURF);
+        int ld = ui.loaded == i + 1u, keys = i / 16u == ui.slot / 16u;
+        uint16_t c = i == ui.slot ? T_THEME : keys ? T_RAISE : ux_mix(T_SURF, T_RAISE, 45);
+        if (ld && i != ui.slot) {
+            cv_rrect(x, y, 23, 19, 3, C_REC, T_SURF);
+            cv_rrect(x + 2, y + 2, 19, 15, 2, c, C_REC);
+        } else {
+            cv_rrect(x, y, 23, 19, 3, c, T_SURF);
+        }
         fmt_u(b, i + 1u);
-        int ld = ui.loaded == i + 1u;            /* (the patch loaded: red) */
-        if (ld && i != ui.slot)
-            cv_rrect(x, y, 29, 36, 4, C_REC, T_SURF), cv_rrect(x + 2, y + 2, 25, 32, 3, c, C_REC);
-        cv_text_in(x, y + 5, 29, &AF_M, b, ld && i != ui.slot ? C_REC : i == ui.slot ? T_INK : ui.used[i] ? T_TEXT : T_DIM, c);
+        cv_text_in(x, y + CAP_IN(S, 16), 23, &AF_S, b, ld && i != ui.slot ? C_REC : i == ui.slot ? T_INK : ui.used[i] ? T_TEXT : T_DIM, c);
         if (ui.used[i])
-            cv_rect(x + 7, y + 28, 15, 3, ld ? C_REC : i == ui.slot ? T_INK : T_THEME);
+            cv_rect(x + 7, y + 15, 9, 2, ld ? C_REC : i == ui.slot ? T_INK : T_THEME);
     }
     g_label(12, 96, ui.swhat == SW_KIT ? "OCT+ SAVES THE KIT" : ui.swhat == SW_PAT ? "OCT+ SAVES THE PATTERNS" :
             "OCT+ SAVES KIT + PATTERNS", T_MID);
@@ -2981,7 +3109,7 @@ static void g_info(void)                         /* SYSTEM: the version, the mem
     str_cat(b, " OF ", sizeof b);
     fmt_u(b + str_len(b), NSLOT);
     str_cat(b, ", ", sizeof b);
-    fmt_u(b + str_len(b), (NSLOT - used) * 20u);
+    fmt_u(b + str_len(b), (NSLOT - used) * (SLOT_SZ / 1024u));
     str_cat(b, " KB FREE", sizeof b);
     g_label(10, 30, b, T_TEXT);
     str_cpy(b, "AUDIO LOAD ", sizeof b);
@@ -3569,9 +3697,9 @@ static int proto_frame(const uint8_t *p, uint32_t n)
         px_raw[m++] = NSLOT;
         wr32(px_raw + m, sizeof(proj_t));
         m += 4;
-        for (k = 0, off = 0; k < NSLOT; k++) off |= (uint32_t)ui.used[k] << k;
-        px_raw[m++] = (uint8_t)off;
-        px_raw[m++] = (uint8_t)(off >> 8);
+        for (k = 0; k < (NSLOT + 7u) / 8u; k++) px_raw[m + k] = 0;   /* (the slots in use: a bit each, as many bytes as it takes) */
+        for (k = 0; k < NSLOT; k++) px_raw[m + k / 8u] |= (uint8_t)(ui.used[k] << (k % 8u));
+        m += (NSLOT + 7u) / 8u;
         proto_reply(0x41, px_raw, m);
         return 1;
     case 0x42:                                   /* (a slot read: what flash has there, magic and all) */

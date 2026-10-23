@@ -90,7 +90,7 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | ARP | NOTE REPEAT | Rate, Velocity, Vel-Modus (fest, steigend, fallend, zufällig), Latch | Humanize |
 | GLO (tippen) | MIXER, Seite 1 | Lautstärke der vier Sounds der Bank | Pan der vier Sounds |
 | GLO (nochmal tippen) | MIXER, Seite 2: PAN | Pan der vier Sounds der Bank (L64 … C … R63) | Lautstärke |
-| SAVE | STORE | **Weiße Tasten 1–14 wählen den Platz, OCT+ speichert sofort (auch auf NEW PATCH).** Platz 1–14, **was gespeichert wird** (KIT+PAT, nur KIT, nur PATTERN – OCT+ speichert), **was geladen wird** (KIT+PAT, nur KIT, nur PATTERN), **LOAD** (ein Dreh lädt den Platz; ein leerer Platz gibt ein neues, leeres Patch) | |
+| SAVE | STORE | **Weiße Tasten wählen den Platz (die 16 der Gruppe, in der KNOB 1 steht: 1–16, 17–32, 33–36; heller hinterlegt), OCT+ speichert sofort (auch auf NEW PATCH).** Platz 1–36, **was gespeichert wird** (KIT+PAT, nur KIT, nur PATTERN – OCT+ speichert), **was geladen wird** (KIT+PAT, nur KIT, nur PATTERN), **LOAD** (ein Dreh lädt den Platz; ein leerer Platz gibt ein neues, leeres Patch) | |
 | SAVE (2.) | **NEW PATCH** | Länge (1–64 Steps), Speed (1/8X … 2X), Tempo, **CREATE** (ein Dreh legt das neue Patch an: 16 leere Patterns, Wiedergabe gestoppt, noch nicht gespeichert) | Kit: FACTORY (Werkssounds und FX) oder KEEP (das aktuelle bleibt) |
 | REC (halten) | **QUANTIZE** | Raster (1/16, 1/8, 1/4), Richtung (zum nächsten Rasterpunkt / zum vorherigen), Metronom (aus, bei Aufnahme, an) | |
 
@@ -145,7 +145,7 @@ quantisiert geschrieben; mit ERASE (SHIFT + REC) löscht ein gehaltenes Pad die 
 **Patches.** Ein Patch ist ein Kit (die acht Sounds samt LFOs und Sends, MIDI-Ausgabekanal und -Note, Tune, Decay,
 Drive/Delay/Reverb) und seine 16 Patterns (jede Spur bis 64 Steps, eigene Länge und SPEED, Velocity/Probability/Pan/
 Substeps/NUDGE je Step, bis 128 Parameter-Locks je Pattern; Tempo, Swing, Chain, Mute/Solo, der Song).
-**14 Plätze**, also bis zu 14 Kits und 224 Patterns. **Beim Einschalten wird Patch 1 geladen** (Kit und Patterns), falls belegt. SAVE speichert beides oder nur Kit bzw. nur Patterns (der andere
+**36 Plätze** (je 8 KiB), also bis zu 36 Kits und 576 Patterns. **Beim Einschalten wird Patch 1 geladen** (Kit und Patterns), falls belegt. SAVE speichert beides oder nur Kit bzw. nur Patterns (der andere
 Teil bleibt, wie er auf dem Platz war); PRESETS lädt sie, ebenso KNOB 4 auf der STORE-Seite – beide nach der Auswahl von KNOB 3 (LOADS).
 
 **Updates behalten die Patches.** Ein Firmware-Update schreibt nur das Programm, nicht den Speicher. Ältere
@@ -155,8 +155,10 @@ Plätze als `.luxr`-Datei herunterladen und wieder zurückspielen (auch ältere 
 Installieren zieht die Seite auf Wunsch vorher ein Backup und spielt es danach zurück. Das geht ab dieser LUXR-Version –
 die Firmware davor kennt die Backup-Befehle noch nicht.
 
-**Speicherformat LXP9** (Hüllkurve, Pre-Delay; LXP1–8 werden gelesen). Die Patterns werden gepackt gespeichert (nur gesetzte Steps, oder alle, wenn das kürzer ist),
-damit Locks, NUDGE, SPEED und der Song in die 20 KiB eines Platzes passen. Patches älterer Formate (LXP1–6) werden beim
+**Speicherformat LXPA** (Hüllkurve, Pre-Delay; LXP1–9 werden gelesen). Die Patterns werden gepackt gespeichert (je Spur ein Bit pro
+gesetztem Step, dann nur deren Werte; Steps mit Extras zusätzlich deren Werte), damit Locks, NUDGE, SPEED und der Song in die
+8 KiB eines Platzes passen – ein normal gefülltes Patch braucht 1–4 KiB. Beim ersten Start nach dem Update zieht die
+Firmware die bisherigen 14 Plätze (je 20 KiB) in das neue Raster um („PATCHES MOVED: n“), Platznummern bleiben gleich. Patches älterer Formate (LXP1–6) werden beim
 Laden umgewandelt und beim nächsten Speichern als LXP7 geschrieben; Backups bleiben in beide Richtungen nutzbar. Passt
 ein Patch nicht mehr (nur bei sehr vielen Locks in sehr vollen Patterns), meldet SAVE „PATCH TOO FULL“ und schreibt
 nichts. **Achtung:** Eine ältere LUXR-Firmware kann LXP7-Patches nicht lesen – vor einem Downgrade ein Backup ziehen.

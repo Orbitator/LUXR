@@ -45,8 +45,8 @@ async function lxAsk(link, cmd, data, ms = 2500) {
 async function lxInfo(link) {
   const r = await lxAsk(link, 0x40, [], 1500);
   if (!r || String.fromCharCode(...r.slice(0, 4)) !== "LUXR") return null;
-  const z = r.indexOf(0, 4), n = r[z + 1], size = lxr4(r, z + 2), used = r[z + 6] | r[z + 7] << 8;
-  const slots = []; for (let s = 0; s < n; s++) if ((used >> s) & 1) slots.push(s);
+  const z = r.indexOf(0, 4), n = r[z + 1], size = lxr4(r, z + 2);   // then the slots in use: a bit each, (n + 7) / 8 bytes
+  const slots = []; for (let s = 0; s < n; s++) if ((r[z + 6 + (s >> 3)] >> (s & 7)) & 1) slots.push(s);
   return { ver: "LUXR " + String.fromCharCode(...r.slice(4, z)), n, size, slots };
 }
 async function lxBackup(link) {
