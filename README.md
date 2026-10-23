@@ -7,7 +7,9 @@ ONE CLICK (Felucca: Update über USB, UBOOT-Rettung, Display, Speicher), nur die
 Dieses Repository ist aus [ONE CLICK FM-1](https://github.com/Orbitator/oneclick-fm1) hervorgegangen; dessen Anleitung
 steht in [README-ONECLICK.md](README-ONECLICK.md) (dort auch die Plattform, der Emulator und die Companion-App).
 
-Status: **v0.1, auf dem Rechner getestet (tests/test_lx.c), noch nie auf einem FM-1 gelaufen.**
+Status: **v0.1, auf dem Rechner getestet (tests/test_lx.c), noch nie auf einem FM-1 gelaufen.** Neu (Speicherformat
+LXP7): Parameter-Locks mit Motion-Rec, NUDGE (Microtiming), FILL, Tempo pro Spur, Songmodus, Master-Filter, MIDI-Clock
+In/Out, Notenausgabe pro Sound und CC-Learn – siehe [Performance und MIDI](#performance-und-midi).
 
 ## Die acht Sounds
 
@@ -48,7 +50,7 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | Bedienelement | normal | mit SHIFT |
 |---|---|---|
 | **SELECT** | Sound 1–8 wählen | Pattern wählen |
-| **ALGORITHM** | würfelt einen neuen Sound für den gewählten (immer mit Transienten-Sample) und spielt ihn an | **das nächste / vorige Sample des Sample-Layers** (alle 44 der Reihe nach, der Synth-Layer bleibt; das Display zeigt den Namen) |
+| **ALGORITHM** | würfelt einen neuen Sound für den gewählten (immer mit Transienten-Sample) und spielt ihn an | **das nächste / vorige Sample des Sample-Layers** (alle 44 der Reihe nach, der Synth-Layer bleibt; das Display zeigt den Namen); **auf der SEQ-Seite:** rechts ein Zufalls-Pattern für die Spur, links die Spur verdoppeln |
 | **PRESETS** | die gespeicherten Patches (Kit + Patterns) durchblättern, jeder wird sofort geladen | nur die Patterns des Patches |
 | **KNOB 1–4** | die vier Karten der Seite (Reihe A) | Reihe B |
 | **PLAY** | Start / Stop | von vorn |
@@ -61,8 +63,9 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | Taste | Seite | Knöpfe 1–4 | mit SHIFT |
 |---|---|---|---|
 | HOME | KIT | Tempo, Swing, Tune (alle), Decay (alle) | MIDI-Kanal, Theme, Version |
+| HOME (2.) | **MIDI** | Clock (INT / EXT), Clock Out (aus / an), Ausgabekanal des Sounds (OFF, 1–16), seine Note | MIDI-IN-Kanal, **CC LEARN** (OFF, ON, CLEAR) |
 | HOME (halten) | **SYSTEM** (ohne Kopfzeile, oben das LUXR-Logo) | Version, belegte Plätze und freier Speicher, Audio-Last, Akkuspannung (geschätzt, unkalibriert), About | |
-| SEQ | SEQUENCER | Länge der Spur, Velocity des letzten Steps, Rotate, Euclid | **PAT LEN: jeder Dreh verdoppelt die Patternlänge (zurück: halbiert)**, **COPY x2: Noten in die neuen Takte kopieren (an/aus)**, Accent des letzten Steps |
+| SEQ | SEQUENCER | Länge der Spur, Velocity des letzten Steps, Rotate, Euclid | **PAT LEN: jeder Dreh verdoppelt die Patternlänge (zurück: halbiert)**, **COPY x2: Noten in die neuen Takte kopieren (an/aus)**, Accent des letzten Steps, **SPEED der Spur** (1/8X, 1/4X, 1/2X, 3/4X, 1X, 3/2X, 2X) |
 | SEQ (2.) | **LIVE PADS** | Pad-Velocity, Quantize-Raster, -Richtung, Metronom | |
 | EDIT | SYNTH 1-4 | Synth-Parameter 1–4 | Parameter 5–8 |
 | EDIT (2.) | SYNTH 5-8 | Synth-Parameter 5–8 (z. B. Tone, Snap, Click, Drive) | Parameter 1–4 |
@@ -75,7 +78,9 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | FX (3.) | DELAY (global, im Kit) | **Modus** (MONO, STEREO: links und rechts je eine Zeit, PINGPONG: die Wiederholungen wechseln die Seite), Zeit (1/8 … 3/4; in STEREO die linke), Zeit rechts (STEREO), Feedback | |
 | FX (4.) | DELAY 2 | Ton, Pegel | |
 | FX (5.) | REVERB (global, im Kit) | Größe (Nachhallzeit), Dämpfung, Pegel – ein Plate-Hall nach Dattorro | |
+| FX (6.) | **MASTER** | Filter (links der Mitte Tiefpass, rechts Hochpass, Mitte aus), Resonanz – per CC anlernbar, nicht gespeichert | |
 | SCL | PATTERNS | Pattern (spielend: wechselt am Pattern-Ende), Chain (spielt N Patterns nacheinander), **Copy** (ein Dreh kopiert das angezeigte Pattern), **Paste** (ein Dreh fügt es ins angezeigte Pattern ein) | |
+| SCL (2.) | **SONG** | Zeile (1–32), ihr Pattern, ihre Wiederholungen (1–16), Song an / aus | Anzahl Zeilen, am Ende: LOOP / STOP |
 | ARP | NOTE REPEAT | Rate, Velocity, Vel-Modus (fest, steigend, fallend, zufällig), Latch | Humanize |
 | GLO (tippen) | MIXER, Seite 1 | Lautstärke der vier Sounds der Bank | Pan der vier Sounds |
 | GLO (nochmal tippen) | MIXER, Seite 2: PAN | Pan der vier Sounds der Bank (L64 … C … R63) | Lautstärke |
@@ -87,10 +92,12 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 das Gerät steht), ein gesetzter beim Loslassen gelöscht. **Lang halten (ab 350 ms) oder halten und einen Knopf drehen:
 STEP EDIT** – KNOB 1 Velocity; KNOB 2 Probability (6 … 100 %: wie oft der Step spielt) und weiter rechts die
 **Bedingungen 1:2, 2:2, 1:4 … 4:4, 1:8 … 8:8** (A:B = der Step spielt im A-ten von je B Durchläufen der Spur, ab PLAY
-gezählt: 1:2 im 1., 3., 5. …, 2:2 im 2., 4. …); KNOB 3 Pan nur für diesen Step (SOUND = der Pan des Sounds, sonst
+gezählt: 1:2 im 1., 3., 5. …, 2:2 im 2., 4. …), dann **FILL** (spielt nur, solange F#5 gehalten wird) und **!FILL**
+(nur ohne FILL); KNOB 3 Pan nur für diesen Step (SOUND = der Pan des Sounds, sonst
 L48 L32 L16 C R16 R32 R48); KNOB 4 **Substeps** (OFF, 2 … 6: so viele Schläge gleichmäßig über den Step verteilt).
 Mehrere gehaltene Steps werden zusammen bearbeitet. Im Raster sind Steps mit Probability oder Bedingung blasser,
-Substeps teilen die Zelle, ein eigenes Pan ist ein Punkt. (Accents setzt der Accent-Modus, C#5.)
+Substeps teilen die Zelle, ein eigenes Pan ist ein Punkt, ein Step mit Locks hat eine Kerbe oben links, ein
+verschobener (NUDGE) sitzt etwas früher oder später in seiner Spalte. (Accents setzt der Accent-Modus, SHIFT + C#5.)
 **Auf allen anderen Seiten** spielen F3–C4 die Sounds 1–8 (D4–G5 dieselben mit Accent), mit REC + PLAY aufgenommen; die
 LEDs leuchten beim Anschlag. Auf den Seiten eines Sounds (SYNTH, SAMPLE, SOUND MIX, LFO, FX SENDS) wählt der Anschlag den
 Sound auch aus: das Display zeigt den gespielten. Auf NOTE REPEAT sind es die Repeat-Pads. Mit SHIFT überall: F3–C4 Mute,
@@ -111,9 +118,12 @@ Mit REC + PLAY wird jeder Schlag aufgenommen, auf das Raster aus QUANTIZE (REC h
 | F#4 | Takt kopieren | ganzes Pattern kopieren |
 | G#4 | Takt einfügen | ganzes Pattern einfügen |
 | A#4 | Spur löschen | ganzes Pattern löschen |
-| C#5 | Accent-Modus (weiße Tasten setzen Accents) | Spur verdoppeln (Länge × 2) |
-| D#5 | Follow (die Anzeige folgt dem laufenden Takt) | Zufalls-Pattern für die Spur |
-| F#5 | Tap-Tempo | Metronom: aus → bei Aufnahme → an |
+| C#5 | **P-LOCK** an / aus (mit gehaltenen Steps: deren Locks löschen) | Accent-Modus (weiße Tasten setzen Accents) |
+| D#5 | **NUDGE** an / aus (mit gehaltenen Steps: zurück aufs Raster) | Follow (die Anzeige folgt dem laufenden Takt) |
+| F#5 | **FILL**, solange gehalten | Tap-Tempo |
+
+Spur verdoppeln und Zufalls-Pattern liegen jetzt auf SHIFT + ALGORITHM auf der SEQ-Seite, das Metronom auf den Seiten
+LIVE PADS und QUANTIZE (KNOB 4 bzw. 3).
 
 **Note Repeat (ARP).** ARP tippen schaltet Note Repeat ein (nochmal tippen: aus), ARP halten nur solange gehalten.
 Dann sind die weißen Tasten F3–C4 die **Pads der acht Sounds**, D4–G5 wählen die **Rate** direkt
@@ -121,8 +131,9 @@ Dann sind die weißen Tasten F3–C4 die **Pads der acht Sounds**, D4–G5 wähl
 auf dem Takt-Raster). LATCH: ein Pad läuft weiter, bis es nochmal gedrückt wird. Mit REC + PLAY wird jeder Schlag
 quantisiert geschrieben; mit ERASE (SHIFT + REC) löscht ein gehaltenes Pad die Schläge seines Sounds.
 
-**Patches.** Ein Patch ist ein Kit (die acht Sounds samt LFOs und Sends, Tune, Decay, Drive/Delay/Reverb) und seine
-16 Patterns (jede Spur bis 64 Steps, eigene Länge, Velocity/Probability/Pan je Step; Tempo, Swing, Chain, Mute/Solo).
+**Patches.** Ein Patch ist ein Kit (die acht Sounds samt LFOs und Sends, MIDI-Ausgabekanal und -Note, Tune, Decay,
+Drive/Delay/Reverb) und seine 16 Patterns (jede Spur bis 64 Steps, eigene Länge und SPEED, Velocity/Probability/Pan/
+Substeps/NUDGE je Step, bis 128 Parameter-Locks je Pattern; Tempo, Swing, Chain, Mute/Solo, der Song).
 **14 Plätze**, also bis zu 14 Kits und 224 Patterns. **Beim Einschalten wird Patch 1 geladen** (Kit und Patterns), falls belegt. SAVE speichert beides oder nur Kit bzw. nur Patterns (der andere
 Teil bleibt, wie er auf dem Platz war); PRESETS lädt sie (mit SHIFT: nur die Patterns), ebenso KNOB 4 auf der STORE-Seite.
 
@@ -133,8 +144,58 @@ Plätze als `.luxr`-Datei herunterladen und wieder zurückspielen (auch ältere 
 Installieren zieht die Seite auf Wunsch vorher ein Backup und spielt es danach zurück. Das geht ab dieser LUXR-Version –
 die Firmware davor kennt die Backup-Befehle noch nicht.
 
+**Speicherformat LXP7.** Die Patterns werden gepackt gespeichert (nur gesetzte Steps, oder alle, wenn das kürzer ist),
+damit Locks, NUDGE, SPEED und der Song in die 20 KiB eines Platzes passen. Patches älterer Formate (LXP1–6) werden beim
+Laden umgewandelt und beim nächsten Speichern als LXP7 geschrieben; Backups bleiben in beide Richtungen nutzbar. Passt
+ein Patch nicht mehr (nur bei sehr vielen Locks in sehr vollen Patterns), meldet SAVE „PATCH TOO FULL“ und schreibt
+nichts. **Achtung:** Eine ältere LUXR-Firmware kann LXP7-Patches nicht lesen – vor einem Downgrade ein Backup ziehen.
+
 **MIDI IN** (USB): General-MIDI-Drum-Noten spielen die Sounds (36 Kick, 38/40 Snare, 39 Clap, 42/44 CH, 46 OH,
-41–50 Tom, 37 Rim, 49/51/57 Cymbal), C4–G4 die Sounds 1–8. Kanal im KIT (SHIFT), Standard: alle.
+41–50 Tom, 37 Rim, 49/51/57 Cymbal), C4–G4 die Sounds 1–8. Kanal im KIT (SHIFT) oder auf der MIDI-Seite, Standard: alle.
+
+## Performance und MIDI
+
+**P-LOCK (C#5).** Solange P-LOCK an ist, sind die weißen Tasten auf *jeder* Seite die 16 Steps des angezeigten Takts
+der gewählten Spur (OCT−/OCT+ blättert die Takte). Einen gesetzten Step halten und an einem Knopf der Seite drehen setzt
+einen **Parameter-Lock**: nur dieser Step spielt mit dem Wert, der Sound selbst bleibt. Mehrere gehaltene Steps bekommen
+den Lock gemeinsam. Lockbar sind die Parameter eines Sounds: Synth 1–8, Sample-Layer (Sample, Level, Pitch, Decay,
+Start, Tone, Bend, Synth-Pegel), Volume, Pan und die drei Sends. Während ein Step gehalten wird, zeigt die Karte seinen
+Wert (hervorgehoben, wenn gelockt). Step(s) halten und C#5 drücken löscht ihre Locks. Bis 128 Locks je Pattern
+(„LOCKS FULL“). **Motion-Rec:** Bei P-LOCK + REC + PLAY schreibt jeder Dreh an einem lockbaren Knopf einen Lock auf den
+gerade laufenden Step der Spur, wenn dort ein Schlag liegt; ohne P-LOCK verändert der Knopf wie bisher den Sound.
+
+**NUDGE (D#5).** Wie P-LOCK sind die weißen Tasten die Steps. Step(s) halten: KNOB 1 verschiebt sie um −15 … +15
+Zweiunddreißigstel des Steps (KNOB 2–4: Velocity, Probability/Bedingung, Substeps). Frühe Schläge werden aus dem Step
+davor gespielt (nicht über das Pattern-Ende hinweg). Step(s) halten und D#5 drücken: zurück aufs Raster.
+
+**FILL (F#5).** Solange F#5 gehalten wird, spielen Steps mit der Bedingung FILL, und Steps mit !FILL schweigen.
+
+**SPEED.** Jede Spur läuft mit ihrem Tempo (SEQ, SHIFT, KNOB 4): 1/8X … 2X. Das Pattern dauert so lange wie seine
+längste Spur (Länge × Tempo); ein 16-Step-Hat auf 2X läuft zweimal pro Takt.
+
+**SONG (SCL zweimal).** Bis 32 Zeilen aus Pattern und Wiederholungen. Mit SONG an startet PLAY bei Zeile 1 und spielt die
+Zeilen der Reihe nach; am Ende von vorn (LOOP) oder Stopp (STOP). Ein von Hand vorgemerktes Pattern hat Vorrang, danach
+geht der Song weiter.
+
+**MASTER-Filter (FX sechsmal).** Ein Knopf, links Tiefpass, rechts Hochpass, Mitte aus; dazu Resonanz. Gedacht für
+Übergänge und per CC zu steuern; er wird nicht gespeichert und startet aus.
+
+**MIDI-Clock (HOME zweimal).** CLOCK INT: LUXR ist Master; mit CLK OUT sendet es 24 Clocks pro Viertel (auch im Stand),
+START beim Start und STOP beim Halt. CLOCK EXT: LUXR folgt START / CONTINUE / STOP und den Ticks eines anderen Geräts
+(ein Sechzehntel je 6 Ticks); das Tempo im Display kommt aus der Clock, Swing ist dabei aus. PLAY wartet ohne Clock auf
+den nächsten Tick („WAITING FOR CLOCK“). Mit CLK OUT wird die empfangene Clock weitergereicht. Die MIDI-Seite zeigt,
+ob eine Clock ankommt.
+
+**Notenausgabe.** Jeder Sound hat einen Ausgabekanal (OFF, 1–16) und eine Note (Standard: GM, 36 Kick, 38 Snare, 39
+Clap, 42 CH, 46 OH, 45 Tom, 37 Rim, 49 Cymbal); gespeichert mit dem Kit. Gesendet werden die Schläge des Sequencers, der
+Pads und des Note Repeat (nicht die von MIDI IN), mit Velocity (Accent +20) und einer Länge von einem halben Sechzehntel.
+Stumme Spuren senden nicht.
+
+**CC-Learn.** MIDI-Seite, SHIFT, KNOB 2 auf ON. Dann an irgendeinem Knopf drehen („… SEND CC“) und am externen
+Controller einen Regler bewegen: Kanal und CC sind diesem Parameter zugeordnet (bei Sound-Parametern dem Sound, der
+gerade gewählt war, auch Mixer-Streifen gehen). LEARN bleibt an für weitere Zuordnungen; OFF beendet, CLEAR löscht alle.
+Bis 32 Zuordnungen, global gespeichert (überleben Patchwechsel und Updates). Nicht anlernbar sind Speicher-, Step- und
+Einstellungsparameter.
 
 ## Bauen
 

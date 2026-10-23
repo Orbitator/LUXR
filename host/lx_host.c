@@ -61,12 +61,27 @@ static void str_cpy(char *d, const char *s, unsigned max)
     d[i] = 0;
 }
 #include "gfx.c"
+static void midi_out_event(uint32_t pkt);        /* (below: MIDI OUT recorded) */
 #include "lx_synth.c"
 #include "lx_seq.c"
 #include "lx_ui.c"
 
 /* ------------------------------------------------------- the platform --- */
-static void midi_in_drain(void) {}
+static uint32_t h_min[256], h_min_w, h_min_r;    /* MIDI IN fed by the tests (status | d1 << 8 | d2 << 16) */
+static void midi_in_drain(void)
+{
+    while (h_min_r != h_min_w) {
+        uint32_t m = h_min[h_min_r++ % 256u];
+        midi_note(m & 0xFFu, (m >> 8) & 0x7Fu, (m >> 16) & 0x7Fu);
+    }
+}
+static void host_midi_in(uint32_t st, uint32_t d1, uint32_t d2) { h_min[h_min_w++ % 256u] = st | d1 << 8 | d2 << 16; }
+static uint32_t h_mout[4096], h_mout_n;           /* MIDI OUT as sent (USB-MIDI packets) */
+static void midi_out_event(uint32_t pkt)
+{
+    if (h_mout_n < 4096u)
+        h_mout[h_mout_n++] = pkt;
+}
 static uint8_t h_store[0x49000];                    /* the store in RAM (oc_main.c: the flash) */
 static int io_store_read(uint32_t off, void *d, uint32_t n)
 {

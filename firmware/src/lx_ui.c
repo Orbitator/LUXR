@@ -6,17 +6,19 @@
  *           four cards, SHIFT the page's second row · MASTER volume
  *   SHIFT   GLO held (from 250 ms, or at once when another control is used while it is down). GLO tapped: the MIXER,
  *           tapped again its page 2 (PAN) and back.
- *   PAGES   a button tapped again shows its next page: HOME kit · SEQ sequencer, live pads · EDIT synth layer, sample
- *           layer, sound mix · ENV sample layer · LFO lfo 1, lfo 2 · FX sends, drive, delay, reverb · SCL patterns ·
- *           ARP note repeat (tap: on / off, held: while held) · GLO mixer, its pans · SAVE store · REC held: quantize
+ *   PAGES   a button tapped again shows its next page: HOME kit, midi (held: system) · SEQ sequencer, live pads · EDIT
+ *           synth layer, sample layer, sound mix · ENV sample layer · LFO lfo 1, lfo 2 · FX sends, drive, delay, reverb,
+ *           master · SCL patterns, song · ARP note repeat (tap: on / off, held: while held) · GLO mixer, its pans ·
+ *           SAVE store · REC held: quantize
  *   PLAY    start / stop (SHIFT: from the top)     REC tap: arm recording (SHIFT: arm ERASE), held: QUANTIZE
  *   OCT-/+  SEQ: the bar shown (SHIFT: a bar less / more) · MIXER: sounds 1-4 / 5-8 · SAVE: back / do it ·
  *           else the sound before / after. Both held 5 s: UBOOT.
  *   WHITE   the 16 steps of the bar shown (C#5: accents) · LIVE: F3..C4 sounds 1..8, D4..G5 the same accented ·
  *           NOTE REPEAT: F3..C4 the pads, D4..G5 the rate · SHIFT: F3..C4 mute sounds 1..8, D4..G5 solo them
- *   BLACK   F#3 sound◂ G#3 sound▸ A#3 mute C#4 solo D#4 audition F#4 copy G#4 paste A#4 clear C#5 accent D#5 follow
- *           F#5 tap tempo; SHIFT: undo redo, all on, solo off, new sound, copy / paste / clear the pattern, double,
- *           random, metronome
+ *   BLACK   F#3 sound◂ G#3 sound▸ A#3 mute C#4 solo D#4 audition F#4 copy G#4 paste A#4 clear C#5 P-LOCK D#5 NUDGE
+ *           F#5 FILL (held); SHIFT: undo redo, all on, solo off, new sound, copy / paste / clear the pattern, accent mode,
+ *           follow, tap tempo. P-LOCK / NUDGE: the white keys are the steps on every page (a step held + a knob: its lock /
+ *           its timing); P-LOCK + REC + PLAY: the knobs write locks (motion rec)
  * Platform hooks (oc_main.c on the FM-1; host/lx_host.c): io_pressed io_held io_keys io_enc io_led_button io_led_key
  * io_store_read io_store_erase io_store_prog, and lcd_blit / lcd_sync / lcd_fill under gfx.c. */
 
@@ -52,20 +54,21 @@ static const uint16_t TRK_COL[NTRK] = {RGB(255, 96, 110), RGB(255, 170, 40), RGB
 #define C_REC RGB(255, 72, 60)
 
 enum { PG_KIT, PG_SEQ, PG_LIVE, PG_VOICE, PG_VOICE2, PG_SAMPLE, PG_SAMPLE2, PG_SND, PG_LFO1, PG_LFO2, PG_FXS, PG_FXD, PG_FXDL, PG_FXDL2, PG_FXR,
-       PG_PAT, PG_NR, PG_MIX, PG_SAVE, PG_REC, PG_INFO, PG_N };
+       PG_PAT, PG_NR, PG_MIX, PG_SAVE, PG_REC, PG_INFO, PG_MIDI, PG_SONG, PG_MFX, PG_N };
 static const char *const PG_NAME[PG_N] = {"LUXR KIT", "SEQUENCER", "LIVE PADS", "SYNTH 1-4", "SYNTH 5-8", "SAMPLE LAYER", "SAMPLE 2",
                                           "SOUND MIX", "LFO 1", "LFO 2", "FX SENDS", "DRIVE", "DELAY", "DELAY 2", "REVERB",
-                                          "PATTERNS", "NOTE REPEAT", "MIXER", "STORE", "QUANTIZE", "SYSTEM"};
+                                          "PATTERNS", "NOTE REPEAT", "MIXER", "STORE", "QUANTIZE", "SYSTEM", "MIDI", "SONG",
+                                          "MASTER"};
 static const uint8_t PAGE_BTN[PG_N] = {B_HOME, B_SEQ, B_SEQ, B_EDIT, B_EDIT, B_EDIT, B_EDIT, B_EDIT, B_LFO, B_LFO, B_FX, B_FX, B_FX, B_FX,
-                                       B_FX, B_SCL, B_ARP, B_GLO, B_SAVE, B_REC, B_HOME};
+                                       B_FX, B_SCL, B_ARP, B_GLO, B_SAVE, B_REC, B_HOME, B_HOME, B_SCL, B_FX};
 static const uint8_t PAGE_KC[PG_N] = {KC_HOME, KC_SEQ, KC_SEQ, KC_EDIT, KC_EDIT, KC_EDIT, KC_EDIT, KC_EDIT, KC_LFO, KC_LFO, KC_FX, KC_FX, KC_FX,
-                                      KC_FX, KC_FX, KC_SCL, KC_ARP, KC_GLO, KC_SAVE, KC_REC, KC_HOME};
+                                      KC_FX, KC_FX, KC_SCL, KC_ARP, KC_GLO, KC_SAVE, KC_REC, KC_HOME, KC_HOME, KC_SCL, KC_FX};
 /* a button's pages, in the order its taps show them (a button not listed: none, or its own logic) */
-typedef struct { uint8_t btn, n, pg[5]; } group_t;
+typedef struct { uint8_t btn, n, pg[6]; } group_t;
 static const group_t GROUPS[] = {
     {B_SEQ, 2, {PG_SEQ, PG_LIVE}}, {B_EDIT, 5, {PG_VOICE, PG_VOICE2, PG_SAMPLE, PG_SAMPLE2, PG_SND}},
-    {B_ENV, 1, {PG_SAMPLE}}, {B_LFO, 2, {PG_LFO1, PG_LFO2}}, {B_FX, 5, {PG_FXS, PG_FXD, PG_FXDL, PG_FXDL2, PG_FXR}},
-    {B_SCL, 1, {PG_PAT}}, {B_SAVE, 1, {PG_SAVE}},
+    {B_ENV, 1, {PG_SAMPLE}}, {B_LFO, 2, {PG_LFO1, PG_LFO2}}, {B_FX, 6, {PG_FXS, PG_FXD, PG_FXDL, PG_FXDL2, PG_FXR, PG_MFX}},
+    {B_SCL, 2, {PG_PAT, PG_SONG}}, {B_SAVE, 1, {PG_SAVE}},
 };
 
 /* ----------------------------------------------------------- parameters --- */
@@ -82,10 +85,13 @@ enum {
     P_MIX0, P_MIX1, P_MIX2, P_MIX3, P_MPAN0, P_MPAN1, P_MPAN2, P_MPAN3,
     P_SLOT, P_SWHAT, P_LWHAT, P_LOAD, P_QGRID, P_QROUND,
     P_EVEL, P_EPROB, P_EPAN, P_ESUB,
+    /* (LXP7; the CC map stores these numbers: new ones only ever at the end) */
+    P_SPEED, P_EMICRO, P_MFLT, P_MRES, P_CLKSRC, P_CLKOUT, P_OCH, P_ONOTE, P_LEARN,
+    P_SROW, P_SPAT, P_SREP, P_SMODE, P_SLEN, P_SEND,
     P_COUNT
 };
 enum { FM_NUM, FM_PCT, FM_BIP, FM_NAME, FM_STEPS, FM_PAN, FM_X100, FM_BPM, FM_SMP, FM_PAT, FM_LOAD, FM_TONE, FM_PROB,
-       FM_SPAN, FM_SUB };
+       FM_SPAN, FM_SUB, FM_MICRO, FM_FILT, FM_NOTE, FM_CH };
 typedef struct { const char *label; uint8_t fmt; int16_t min, max; const char *const *names; } pdesc_t;
 static const char *const N_OFFON[] = {"OFF", "ON"};
 static const char *const N_LDEST[] = {"OFF", "PITCH", "FILTER", "DECAY", "LEVEL", "PAN", "SAMPLE"};
@@ -103,6 +109,10 @@ static const char *const N_MIDICH[] = {"ALL", "1", "2", "3", "4", "5", "6", "7",
                                        "15", "16"};
 static const char *const N_WAVE[] = {"SINE", "TRI", "SAW", "SQUARE", "NOISE"};
 static const char *const N_VERSION[] = {"LUXR " OC_VERSION};
+static const char *const N_SPEED[] = {"1/8X", "1/4X", "1/2X", "3/4X", "1X", "3/2X", "2X"};
+static const char *const N_CLKSRC[] = {"INT", "EXT"};
+static const char *const N_LEARN[] = {"OFF", "ON", "CLEAR"};
+static const char *const N_SEND[] = {"LOOP", "STOP"};
 static const char *N_THEME[UI_NPALETTES];
 #define NSLOT 14u
 static const pdesc_t PD[P_COUNT] = {
@@ -178,11 +188,26 @@ static const pdesc_t PD[P_COUNT] = {
     [P_EPROB] = {"PROB", FM_PROB, 1, C_N, 0},
     [P_EPAN] = {"PAN", FM_SPAN, 0, 7, 0},
     [P_ESUB] = {"SUBSTEP", FM_SUB, 1, 6, 0},
+    [P_SPEED] = {"SPEED", FM_NAME, SPD_MIN, SPD_MAX, N_SPEED},
+    [P_EMICRO] = {"NUDGE", FM_MICRO, -15, 15, 0},
+    [P_MFLT] = {"FILTER", FM_FILT, -64, 63, 0},
+    [P_MRES] = {"RESO", FM_NUM, 0, 127, 0},
+    [P_CLKSRC] = {"CLOCK", FM_NAME, 0, CK_N - 1, N_CLKSRC},
+    [P_CLKOUT] = {"CLK OUT", FM_NAME, 0, 1, N_OFFON},
+    [P_OCH] = {"OUT CH", FM_CH, 0, 16, 0},
+    [P_ONOTE] = {"NOTE", FM_NOTE, 0, 127, 0},
+    [P_LEARN] = {"CC LEARN", FM_NAME, 0, 2, N_LEARN},
+    [P_SROW] = {"ROW", FM_NUM, 1, NSONG, 0},
+    [P_SPAT] = {"PATTERN", FM_NUM, 1, NPAT, 0},
+    [P_SREP] = {"REPEAT", FM_NUM, 1, 16, 0},
+    [P_SMODE] = {"SONG", FM_NAME, 0, 1, N_OFFON},
+    [P_SLEN] = {"ROWS", FM_NUM, 1, NSONG, 0},
+    [P_SEND] = {"AT END", FM_NAME, 0, 1, N_SEND},
 };
 /* the four cards of each page: row A, row B (SHIFT) */
 static const uint8_t PAGE_P[PG_N][8] = {
     [PG_KIT] = {P_BPM, P_SWING, P_TUNE, P_KDEC, P_MIDICH, P_THEME, P_VERSION, 0},
-    [PG_SEQ] = {P_LEN, P_SVEL, P_ROT, P_EUCLID, P_PLEN, P_COPY, P_SACC, 0},
+    [PG_SEQ] = {P_LEN, P_SVEL, P_ROT, P_EUCLID, P_PLEN, P_COPY, P_SACC, P_SPEED},
     [PG_LIVE] = {P_LVEL, P_QGRID, P_QROUND, P_CLICK, 0, 0, 0, 0},
     [PG_VOICE] = {P_V0, P_V1, P_V2, P_V3, P_V4, P_V5, P_V6, P_V7},
     [PG_VOICE2] = {P_V4, P_V5, P_V6, P_V7, P_V0, P_V1, P_V2, P_V3},
@@ -201,6 +226,9 @@ static const uint8_t PAGE_P[PG_N][8] = {
     [PG_MIX] = {P_MIX0, P_MIX1, P_MIX2, P_MIX3, P_MPAN0, P_MPAN1, P_MPAN2, P_MPAN3},
     [PG_SAVE] = {P_SLOT, P_SWHAT, P_LWHAT, P_LOAD, 0, 0, 0, 0},
     [PG_REC] = {P_QGRID, P_QROUND, P_CLICK, 0, 0, 0, 0, 0},
+    [PG_MIDI] = {P_CLKSRC, P_CLKOUT, P_OCH, P_ONOTE, P_MIDICH, P_LEARN, 0, 0},
+    [PG_SONG] = {P_SROW, P_SPAT, P_SREP, P_SMODE, P_SLEN, P_SEND, 0, 0},
+    [PG_MFX] = {P_MFLT, P_MRES, 0, 0, 0, 0, 0, 0},
 };
 
 static struct {
@@ -212,6 +240,9 @@ static struct {
     int8_t rot;
     uint32_t hot_t, msg_t, both_t, burst_t, burst_tag, glo_t0, arp_t0, rec_t0, home_t0, tap_t, tap_n, tap_sum;
     uint8_t home_long;
+    uint8_t lockmode;                            /* LM_*: the white keys are steps on every page (P-LOCK, NUDGE) */
+    uint8_t learn, lpid, ltrk;                   /* CC LEARN: 1 on (a knob turned arms it), 2 armed: the next CC maps */
+    uint8_t scur;                                /* SONG: the row shown */
     char msg[28];
     uint32_t sig[8];                             /* the areas: 0 header, 1..4 cards, 5 graph, 6 footer, 7 uboot */
     uint8_t logo;                                /* the SYSTEM page's logo is on the screen (header and cards are not) */
@@ -230,11 +261,12 @@ static void str_cat(char *d, const char *s, uint32_t n) { str_cpy(d + str_len(d)
 
 /* ---------------------------------------------------------------- undo --- */
 #define UNDO_N 8u
-typedef struct { pattern_t p; sound_t s[NTRK]; uint8_t pat; } snap_t;
+typedef struct { pattern_t p; lock_t lk[NLOCK]; sound_t s[NTRK]; uint8_t pat; } snap_t;
 static struct { snap_t s[UNDO_N]; uint32_t cur, n_undo, n_redo; } undo __attribute__((section(".pool")));
 static void snap_take(snap_t *s)
 {
     memcpy(&s->p, PAT, sizeof s->p);
+    memcpy(s->lk, plk[song.pat % NPAT], sizeof s->lk);
     memcpy(s->s, snd, sizeof s->s);
     s->pat = song.pat;
 }
@@ -255,7 +287,7 @@ static void undo_burst(uint32_t tag)             /* one undo for a run of turns 
 }
 static void undo_do(int redo)
 {
-    snap_t now;
+    static snap_t now __attribute__((section(".pool")));
     if (redo ? !undo.n_redo : !undo.n_undo) {
         ui_say(redo ? "NOTHING TO REDO" : "NOTHING TO UNDO");
         return;
@@ -273,6 +305,7 @@ static void undo_do(int redo)
     {
         snap_t *s = &undo.s[(redo ? undo.cur - 1u : undo.cur) % UNDO_N];
         memcpy(&pat[s->pat % NPAT], &s->p, sizeof s->p);
+        memcpy(plk[s->pat % NPAT], s->lk, sizeof s->lk);
         memcpy(snd, s->s, sizeof snd);
         *s = now;
     }
@@ -283,17 +316,23 @@ static void undo_do(int redo)
 static void fmt_u(char *b, uint32_t v);
 /* --------------------------------------------------------------- store --- */
 /* the store (OC_STORE_*, the area ONE CLICK and Felucca use too): settings at 0, fourteen patches of 20 KiB after it.
- * A patch is a kit (the eight sounds, tune, decay, the global FX) and its patterns (16, tempo, swing, chain, mute, solo);
- * SAVE writes both or one of them (the other as the slot has it), PRESETS loads both or (SHIFT) the patterns.
- * The formats before (LXP1..3: eight slots of 12 KiB) are read too: moved to this layout at the first boot (layout 2 in
- * the settings), and taken by a restore over USB. */
+ * A patch is a kit (the eight sounds, tune, decay, the global FX) and its patterns (16 with their locks, tempo, swing,
+ * chain, mute, solo, the song); SAVE writes both or one of them (the other as the slot has it), PRESETS loads both or
+ * (SHIFT) the patterns.
+ * LXP7 keeps the patterns packed (a pattern: its steps one by one, or all of them when that is shorter) so the locks,
+ * the timing and the speeds fit in the slot; a patch past the slot's room is not saved ("PATCH TOO FULL").
+ * The formats before are read too: LXP4..6 as they are in their slots (converted when loaded, written as LXP7 when
+ * saved again); LXP1..3 (eight slots of 12 KiB) moved to this layout at the first boot (layout 2 in the settings); any
+ * of them taken by a restore over USB. */
 #define ST_SET 0x0000u
 #define ST_PROJ(i) (0x1000u + 0x5000u * (uint32_t)(i))
 #define ST_OLD(i) (0x1000u + 0x3000u * (uint32_t)(i))   /* (LXP1..3) */
 #define NSLOT_OLD 8u
-#define MAGIC_SET 0x3254584Cu                    /* "LXT2" */
+#define MAGIC_SET 0x3354584Cu                    /* "LXT3": + the MIDI clock, the CC map */
+#define MAGIC_SET2 0x3254584Cu                   /* "LXT2" */
 #define MAGIC_SET1 0x3154584Cu                   /* "LXT1" (LUXR's first) */
-#define MAGIC_PROJ 0x3650584Cu                   /* "LXP6": the conditions A:B, the delay's modes */
+#define MAGIC_PROJ 0x3750584Cu                   /* "LXP7": packed patterns, the locks, NUDGE, the speeds, the song, MIDI OUT */
+#define MAGIC_P6 0x3650584Cu                     /* (the conditions A:B, the delay's modes) */
 #define MAGIC_P5 0x3550584Cu                     /* (the substeps; probability and pan in nibbles; one delay time) */
 #define MAGIC_P4 0x3450584Cu                     /* (the extras, no substeps) */
 #define KIT_OLD 253u                             /* (the kit of LXP3..5: no delay mode, no second time) */
@@ -301,25 +340,50 @@ static void fmt_u(char *b, uint32_t v);
 #define MAGIC_P2 0x3250584Cu
 #define MAGIC_P3 0x3350584Cu
 #define LAYOUT 2u
+#define NMAP 32u
 enum { SW_ALL, SW_KIT, SW_PAT };
-typedef struct { uint32_t magic; uint8_t theme, midi_ch, click, slot, qgrid, qround, layout, pad; } set_rec_t;
+typedef struct { uint8_t ch, cc, pid, trk; } ccmap_t;   /* a controller (channel 0..15, number) onto a parameter (of a sound) */
+typedef struct {
+    uint32_t magic;
+    uint8_t theme, midi_ch, click, slot, qgrid, qround, layout, pad;
+    uint8_t clk_src, clk_out, pad2[2];           /* (LXT3) */
+    ccmap_t map[NMAP];
+} set_rec_t;
+static ccmap_t ccmap[NMAP];
+/* the formats before LXP7, as they were laid out (read only) */
+typedef struct {                                 /* a sound of LXP4..6 */
+    uint8_t p[8], smp, slvl, spitch, sdec, sstart;
+    int8_t stone, sbend;
+    uint8_t syn, level, dly, rev, drv;
+    int8_t pan;
+    lfo_t lfo[2];
+    uint8_t preset;
+} sound6_t;
+typedef struct {
+    sound6_t s[NTRK];
+    int8_t tune;
+    uint8_t ddec, drv_mode, drv_amt, drv_tone, drv_lvl, dly_div, dly_fb, dly_tone, dly_lvl, rev_size, rev_damp, rev_lvl;
+    uint8_t dly_mode, dly_div2;                  /* (LXP6) */
+} kit6_t;
+typedef struct {                                 /* a pattern as LXP5..6 stored it: the substeps 3 bits a step */
+    uint8_t s[NTRK][NSTEP], x[NTRK][NSTEP], r3[NTRK * NSTEP * 3u / 8u], len[NTRK];
+} pat_st_t;
+typedef struct { pat_st_t p[NPAT]; uint8_t bpm, swing, chain, pat, mute, solo; } pat_rec6_t;
+typedef struct { uint32_t magic, size, sum; kit6_t k; pat_rec6_t p; } proj6_t;
+typedef char kit6_fits[sizeof(sound6_t) == 30u && sizeof(kit6_t) == KIT_OLD + 2u ? 1 : -1];
+/* LXP7 */
 typedef struct {                                 /* the kit */
     sound_t s[NTRK];
     int8_t tune;
     uint8_t ddec, drv_mode, drv_amt, drv_tone, drv_lvl, dly_div, dly_fb, dly_tone, dly_lvl, rev_size, rev_damp, rev_lvl;
-    uint8_t dly_mode, dly_div2;                  /* (LXP6) */
+    uint8_t dly_mode, dly_div2;
 } kit_rec_t;
-typedef struct {                                 /* a pattern as stored: the substeps 3 bits a step */
-    uint8_t s[NTRK][NSTEP], x[NTRK][NSTEP], r3[NTRK * NSTEP * 3u / 8u], len[NTRK];
-} pat_st_t;
-typedef struct {                                 /* the patterns */
-    pat_st_t p[NPAT];
-    uint8_t bpm, swing, chain, pat, mute, solo;
-} pat_rec_t;
-typedef struct { uint32_t magic, size, sum; kit_rec_t k; pat_rec_t p; } proj_t;
+#define PBLOB (0x5000u - 16u - (uint32_t)sizeof(kit_rec_t))
+typedef struct { uint32_t magic, size, sum; uint16_t blen, pad; kit_rec_t k; uint8_t blob[PBLOB]; } proj_t;
+typedef char proj_fits[sizeof(proj_t) == 0x5000u && sizeof(proj_t) >= sizeof(proj6_t) && ST_PROJ(NSLOT) <= 0x49000u ? 1 : -1];
 static proj_t proj_buf __attribute__((section(".pool")));
-typedef char proj_fits[sizeof(proj_t) <= 0x5000u && ST_PROJ(NSLOT) <= 0x49000u ? 1 : -1];   /* (a slot, the store) */
-static uint8_t stage[sizeof(proj_t)] __attribute__((section(".pool")));   /* a patch as stored (any format): USB, moving */
+static uint8_t stage[sizeof(proj_t)] __attribute__((section(".pool"), aligned(4)));   /* a patch as stored (any format): USB, moving */
+static pattern_t cv_pat __attribute__((section(".pool")));               /* a pattern on its way (converting, loading) */
 static int store_write(uint32_t off, const void *src, uint32_t n)   /* whole sectors from off, erased, then written */
 {
     const uint8_t *b = src;
@@ -331,26 +395,6 @@ static int store_write(uint32_t off, const void *src, uint32_t n)   /* whole sec
     }
     return 0;
 }
-static uint32_t proj_sum(const proj_t *r)
-{
-    const uint8_t *p = (const uint8_t *)&r->k;
-    uint32_t h = 2166136261u, i;
-    for (i = 0; i < sizeof r->k + sizeof r->p; i++)
-        h = (h ^ p[i]) * 16777619u;
-    return h;
-}
-static void settings_save(void)
-{
-    set_rec_t st = {MAGIC_SET, song.theme, song.midi_ch, song.click, ui.slot, song.qgrid, song.qround, LAYOUT, 0};
-    store_write(ST_SET, &st, sizeof st);
-}
-static int proj_convert(const uint8_t *raw, uint32_t n);
-static int proj_read(uint32_t slot)              /* into proj_buf (from any format); 0 = a patch is there */
-{
-    return io_store_read(ST_PROJ(slot), stage, sizeof stage) || proj_convert(stage, sizeof stage);
-}
-static int slot_magic(uint32_t m) { return m == MAGIC_PROJ || m == MAGIC_P5 || m == MAGIC_P4; }
-/* a patch as stored, in any of the formats, into proj_buf (LXP4); 0 = ok */
 static uint32_t fnv(const uint8_t *p, uint32_t n)
 {
     uint32_t h = 2166136261u;
@@ -358,8 +402,268 @@ static uint32_t fnv(const uint8_t *p, uint32_t n)
         h = (h ^ *p++) * 16777619u;
     return h;
 }
+static uint32_t proj_sum(const proj_t *r)        /* the blob's length, the kit and the blob */
+{
+    return fnv((const uint8_t *)&r->blen, (uint32_t)((const uint8_t *)r->blob - (const uint8_t *)&r->blen) + (r->blen <= PBLOB ? r->blen : 0u));
+}
+static void settings_save(void)
+{
+    static set_rec_t st;
+    memset(&st, 0, sizeof st);
+    st.magic = MAGIC_SET;
+    st.theme = song.theme; st.midi_ch = song.midi_ch; st.click = song.click; st.slot = ui.slot;
+    st.qgrid = song.qgrid; st.qround = song.qround; st.layout = LAYOUT;
+    st.clk_src = song.clk_src; st.clk_out = song.clk_out;
+    memcpy(st.map, ccmap, sizeof st.map);
+    store_write(ST_SET, &st, sizeof st);
+}
+static int proj_convert(const uint8_t *raw, uint32_t n);
+static int proj_read(uint32_t slot)              /* into proj_buf (from any format); 0 = a patch is there */
+{
+    return io_store_read(ST_PROJ(slot), stage, sizeof stage) || proj_convert(stage, sizeof stage);
+}
+static int slot_magic(uint32_t m) { return m == MAGIC_PROJ || m == MAGIC_P6 || m == MAGIC_P5 || m == MAGIC_P4; }
 static uint32_t rd32(const uint8_t *b) { return b[0] | (uint32_t)b[1] << 8 | (uint32_t)b[2] << 16 | (uint32_t)b[3] << 24; }
-static void sound_from_old(sound_t *d, const uint8_t *o, uint32_t ver)   /* LXP1 (22 B), LXP2 (27), LXP3 (30) */
+
+/* ---- the blob: the patterns packed, then the rest of them
+ * a pattern: mode (0 its steps one by one, 1 all of them with the substeps in 3 bits, 2 all of them), len[8], spd[8];
+ *            mode 0: the count (2) and each step: t << 6 | step (2), s, x, r; mode 1: s[512] x[512] r3[192];
+ *            mode 2: s[512] x[512] r[512]; then its locks: the count (1) and each: key (2), pid, value
+ * the rest:  bpm swing chain pat mute solo, SONG on, rows, at its end, the rows (pattern, repeats) */
+static struct { uint8_t *b; uint32_t n, cap, over; } bw;
+static void bw_put(uint32_t v)
+{
+    if (bw.n < bw.cap)
+        bw.b[bw.n++] = (uint8_t)v;
+    else
+        bw.over = 1;
+}
+static void bw_put16(uint32_t v) { bw_put(v & 0xFFu); bw_put(v >> 8); }
+static int r3_ok(const pattern_t *p)             /* the substeps alone, 0..5 (mode 1 keeps 3 bits a step) */
+{
+    uint32_t k;
+    for (k = 0; k < NTRK * NSTEP; k++)
+        if ((&p->r[0][0])[k] > 5u)
+            return 0;
+    return 1;
+}
+static void enc_pattern(const pattern_t *p, const lock_t *lk)
+{
+    uint32_t t, i, k, n = 0, nl = 0, sp, d3 = r3_ok(p);
+    for (k = 0; k < NTRK * NSTEP; k++)
+        n += (&p->s[0][0])[k] != 0u;
+    sp = 2u + 5u * n;
+    bw_put(sp <= (d3 ? 1216u : 1536u) ? 0u : d3 ? 1u : 2u);
+    for (t = 0; t < NTRK; t++)
+        bw_put(p->len[t]);
+    for (t = 0; t < NTRK; t++)
+        bw_put((uint8_t)p->spd[t]);
+    if (sp <= (d3 ? 1216u : 1536u)) {
+        bw_put16(n);
+        for (t = 0; t < NTRK; t++)
+            for (i = 0; i < NSTEP; i++)
+                if (p->s[t][i]) {
+                    bw_put16(t << 6 | i);
+                    bw_put(p->s[t][i]);
+                    bw_put(p->x[t][i]);
+                    bw_put(p->r[t][i]);
+                }
+    } else {
+        for (k = 0; k < NTRK * NSTEP; k++)
+            bw_put((&p->s[0][0])[k]);
+        for (k = 0; k < NTRK * NSTEP; k++)
+            bw_put((&p->x[0][0])[k]);
+        if (d3) {                                /* (3 bits a step, little end first) */
+            uint8_t r3[NTRK * NSTEP * 3u / 8u];
+            memset(r3, 0, sizeof r3);
+            for (k = 0; k < NTRK * NSTEP; k++) {
+                uint32_t v = (&p->r[0][0])[k] & 7u, b = 3u * k;
+                r3[b >> 3] |= (uint8_t)(v << (b & 7u));
+                if ((b & 7u) > 5u)
+                    r3[(b >> 3) + 1u] |= (uint8_t)(v >> (8u - (b & 7u)));
+            }
+            for (k = 0; k < sizeof r3; k++)
+                bw_put(r3[k]);
+        } else {
+            for (k = 0; k < NTRK * NSTEP; k++)
+                bw_put((&p->r[0][0])[k]);
+        }
+    }
+    for (i = 0; lk && i < NLOCK; i++)
+        nl += lk[i].pid != 0u;
+    bw_put(nl);
+    for (i = 0; lk && i < NLOCK; i++)
+        if (lk[i].pid) {
+            bw_put16(lk[i].key);
+            bw_put(lk[i].pid);
+            bw_put(lk[i].val);
+        }
+}
+typedef struct { uint8_t bpm, swing, chain, pat, mute, solo; } ptail_t;
+static void enc_tail(const ptail_t *g, uint32_t smode, uint32_t slen, uint32_t send, const srow_t *rows)
+{
+    uint32_t i;
+    bw_put(g->bpm); bw_put(g->swing); bw_put(g->chain); bw_put(g->pat); bw_put(g->mute); bw_put(g->solo);
+    bw_put(smode); bw_put(slen); bw_put(send);
+    for (i = 0; i < slen && i < NSONG; i++) {
+        bw_put(rows[i].pat);
+        bw_put(rows[i].rep);
+    }
+}
+static void enc_begin(proj_t *r)
+{
+    bw.b = r->blob;
+    bw.n = 0;
+    bw.cap = PBLOB;
+    bw.over = 0;
+}
+static int enc_end(proj_t *r)                    /* 0 = it fits */
+{
+    r->magic = MAGIC_PROJ;
+    r->size = sizeof *r;
+    r->blen = (uint16_t)(bw.over ? 0u : bw.n);
+    r->pad = 0;
+    r->sum = proj_sum(r);
+    return bw.over ? -1 : 0;
+}
+/* the blob read back: apply 0 only checks it; 1 into the patterns, their locks, the song (0 = ok) */
+static int dec_blob(const proj_t *r, int apply)
+{
+    const uint8_t *b = r->blob;
+    uint32_t n = r->blen, o = 0, i, t, k, m, cnt;
+    if (n > PBLOB)
+        return -1;
+#define NEED(c) do { if (o + (c) > n) return -1; } while (0)
+    for (i = 0; i < NPAT; i++) {
+        pattern_t *p = &cv_pat;
+        NEED(17u);
+        m = b[o++];
+        memset(p, 0, sizeof *p);
+        for (t = 0; t < NTRK; t++)
+            p->len[t] = (uint8_t)clamp(b[o++], 1, NSTEP);
+        for (t = 0; t < NTRK; t++)
+            p->spd[t] = (int8_t)clamp((int8_t)b[o++], SPD_MIN, SPD_MAX);
+        if (m == 0u) {
+            NEED(2u);
+            cnt = b[o] | (uint32_t)b[o + 1] << 8;
+            o += 2u;
+            NEED(5u * cnt);
+            for (k = 0; k < cnt; k++, o += 5u) {
+                uint32_t key = (b[o] | (uint32_t)b[o + 1] << 8) & 0x1FFu;
+                p->s[key >> 6][key & 63u] = b[o + 2];
+                p->x[key >> 6][key & 63u] = b[o + 3];
+                p->r[key >> 6][key & 63u] = b[o + 4];
+            }
+        } else if (m == 1u || m == 2u) {
+            NEED(1024u + (m == 1u ? 192u : 512u));
+            memcpy(p->s, b + o, NTRK * NSTEP);
+            memcpy(p->x, b + o + NTRK * NSTEP, NTRK * NSTEP);
+            o += 1024u;
+            if (m == 1u) {
+                for (k = 0; k < NTRK * NSTEP; k++) {
+                    uint32_t bb = 3u * k, v = (uint32_t)b[o + (bb >> 3)] >> (bb & 7u);
+                    if ((bb & 7u) > 5u)
+                        v |= (uint32_t)b[o + (bb >> 3) + 1u] << (8u - (bb & 7u));
+                    (&p->r[0][0])[k] = (uint8_t)((v & 7u) <= 5u ? v & 7u : 0u);
+                }
+                o += 192u;
+            } else {
+                memcpy(p->r, b + o, NTRK * NSTEP);
+                o += 512u;
+            }
+        } else {
+            return -1;
+        }
+        NEED(1u);
+        cnt = b[o++];
+        if (cnt > NLOCK)
+            return -1;
+        NEED(4u * cnt);
+        if (apply) {
+            memcpy(&pat[i], p, sizeof *p);
+            memset(plk[i], 0, sizeof plk[i]);
+        }
+        for (k = 0; k < cnt; k++, o += 4u)
+            if (apply) {
+                plk[i][k].key = (uint16_t)((b[o] | (uint32_t)b[o + 1] << 8) & 0x1FFu);
+                plk[i][k].val = b[o + 3];
+                plk[i][k].pid = b[o + 2];
+            }
+    }
+    NEED(9u);
+    if (apply) {
+        song.bpm = (uint8_t)clamp(b[o], 60, 200);
+        song.swing = (uint8_t)clamp(b[o + 1], 0, 50);
+        song.chain = (uint8_t)clamp(b[o + 2], 1, NPAT);
+        song.mute = b[o + 4];
+        song.solo = b[o + 5];
+        if (!song.playing)
+            song.pat = song.chain0 = b[o + 3] % NPAT;
+        else
+            song.pat_next = b[o + 3] % NPAT;     /* (playing: at the end of the pattern) */
+        song.smode = b[o + 6] & 1u;
+        song.send = b[o + 8] & 1u;
+    }
+    m = b[o + 7];
+    o += 9u;
+    if (m > NSONG)
+        return -1;
+    NEED(2u * m);
+    if (apply) {
+        song.slen = (uint8_t)(m ? m : 1u);
+        memset(srows, 0, sizeof srows);
+        for (k = 0; k < m; k++) {
+            srows[k].pat = b[o + 2u * k] % NPAT;
+            srows[k].rep = (uint8_t)clamp(b[o + 2u * k + 1u], 1, 16);
+        }
+        if (!m)
+            srows[0].rep = 1;
+        if (song.srow >= song.slen)
+            song.srow = 0;
+    }
+#undef NEED
+    return 0;
+}
+
+/* ---- the formats before, into LXP7 (proj_buf) */
+static void sound_from6(sound_t *d, const sound6_t *o, uint32_t t)
+{
+    memset(d, 0, sizeof *d);
+    memcpy(d->p, o->p, 8);
+    d->smp = o->smp; d->slvl = o->slvl; d->spitch = o->spitch; d->sdec = o->sdec; d->sstart = o->sstart;
+    d->stone = o->stone; d->sbend = o->sbend; d->syn = o->syn; d->level = o->level; d->dly = o->dly; d->rev = o->rev;
+    d->drv = o->drv; d->pan = o->pan;
+    memcpy(d->lfo, o->lfo, sizeof d->lfo);
+    d->preset = o->preset;
+    d->och = 0;
+    d->onote = GM_NOTE[t % NTRK];
+}
+static void kit_from6(kit_rec_t *d, const kit6_t *o)
+{
+    uint32_t t;
+    for (t = 0; t < NTRK; t++)
+        sound_from6(&d->s[t], &o->s[t], t);
+    d->tune = o->tune; d->ddec = o->ddec; d->drv_mode = o->drv_mode; d->drv_amt = o->drv_amt; d->drv_tone = o->drv_tone;
+    d->drv_lvl = o->drv_lvl; d->dly_div = o->dly_div; d->dly_fb = o->dly_fb; d->dly_tone = o->dly_tone; d->dly_lvl = o->dly_lvl;
+    d->rev_size = o->rev_size; d->rev_damp = o->rev_damp; d->rev_lvl = o->rev_lvl; d->dly_mode = o->dly_mode; d->dly_div2 = o->dly_div2;
+}
+static void cv_from_st(const uint8_t *st, uint32_t has_r3)   /* a pattern as pat_st_t (LXP5..6) laid it out, into cv_pat */
+{
+    const pat_st_t *q = (const pat_st_t *)st;    /* (bytes only: no alignment needed) */
+    uint32_t k;
+    memset(&cv_pat, 0, sizeof cv_pat);
+    memcpy(cv_pat.s, q->s, sizeof cv_pat.s);
+    memcpy(cv_pat.x, q->x, sizeof cv_pat.x);
+    memcpy(cv_pat.len, q->len, sizeof cv_pat.len);
+    for (k = 0; has_r3 && k < NTRK * NSTEP; k++) {
+        uint32_t b = 3u * k, v = (uint32_t)q->r3[b >> 3] >> (b & 7u);
+        if ((b & 7u) > 5u)
+            v |= (uint32_t)q->r3[(b >> 3) + 1u] << (8u - (b & 7u));
+        (&cv_pat.r[0][0])[k] = (uint8_t)((v & 7u) <= 5u ? v & 7u : 0u);
+    }
+}
+static const srow_t SONG0[1] = {{0, 1}};
+static void sound_from_old(sound6_t *d, const uint8_t *o, uint32_t ver)   /* LXP1 (22 B), LXP2 (27), LXP3 (30) */
 {
     static const uint8_t LD1[5] = {LD_OFF, LD_PITCH, LD_FILTER, LD_LEVEL, LD_PAN};
     uint32_t k = 12;
@@ -386,36 +690,64 @@ static void sound_from_old(sound_t *d, const uint8_t *o, uint32_t ver)   /* LXP1
 static int proj_convert(const uint8_t *raw, uint32_t n)
 {
     proj_t *r = &proj_buf;
+    static kit6_t k6;
+    ptail_t g;
     uint32_t magic = n >= 12u ? rd32(raw) : 0, ver, ss, i, t, at;
     if (magic == MAGIC_PROJ) {
         if (n < sizeof *r)
             return -2;
         memcpy(r, raw, sizeof *r);
-        return r->size == sizeof *r && r->sum == proj_sum(r) ? 0 : -2;
+        return r->size == sizeof *r && r->blen <= PBLOB && r->sum == proj_sum(r) && !dec_blob(r, 0) ? 0 : -2;
+    }
+    memset(&k6, 0, sizeof k6);
+    memset(&g, 0, sizeof g);
+    if (magic == MAGIC_P6) {                     /* LXP6: its kit and patterns as they were laid out */
+        const uint8_t *pp = raw + 12u + sizeof(kit6_t);
+        if (n < sizeof(proj6_t) || rd32(raw + 4) != sizeof(proj6_t) || rd32(raw + 8) != fnv(raw + 12, sizeof(kit6_t) + sizeof(pat_rec6_t)))
+            return -2;
+        memcpy(&k6, raw + 12, sizeof k6);
+        kit_from6(&r->k, &k6);
+        enc_begin(r);
+        for (i = 0; i < NPAT; i++) {
+            cv_from_st(pp + i * sizeof(pat_st_t), 1);
+            enc_pattern(&cv_pat, 0);
+        }
+        memcpy(&g, pp + NPAT * sizeof(pat_st_t), sizeof g);
+        enc_tail(&g, 0, 1, 0, SONG0);
+        return enc_end(r) ? -2 : 0;
     }
     if (magic == MAGIC_P4 || magic == MAGIC_P5) {   /* LXP4 (no substeps, 1032 B a pattern), LXP5 (1224 B): their kit, the
                                                      * extras' nibbles (probability, pan) remapped */
         uint32_t pl = magic == MAGIC_P4 ? 1032u : 1224u, body = KIT_OLD + NPAT * pl + 6u, k;
         if (n < 12u + body || rd32(raw + 8) != fnv(raw + 12, body))
             return -2;
-        memset(r, 0, sizeof *r);
-        memcpy(&r->k, raw + 12, KIT_OLD);
-        r->k.dly_div2 = r->k.dly_div;
+        memcpy(&k6, raw + 12, KIT_OLD);
+        k6.dly_div2 = k6.dly_div;
+        kit_from6(&r->k, &k6);
+        enc_begin(r);
         for (t = 0, i = 12u + KIT_OLD; t < NPAT; t++, i += pl) {
-            memcpy(r->p.p[t].s, raw + i, NTRK * NSTEP);
+            memset(&cv_pat, 0, sizeof cv_pat);
+            memcpy(cv_pat.s, raw + i, NTRK * NSTEP);
             for (k = 0; k < NTRK * NSTEP; k++) {
                 uint32_t o = raw[i + NTRK * NSTEP + k], pn = o & 15u, v = pn ? (uint32_t)clamp(((int32_t)pn * 8 + 8) / 16, 1, 7) : 0u;
-                (&r->p.p[t].x[0][0])[k] = (uint8_t)((o >> 4) << 3 | v);
+                (&cv_pat.x[0][0])[k] = (uint8_t)((o >> 4) << 3 | v);
             }
-            if (magic == MAGIC_P5)
-                memcpy(r->p.p[t].r3, raw + i + 2u * NTRK * NSTEP, sizeof r->p.p[t].r3);
-            memcpy(r->p.p[t].len, raw + i + 2u * NTRK * NSTEP + (magic == MAGIC_P5 ? sizeof r->p.p[t].r3 : 0u), NTRK);
+            if (magic == MAGIC_P5) {
+                static pat_st_t q;
+                memcpy(q.r3, raw + i + 2u * NTRK * NSTEP, sizeof q.r3);
+                for (k = 0; k < NTRK * NSTEP; k++) {
+                    uint32_t b = 3u * k, v = (uint32_t)q.r3[b >> 3] >> (b & 7u);
+                    if ((b & 7u) > 5u)
+                        v |= (uint32_t)q.r3[(b >> 3) + 1u] << (8u - (b & 7u));
+                    (&cv_pat.r[0][0])[k] = (uint8_t)((v & 7u) <= 5u ? v & 7u : 0u);
+                }
+            }
+            memcpy(cv_pat.len, raw + i + 2u * NTRK * NSTEP + (magic == MAGIC_P5 ? NTRK * NSTEP * 3u / 8u : 0u), NTRK);
+            enc_pattern(&cv_pat, 0);
         }
-        memcpy(&r->p.bpm, raw + i, 6);
-        r->magic = MAGIC_PROJ;
-        r->size = sizeof *r;
-        r->sum = proj_sum(r);
-        return 0;
+        memcpy(&g, raw + i, sizeof g);
+        enc_tail(&g, 0, 1, 0, SONG0);
+        return enc_end(r) ? -2 : 0;
     }
     ver = magic == MAGIC_P1 ? 1u : magic == MAGIC_P2 ? 2u : magic == MAGIC_P3 ? 3u : 0u;
     ss = ver == 1u ? 22u : ver == 2u ? 27u : 30u;
@@ -425,40 +757,39 @@ static int proj_convert(const uint8_t *raw, uint32_t n)
     i = ver == 1u ? NTRK * ss + NPAT * 520u : NTRK * ss + 13u + NPAT * 520u + 6u;   /* (its summed bytes) */
     if (n < at + i || rd32(raw + 8) != fnv(raw + at, i))
         return -2;
-    memset(r, 0, sizeof *r);
     for (t = 0; t < NTRK; t++)
-        sound_from_old(&r->k.s[t], raw + at + t * ss, ver);
-    r->k.drv_mode = DM_SOFT; r->k.drv_amt = 40; r->k.drv_tone = 90; r->k.drv_lvl = 100;
-    r->k.dly_tone = 60; r->k.dly_lvl = 110; r->k.rev_lvl = 110;
-    r->k.dly_mode = 0;
+        sound_from_old(&k6.s[t], raw + at + t * ss, ver);
+    k6.drv_mode = DM_SOFT; k6.drv_amt = 40; k6.drv_tone = 90; k6.drv_lvl = 100;
+    k6.dly_tone = 60; k6.dly_lvl = 110; k6.rev_lvl = 110;
+    k6.dly_mode = 0;
     if (ver == 1u) {                             /* bpm swing ddec dly_div dly_fb rev_size rev_damp chain pat mute solo pad tune */
-        const uint8_t *g = raw + 12;
-        r->p.bpm = g[0]; r->p.swing = g[1]; r->k.ddec = g[2]; r->k.dly_div = g[3]; r->k.dly_fb = g[4];
-        r->k.rev_size = g[5]; r->k.rev_damp = g[6]; r->p.chain = g[7]; r->p.pat = g[8]; r->p.mute = g[9];
-        r->p.solo = g[10]; r->k.tune = (int8_t)g[12];
+        const uint8_t *h = raw + 12;
+        g.bpm = h[0]; g.swing = h[1]; k6.ddec = h[2]; k6.dly_div = h[3]; k6.dly_fb = h[4];
+        k6.rev_size = h[5]; k6.rev_damp = h[6]; g.chain = h[7]; g.pat = h[8]; g.mute = h[9];
+        g.solo = h[10]; k6.tune = (int8_t)h[12];
         i = at + NTRK * ss;
     } else {                                     /* tune ddec drv_mode drv_amt drv_tone drv_lvl dly_div dly_fb dly_tone ... */
-        const uint8_t *g = raw + at + NTRK * ss;
-        r->k.tune = (int8_t)g[0]; r->k.ddec = g[1]; r->k.drv_mode = g[2]; r->k.drv_amt = g[3]; r->k.drv_tone = g[4];
-        r->k.drv_lvl = g[5]; r->k.dly_div = g[6]; r->k.dly_fb = g[7]; r->k.dly_tone = g[8]; r->k.dly_lvl = g[9];
-        r->k.rev_size = g[10]; r->k.rev_damp = g[11]; r->k.rev_lvl = g[12];
+        const uint8_t *h = raw + at + NTRK * ss;
+        k6.tune = (int8_t)h[0]; k6.ddec = h[1]; k6.drv_mode = h[2]; k6.drv_amt = h[3]; k6.drv_tone = h[4];
+        k6.drv_lvl = h[5]; k6.dly_div = h[6]; k6.dly_fb = h[7]; k6.dly_tone = h[8]; k6.dly_lvl = h[9];
+        k6.rev_size = h[10]; k6.rev_damp = h[11]; k6.rev_lvl = h[12];
         i = at + NTRK * ss + 13u;
     }
-    r->k.dly_div2 = r->k.dly_div;
+    k6.dly_div2 = k6.dly_div;
+    kit_from6(&r->k, &k6);
+    enc_begin(r);
     for (t = 0; t < NPAT; t++, i += 520u) {      /* the patterns: their steps and lengths, no extras yet */
-        memcpy(r->p.p[t].s, raw + i, NTRK * NSTEP);
-        memcpy(r->p.p[t].len, raw + i + NTRK * NSTEP, NTRK);
+        memset(&cv_pat, 0, sizeof cv_pat);
+        memcpy(cv_pat.s, raw + i, NTRK * NSTEP);
+        memcpy(cv_pat.len, raw + i + NTRK * NSTEP, NTRK);
+        enc_pattern(&cv_pat, 0);
     }
-    if (ver >= 2u) {
-        const uint8_t *g = raw + i;
-        r->p.bpm = g[0]; r->p.swing = g[1]; r->p.chain = g[2]; r->p.pat = g[3]; r->p.mute = g[4]; r->p.solo = g[5];
-    }
-    r->magic = MAGIC_PROJ;
-    r->size = sizeof *r;
-    r->sum = proj_sum(r);
-    return 0;
+    if (ver >= 2u)
+        memcpy(&g, raw + i, sizeof g);
+    enc_tail(&g, 0, 1, 0, SONG0);
+    return enc_end(r) ? -2 : 0;
 }
-static void store_migrate(void)                  /* LXP1..3 (eight slots of 12 KiB) -> LXP4, the last slot first */
+static void store_migrate(void)                  /* LXP1..3 (eight slots of 12 KiB) -> LXP7, the last slot first */
 {
     uint32_t i, moved = 0;
     for (i = NSLOT_OLD; i-- > 0;) {
@@ -475,17 +806,21 @@ static void store_migrate(void)                  /* LXP1..3 (eight slots of 12 K
 }
 static void store_scan(void)
 {
-    set_rec_t st;
+    static set_rec_t st;
     uint32_t i;
     for (i = 0; i < NSLOT; i++) {
         uint32_t m = 0;
         ui.used[i] = io_store_read(ST_PROJ(i), &m, 4) == 0 && slot_magic(m);
     }
-    if (io_store_read(ST_SET, &st, sizeof st) == 0 && (st.magic == MAGIC_SET || st.magic == MAGIC_SET1) &&
+    if (io_store_read(ST_SET, &st, sizeof st) == 0 && (st.magic == MAGIC_SET || st.magic == MAGIC_SET2 || st.magic == MAGIC_SET1) &&
         (st.magic == MAGIC_SET1 || st.layout != LAYOUT)) {   /* a store of the formats before: moved, once */
         store_migrate();
         if (st.magic == MAGIC_SET1)
             st.qgrid = st.qround = 0;
+        if (st.magic != MAGIC_SET) {
+            st.clk_src = st.clk_out = 0;
+            memset(st.map, 0, sizeof st.map);
+        }
         st.magic = MAGIC_SET;
         st.layout = LAYOUT;
         store_write(ST_SET, &st, sizeof st);
@@ -494,13 +829,22 @@ static void store_scan(void)
             ui.used[i] = io_store_read(ST_PROJ(i), &m, 4) == 0 && slot_magic(m);
         }
     }
-    if (io_store_read(ST_SET, &st, sizeof st) == 0 && st.magic == MAGIC_SET) {
+    if (io_store_read(ST_SET, &st, sizeof st) == 0 && (st.magic == MAGIC_SET || st.magic == MAGIC_SET2)) {
         song.theme = st.theme < UI_NPALETTES ? st.theme : PAL_AMBER;
         song.midi_ch = st.midi_ch <= 16u ? st.midi_ch : 0;
         song.click = st.click < CLICK_N ? st.click : CLICK_OFF;
         song.qgrid = st.qgrid < Q_N ? st.qgrid : Q_16;
         song.qround = st.qround & 1u;
         ui.slot = ui.patch = st.slot % NSLOT;
+        if (st.magic == MAGIC_SET) {
+            song.clk_src = st.clk_src < CK_N ? st.clk_src : CK_INT;
+            song.clk_out = st.clk_out & 1u;
+            for (i = 0; i < NMAP; i++) {
+                ccmap[i] = st.map[i];
+                if (ccmap[i].pid >= P_COUNT || ccmap[i].ch > 15u || ccmap[i].cc > 127u)
+                    ccmap[i].pid = 0;
+            }
+        }
     }
 }
 static void kit_take(kit_rec_t *k)
@@ -520,6 +864,8 @@ static void kit_put(const kit_rec_t *k)
         snd[t].smp %= TR_N;
         snd[t].stone = (int8_t)clamp(snd[t].stone, -64, 63);
         snd[t].sbend = (int8_t)clamp(snd[t].sbend, -64, 63);
+        snd[t].och = snd[t].och <= 16u ? snd[t].och : 0u;
+        snd[t].onote &= 0x7Fu;
         for (j = 0; j < 2u; j++) {
             snd[t].lfo[j].dest %= LD_N;
             snd[t].lfo[j].wave %= LW_N;
@@ -535,49 +881,15 @@ static void kit_put(const kit_rec_t *k)
     song.rev_size = k->rev_size & 127u; song.rev_damp = k->rev_damp & 127u; song.rev_lvl = k->rev_lvl & 127u;
     song.dly_mode = k->dly_mode % DL_N; song.dly_div2 = k->dly_div2 % 6u;
 }
-static void pat_take(pat_rec_t *r)
+static int pat_take(proj_t *r)                   /* the patterns, their locks, the song into r's blob (0 = it fits) */
 {
-    uint32_t i, k;
-    for (i = 0; i < NPAT; i++) {
-        memcpy(r->p[i].s, pat[i].s, sizeof pat[i].s);
-        memcpy(r->p[i].x, pat[i].x, sizeof pat[i].x);
-        memcpy(r->p[i].len, pat[i].len, sizeof pat[i].len);
-        memset(r->p[i].r3, 0, sizeof r->p[i].r3);
-        for (k = 0; k < NTRK * NSTEP; k++) {     /* (3 bits a step, little end first) */
-            uint32_t v = (&pat[i].r[0][0])[k] & 7u, b = 3u * k;
-            r->p[i].r3[b >> 3] |= (uint8_t)(v << (b & 7u));
-            if ((b & 7u) > 5u)
-                r->p[i].r3[(b >> 3) + 1u] |= (uint8_t)(v >> (8u - (b & 7u)));
-        }
-    }
-    r->bpm = song.bpm; r->swing = song.swing; r->chain = song.chain; r->pat = song.pat;
-    r->mute = song.mute; r->solo = song.solo;
-}
-static void pat_put(const pat_rec_t *r)
-{
-    uint32_t i, t, k;
-    for (i = 0; i < NPAT; i++) {
-        memcpy(pat[i].s, r->p[i].s, sizeof pat[i].s);
-        memcpy(pat[i].x, r->p[i].x, sizeof pat[i].x);
-        memcpy(pat[i].len, r->p[i].len, sizeof pat[i].len);
-        for (k = 0; k < NTRK * NSTEP; k++) {
-            uint32_t b = 3u * k, v = (uint32_t)r->p[i].r3[b >> 3] >> (b & 7u);
-            if ((b & 7u) > 5u)
-                v |= (uint32_t)r->p[i].r3[(b >> 3) + 1u] << (8u - (b & 7u));
-            (&pat[i].r[0][0])[k] = (uint8_t)((v & 7u) <= 5u ? v & 7u : 0u);
-        }
-        for (t = 0; t < NTRK; t++)
-            pat[i].len[t] = (uint8_t)clamp(pat[i].len[t], 1, NSTEP);
-    }
-    song.bpm = (uint8_t)clamp(r->bpm, 60, 200);
-    song.swing = (uint8_t)clamp(r->swing, 0, 50);
-    song.chain = (uint8_t)clamp(r->chain, 1, NPAT);
-    song.mute = r->mute;
-    song.solo = r->solo;
-    if (!song.playing)
-        song.pat = song.chain0 = r->pat % NPAT;
-    else
-        song.pat_next = r->pat % NPAT;          /* (playing: at the end of the pattern) */
+    ptail_t g = {song.bpm, song.swing, song.chain, song.pat, song.mute, song.solo};
+    uint32_t i;
+    enc_begin(r);
+    for (i = 0; i < NPAT; i++)
+        enc_pattern(&pat[i], plk[i]);
+    enc_tail(&g, song.smode, song.slen ? song.slen : 1u, song.send, srows);
+    return enc_end(r);
 }
 static void proj_save(uint32_t slot, uint32_t what)   /* SW_ALL, or the kit / the patterns into what the slot has */
 {
@@ -585,8 +897,10 @@ static void proj_save(uint32_t slot, uint32_t what)   /* SW_ALL, or the kit / th
     int had = what != SW_ALL && !proj_read(slot);
     if (what != SW_PAT || !had)
         kit_take(&r->k);
-    if (what != SW_KIT || !had)
-        pat_take(&r->p);
+    if ((what != SW_KIT || !had) && pat_take(r)) {
+        ui_say("PATCH TOO FULL");
+        return;
+    }
     r->magic = MAGIC_PROJ;
     r->size = sizeof *r;
     r->sum = proj_sum(r);
@@ -610,7 +924,7 @@ static int proj_load(uint32_t slot, uint32_t what)   /* SW_ALL: kit and patterns
     if (what != SW_PAT)
         kit_put(&proj_buf.k);
     if (what != SW_KIT)
-        pat_put(&proj_buf.p);
+        dec_blob(&proj_buf, 1);
     ui.patch = (uint8_t)slot;
     str_cpy(m, what == SW_PAT ? "PATTERNS " : what == SW_KIT ? "KIT " : "PATCH ", sizeof m);
     fmt_u(m + str_len(m), slot + 1u);
@@ -633,26 +947,114 @@ static void patch_turn(int32_t d, uint32_t what)   /* PRESETS: the next / previo
 /* ------------------------------------------------------- the pattern --- */
 static uint32_t tlen(uint32_t t) { return (uint32_t)clamp(PAT->len[t % NTRK], 1, NSTEP); }
 static uint32_t nbars(uint32_t t) { return (tlen(t) + 15u) / 16u; }
+static uint32_t tpos(uint32_t t) { return trk_k[t % NTRK] % tlen(t); }   /* the step track t is at */
+
+/* ---- parameter locks (the pattern playing's pool, lx_core.h lock_t) */
+enum { LM_OFF, LM_LOCK, LM_NUDGE };
+static int lockable(uint32_t id)                 /* a sound's parameter a step can lock */
+{
+    return (id >= P_V0 && id <= P_V7) || (id >= P_SMP && id <= P_SBEND) || (id >= P_LEVEL && id <= P_DRV);
+}
+static int32_t lock_val(uint32_t pid, uint32_t raw) /* the stored byte as the parameter's value */
+{
+    return pid == P_PAN || pid == P_STONE || pid == P_SBEND ? (int32_t)(int8_t)raw : (int32_t)raw;
+}
+static void lock_apply(sound_t *s, uint32_t pid, uint32_t val)   /* (the audio ISR: a hit's sound, lx_synth.c) */
+{
+    if (pid >= P_V0 && pid <= P_V7) { s->p[pid - P_V0] = (uint8_t)(val & 127u); return; }
+    switch (pid) {
+    case P_SMP: s->smp = (uint8_t)(val % TR_N); break;
+    case P_SLVL: s->slvl = (uint8_t)(val & 127u); break;
+    case P_SPITCH: s->spitch = (uint8_t)(val & 127u); break;
+    case P_SDEC: s->sdec = (uint8_t)(val & 127u); break;
+    case P_SYN: s->syn = (uint8_t)(val & 127u); break;
+    case P_SSTART: s->sstart = (uint8_t)(val & 127u); break;
+    case P_STONE: s->stone = (int8_t)clamp((int8_t)val, -64, 63); break;
+    case P_SBEND: s->sbend = (int8_t)clamp((int8_t)val, -64, 63); break;
+    case P_LEVEL: s->level = (uint8_t)(val & 127u); break;
+    case P_PAN: s->pan = (int8_t)clamp((int8_t)val, -64, 63); break;
+    case P_DLY: s->dly = (uint8_t)(val & 127u); break;
+    case P_REV: s->rev = (uint8_t)(val & 127u); break;
+    case P_DRV: s->drv = (uint8_t)(val & 127u); break;
+    }
+}
+static lock_t *lock_find(const lock_t *pool, uint32_t t, uint32_t idx, uint32_t pid)
+{
+    uint32_t i, key = (t % NTRK) << 6 | (idx % NSTEP);
+    for (i = 0; i < NLOCK; i++)
+        if (pool[i].pid == pid && pool[i].key == key)
+            return (lock_t *)&pool[i];
+    return 0;
+}
+static int lock_set(lock_t *pool, uint32_t t, uint32_t idx, uint32_t pid, int32_t v)   /* 0, or -1: the pool is full */
+{
+    lock_t *l = lock_find(pool, t, idx, pid);
+    uint32_t i;
+    if (!l)
+        for (i = 0; i < NLOCK && !l; i++)
+            if (!pool[i].pid)
+                l = &pool[i];
+    if (!l)
+        return -1;
+    l->key = (uint16_t)((t % NTRK) << 6 | (idx % NSTEP));
+    l->val = (uint8_t)v;
+    RING_PUBLISH();
+    l->pid = (uint8_t)pid;                       /* (last: the audio ISR reads a whole lock or none) */
+    return 0;
+}
+static uint32_t lock_clear(lock_t *pool, uint32_t t, uint32_t from, uint32_t n)   /* track t's steps from .. from + n - 1 (t NTRK: all) */
+{
+    uint32_t i, c = 0;
+    for (i = 0; i < NLOCK; i++) {
+        uint32_t lt = pool[i].key >> 6, ls = pool[i].key & 63u;
+        if (pool[i].pid && (t >= NTRK || lt == t) && ls >= from && ls < from + n) {
+            pool[i].pid = 0;
+            c++;
+        }
+    }
+    return c;
+}
+static int lock_dup(lock_t *pool, uint32_t t, uint32_t from, uint32_t to, uint32_t n)   /* steps from.. copied to to.. */
+{
+    uint32_t i;
+    int full = 0;
+    lock_clear(pool, t, to, n);
+    for (i = 0; i < NLOCK; i++) {
+        uint32_t ls = pool[i].key & 63u;
+        if (pool[i].pid && (pool[i].key >> 6) == t && ls >= from && ls < from + n)
+            full |= lock_set(pool, t, to + ls - from, pool[i].pid, pool[i].val) != 0;
+    }
+    return full;
+}
 static uint8_t clip_bar[16], clip_xbar[16], clip_rbar[16], clip_ok;
+static lock_t clip_blk[64];                      /* the bar copied: its locks (steps 0..15) */
 static pattern_t clip_pat;
+static lock_t clip_plk[NLOCK] __attribute__((section(".pool")));
 static uint8_t clip_pat_ok;                      /* the pattern copied: its number + 1 (0: none) */
 static void rotate_track(uint32_t t, int32_t d)  /* the track's steps 1..LEN moved d steps later */
 {
     uint8_t tmp[NSTEP];
     uint32_t len = tlen(t), i;
+    lock_t *pl = plk[song.pat % NPAT];
     for (i = 0; i < len; i++)
         tmp[(uint32_t)((int32_t)i + d + 64 * (int32_t)len) % len] = PAT->s[t][i];
     memcpy(PAT->s[t], tmp, len);
-    for (i = 0; i < len; i++)                    /* (the extras go with their steps) */
+    for (i = 0; i < len; i++)                    /* (the extras go with their steps, the locks too) */
         tmp[(uint32_t)((int32_t)i + d + 64 * (int32_t)len) % len] = PAT->x[t][i];
     memcpy(PAT->x[t], tmp, len);
     for (i = 0; i < len; i++)
         tmp[(uint32_t)((int32_t)i + d + 64 * (int32_t)len) % len] = PAT->r[t][i];
     memcpy(PAT->r[t], tmp, len);
+    for (i = 0; i < NLOCK; i++) {
+        uint32_t ls = pl[i].key & 63u;
+        if (pl[i].pid && (pl[i].key >> 6) == t && ls < len)
+            pl[i].key = (uint16_t)(t << 6 | (uint32_t)((int32_t)ls + d + 64 * (int32_t)len) % len);
+    }
 }
 static void euclid_track(uint32_t t, uint32_t hits)   /* HITS spread evenly over LEN (Bjorklund by the bucket) */
 {
     uint32_t len = tlen(t), i, b = 0;
+    lock_clear(plk[song.pat % NPAT], t, 0, NSTEP);
     for (i = 0; i < len; i++) {
         b += hits;
         PAT->s[t][i] = b >= len ? (uint8_t)100u : 0u;
@@ -667,6 +1069,7 @@ static void random_track(uint32_t t)             /* a pattern by the sound's rol
 {
     static const uint8_t DENS[NTRK] = {35, 25, 12, 60, 12, 12, 15, 6};   /* % of the steps */
     uint32_t len = tlen(t), i;
+    lock_clear(plk[song.pat % NPAT], t, 0, NSTEP);
     for (i = 0; i < len; i++) {
         uint32_t r = rng() % 100u, on = r < DENS[t];
         if (t == 0u && i % 4u == 0u) on = 1;     /* the kick on the beats, the snare on 2 and 4 */
@@ -682,11 +1085,14 @@ static void double_track(uint32_t t)
         ui_say("64 STEPS MAX");
         return;
     }
-    for (i = 0; i < len; i++)
+    for (i = 0; i < len; i++) {
         PAT->s[t][len + i] = PAT->s[t][i];
         PAT->x[t][len + i] = PAT->x[t][i];
         PAT->r[t][len + i] = PAT->r[t][i];
+    }
+    lock_dup(plk[song.pat % NPAT], t, 0, len, len);
     PAT->len[t] = (uint8_t)(len * 2u);
+    ui_say("DOUBLED");
 }
 static void demo_pattern(pattern_t *p)           /* the groove at power-on */
 {
@@ -712,13 +1118,17 @@ static void plen_scale(int up)                    /* SEQ + SHIFT, KNOB 1: every 
             cut = 1;
             continue;
         }
-        if (up)
-            for (i = 0; i < len; i++)
-            {
+        if (up) {
+            for (i = 0; i < len; i++) {
                 PAT->s[t][len + i] = ui.copy ? PAT->s[t][i] : 0u;
                 PAT->x[t][len + i] = ui.copy ? PAT->x[t][i] : 0u;
                 PAT->r[t][len + i] = ui.copy ? PAT->r[t][i] : 0u;
             }
+            if (ui.copy)
+                lock_dup(plk[song.pat % NPAT], t, 0, len, len);
+            else
+                lock_clear(plk[song.pat % NPAT], t, len, len);
+        }
         PAT->len[t] = (uint8_t)(up ? len * 2u : (len > 1u ? len / 2u : 1u));
     }
     if (ui.bar >= nbars(song.sel))
@@ -738,12 +1148,26 @@ static pdesc_t pdesc_of(uint32_t id)
     if (id == P_DTIME && song.dly_mode == DL_STEREO)
         d.label = "TIME L";
     if (id == P_DTIME2 && song.dly_mode != DL_STEREO)
-        d.label = "(STEREO)";
+        d.label = "TIME R";                     /* (STEREO only) */
     return d;
+}
+static uint32_t held_first(void)                /* the first step held (P-LOCK, NUDGE, STEP EDIT) */
+{
+    uint32_t m = ui.sedit ? ui.sedit : ui.wheld;
+    return (ui.bar * 16u + (uint32_t)__builtin_ctz(m ? m : 1u)) % NSTEP;
+}
+static int lock_view(uint32_t id)                /* P-LOCK with a step held: its card shows the step's value */
+{
+    return ui.lockmode == LM_LOCK && ui.page != PG_SEQ && (ui.wheld || ui.sedit) && lockable(id);
 }
 static int32_t pget(uint32_t id)
 {
     const sound_t *s = TS;
+    if (lock_view(id)) {
+        const lock_t *l = lock_find(plk[song.pat % NPAT], song.sel, held_first(), id);
+        if (l)
+            return lock_val(id, l->val);
+    }
     switch (id) {
     case P_BPM: return song.bpm;
     case P_SWING: return song.swing;
@@ -805,12 +1229,26 @@ static int32_t pget(uint32_t id)
     case P_LOAD: return ui.slot + 1;
     case P_QGRID: return song.qgrid;
     case P_QROUND: return song.qround;
-    case P_EVEL: case P_EPROB: case P_EPAN: case P_ESUB: {   /* STEP EDIT: the first step held */
-        uint32_t i = ui.bar * 16u + (uint32_t)__builtin_ctz(ui.sedit ? ui.sedit : 1u);
-        uint8_t st = PAT->s[song.sel][i % NSTEP], x = PAT->x[song.sel][i % NSTEP];
-        return id == P_EVEL ? (int32_t)S_VEL(st) : id == P_ESUB ? PAT->r[song.sel][i % NSTEP] + 1 :
+    case P_EVEL: case P_EPROB: case P_EPAN: case P_ESUB: case P_EMICRO: {   /* STEP EDIT: the first step held */
+        uint32_t i = held_first();
+        uint8_t st = PAT->s[song.sel][i], x = PAT->x[song.sel][i], r = PAT->r[song.sel][i];
+        return id == P_EVEL ? (int32_t)S_VEL(st) : id == P_ESUB ? (int32_t)R_SUB(r) + 1 : id == P_EMICRO ? R_MICRO(r) :
                id == P_EPAN ? (int32_t)X_PAN(x) : !X_COND(x) ? 16 : X_COND(x) < C_PROB_N ? (int32_t)X_COND(x) : (int32_t)X_COND(x) + 1;
     }
+    case P_SPEED: return PAT->spd[song.sel % NTRK];
+    case P_MFLT: return song.mflt;
+    case P_MRES: return song.mres;
+    case P_CLKSRC: return song.clk_src;
+    case P_CLKOUT: return song.clk_out;
+    case P_OCH: return s->och;
+    case P_ONOTE: return s->onote;
+    case P_LEARN: return ui.learn ? 1 : 0;
+    case P_SROW: return ui.scur + 1;
+    case P_SPAT: return srows[ui.scur % NSONG].pat + 1;
+    case P_SREP: return srows[ui.scur % NSONG].rep ? srows[ui.scur % NSONG].rep : 1;
+    case P_SMODE: return song.smode;
+    case P_SLEN: return song.slen ? song.slen : 1;
+    case P_SEND: return song.send;
     }
     if (id >= P_V0 && id <= P_V7)
         return s->p[id - P_V0];
@@ -832,6 +1270,7 @@ static void pset(uint32_t id, int32_t v)
             return;
         if (id == P_PCOPY) {
             memcpy(&clip_pat, &pat[k % NPAT], sizeof clip_pat);
+            memcpy(clip_plk, plk[k % NPAT], sizeof clip_plk);
             clip_pat_ok = (uint8_t)(k + 1u);
             str_cpy(m, "P", sizeof m);
             fmt_u(m + 1, k + 1u);
@@ -842,6 +1281,7 @@ static void pset(uint32_t id, int32_t v)
             if (k == song.pat)
                 undo_take();                     /* (undo keeps the pattern playing) */
             memcpy(&pat[k % NPAT], &clip_pat, sizeof clip_pat);
+            memcpy(plk[k % NPAT], clip_plk, sizeof clip_plk);
             str_cpy(m, "PASTED INTO P", sizeof m);
             fmt_u(m + str_len(m), k + 1u);
         }
@@ -934,21 +1374,58 @@ static void pset(uint32_t id, int32_t v)
     case P_LWHAT: ui.lwhat = (uint8_t)v; break;
     case P_QGRID: song.qgrid = (uint8_t)v; settings_save(); break;
     case P_QROUND: song.qround = (uint8_t)v; settings_save(); break;
-    case P_EVEL: case P_EPROB: case P_EPAN: case P_ESUB: {   /* STEP EDIT: every step held */
+    case P_EVEL: case P_EPROB: case P_EPAN: case P_ESUB: case P_EMICRO: {   /* STEP EDIT: every step held */
         uint32_t w;
         undo_burst(0x900u + id);
         for (w = 0; w < 16u; w++) {
             uint32_t i = (ui.bar * 16u + w) % NSTEP;
-            uint8_t *st = &PAT->s[t][i], *x = &PAT->x[t][i];
+            uint8_t *st = &PAT->s[t][i], *x = &PAT->x[t][i], *r = &PAT->r[t][i];
             if (!((ui.sedit >> w) & 1u) || !*st)
                 continue;
             if (id == P_EVEL) *st = (uint8_t)((*st & S_ACC) | (uint32_t)v);
-            else if (id == P_ESUB) PAT->r[t][i] = (uint8_t)(v - 1);
+            else if (id == P_ESUB) *r = R_MAKE((uint32_t)(v - 1), R_MICRO(*r));
+            else if (id == P_EMICRO) *r = R_MAKE(R_SUB(*r), v);
             else if (id == P_EPAN) *x = (uint8_t)((*x & 0xF8u) | (uint32_t)v);
-            else *x = (uint8_t)((*x & 7u) | (uint32_t)(v == 16 ? 0 : v < 16 ? v : v - 1) << 3);   /* (.. 100 %, then A:B) */
+            else *x = (uint8_t)((*x & 7u) | (uint32_t)(v == 16 ? 0 : v < 16 ? v : v - 1) << 3);   /* (.. 100 %, A:B, FILL) */
         }
         break;
     }
+    case P_SPEED: undo_burst(0xB00u + t); PAT->spd[t] = (int8_t)v; break;
+    case P_MFLT: song.mflt = (int8_t)v; break;
+    case P_MRES: song.mres = (uint8_t)v; break;
+    case P_CLKSRC: song.clk_src = (uint8_t)v; settings_save(); break;
+    case P_CLKOUT: song.clk_out = (uint8_t)v; settings_save(); break;
+    case P_OCH: s->och = (uint8_t)v; break;
+    case P_ONOTE: s->onote = (uint8_t)v; break;
+    case P_LEARN:
+        if (v == 2) {
+            memset(ccmap, 0, sizeof ccmap);
+            settings_save();
+            ui.learn = 0;
+            ui_say("CC MAP CLEARED");
+        } else {
+            ui.learn = (uint8_t)v;
+            ui_say(v ? "LEARN: TURN A KNOB" : "LEARN OFF");
+        }
+        break;
+    case P_SROW: ui.scur = (uint8_t)(v - 1); if (!srows[ui.scur].rep) srows[ui.scur].rep = 1; break;
+    case P_SPAT: srows[ui.scur % NSONG].pat = (uint8_t)(v - 1); if (!srows[ui.scur % NSONG].rep) srows[ui.scur % NSONG].rep = 1; break;
+    case P_SREP: srows[ui.scur % NSONG].rep = (uint8_t)v; break;
+    case P_SMODE:
+        song.smode = (uint8_t)v;
+        if (!song.slen) song.slen = 1;
+        if (v && !srows[0].rep) srows[0].rep = 1;
+        break;
+    case P_SLEN: {
+        uint32_t k;
+        for (k = song.slen; k < (uint32_t)v; k++)
+            if (!srows[k].rep) { srows[k].rep = 1; srows[k].pat = k ? srows[k - 1u].pat : 0u; }
+        song.slen = (uint8_t)v;
+        if (song.srow >= song.slen) song.srow = 0;
+        if (ui.scur >= song.slen) ui.scur = (uint8_t)(song.slen - 1u);
+        break;
+    }
+    case P_SEND: song.send = (uint8_t)v; break;
     default:
         if (id >= P_V0 && id <= P_V7)
             s->p[id - P_V0] = (uint8_t)v;
@@ -998,8 +1475,23 @@ static void pformat(uint32_t id, char *val, const char **unit)
     case FM_NAME: str_cpy(val, d.names ? d.names[clamp(v, d.min, d.max) - d.min] : "", 16); break;
     case FM_SMP: smp_name(val, (uint32_t)v, song.sel); break;
     case FM_SUB: if (v <= 1) str_cpy(val, "OFF", 16); else { fmt_u(val, (uint32_t)v); *unit = "X"; } break;
+    case FM_MICRO: if (!v) str_cpy(val, "0", 16); else { fmt_s(val, v, 1); *unit = "/32"; } break;
+    case FM_FILT:
+        if (!v) str_cpy(val, "OFF", 16);
+        else { str_cpy(val, v < 0 ? "LP " : "HP ", 16); fmt_u(val + 3, (uint32_t)(v < 0 ? -v : v)); }
+        break;
+    case FM_NOTE: {
+        static const char *const NN[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+        str_cpy(val, NN[v % 12], 16);
+        if (v < 12) str_cat(val, "-", 16);
+        fmt_u(val + str_len(val), (uint32_t)(v < 12 ? 1 : v / 12 - 1));
+        break;
+    }
+    case FM_CH: if (!v) str_cpy(val, "OFF", 16); else fmt_u(val, (uint32_t)v); break;
     case FM_PROB:
-        if (v > 16) {                            /* A:B */
+        if (v == 31 || v == 32) {
+            str_cpy(val, v == 31 ? "FILL" : "!FILL", 16);
+        } else if (v > 16) {                     /* A:B */
             fmt_u(val, COND_A[(v - 17) % 14]);
             str_cat(val, ":", 16);
             fmt_u(val + str_len(val), COND_B[(v - 17) % 14]);
@@ -1044,6 +1536,9 @@ static void pformat(uint32_t id, char *val, const char **unit)
 static uint32_t knob_id(uint32_t c)              /* (the MIXER: page 2 the pans, SHIFT the other row) */
 {
     static const uint8_t STEP_P[4] = {P_EVEL, P_EPROB, P_EPAN, P_ESUB};
+    static const uint8_t NUDGE_P[4] = {P_EMICRO, P_EVEL, P_EPROB, P_ESUB};
+    if (ui.lockmode == LM_NUDGE && ui.sedit && ui.page != PG_NR)   /* NUDGE: the steps held, their timing first */
+        return NUDGE_P[c & 3u];
     if (ui.page == PG_SEQ && ui.sedit)           /* STEP EDIT: the steps held */
         return STEP_P[c & 3u];
     uint32_t b = ui.page == PG_MIX ? (ui.mixpan ^ ui.shift) & 1u : ui.shift;
@@ -1062,7 +1557,7 @@ static uint32_t key_place(uint32_t k)
     }
     return key_black(k) ? b : w;
 }
-enum { BK_PREV, BK_NEXT, BK_MUTE, BK_SOLO, BK_AUDITION, BK_COPY, BK_PASTE, BK_CLEAR, BK_ACCENT, BK_FOLLOW, BK_TAP, BK_N };
+enum { BK_PREV, BK_NEXT, BK_MUTE, BK_SOLO, BK_AUDITION, BK_COPY, BK_PASTE, BK_CLEAR, BK_PLOCK, BK_NUDGE, BK_FILL, BK_N };
 
 static void sel_track(int32_t t)
 {
@@ -1108,11 +1603,23 @@ static void black_key(uint32_t b)
         ev_push(EV_HIT, t, 100);
         break;
     case BK_COPY:
-        if (ui.shift) { memcpy(&clip_pat, PAT, sizeof clip_pat); clip_pat_ok = (uint8_t)(song.pat + 1u); ui_say("PATTERN COPIED"); }
-        else {
-            memcpy(clip_bar, &PAT->s[t][ui.bar * 16u % NSTEP], 16);
-            memcpy(clip_xbar, &PAT->x[t][ui.bar * 16u % NSTEP], 16);
-            memcpy(clip_rbar, &PAT->r[t][ui.bar * 16u % NSTEP], 16);
+        if (ui.shift) {
+            memcpy(&clip_pat, PAT, sizeof clip_pat);
+            memcpy(clip_plk, plk[song.pat % NPAT], sizeof clip_plk);
+            clip_pat_ok = (uint8_t)(song.pat + 1u);
+            ui_say("PATTERN COPIED");
+        } else {
+            uint32_t i, n = 0, b0 = ui.bar * 16u % NSTEP;
+            const lock_t *pl = plk[song.pat % NPAT];
+            memcpy(clip_bar, &PAT->s[t][b0], 16);
+            memcpy(clip_xbar, &PAT->x[t][b0], 16);
+            memcpy(clip_rbar, &PAT->r[t][b0], 16);
+            memset(clip_blk, 0, sizeof clip_blk);
+            for (i = 0; i < NLOCK && n < NELEM(clip_blk); i++)
+                if (pl[i].pid && (pl[i].key >> 6) == t && (pl[i].key & 63u) >= b0 && (pl[i].key & 63u) < b0 + 16u) {
+                    clip_blk[n] = pl[i];
+                    clip_blk[n++].key = (uint16_t)((pl[i].key & 63u) - b0);
+                }
             clip_ok = 1;
             ui_say("BAR COPIED");
         }
@@ -1120,11 +1627,19 @@ static void black_key(uint32_t b)
     case BK_PASTE:
         if (ui.shift ? !clip_pat_ok : !clip_ok) { ui_say("NOTHING COPIED"); break; }
         undo_take();
-        if (ui.shift) memcpy(PAT, &clip_pat, sizeof clip_pat);
-        else {
-            memcpy(&PAT->s[t][ui.bar * 16u % NSTEP], clip_bar, 16);
-            memcpy(&PAT->x[t][ui.bar * 16u % NSTEP], clip_xbar, 16);
-            memcpy(&PAT->r[t][ui.bar * 16u % NSTEP], clip_rbar, 16);
+        if (ui.shift) {
+            memcpy(PAT, &clip_pat, sizeof clip_pat);
+            memcpy(plk[song.pat % NPAT], clip_plk, sizeof clip_plk);
+        } else {
+            uint32_t i, b0 = ui.bar * 16u % NSTEP, full = 0;
+            memcpy(&PAT->s[t][b0], clip_bar, 16);
+            memcpy(&PAT->x[t][b0], clip_xbar, 16);
+            memcpy(&PAT->r[t][b0], clip_rbar, 16);
+            lock_clear(plk[song.pat % NPAT], t, b0, 16);
+            for (i = 0; i < NELEM(clip_blk); i++)
+                if (clip_blk[i].pid)
+                    full |= (uint32_t)(lock_set(plk[song.pat % NPAT], t, b0 + clip_blk[i].key, clip_blk[i].pid, clip_blk[i].val) != 0);
+            if (full) { ui_say("LOCKS FULL"); break; }
         }
         ui_say("PASTED");
         break;
@@ -1132,25 +1647,51 @@ static void black_key(uint32_t b)
         undo_take();
         if (ui.shift) {
             memset(PAT->s, 0, sizeof PAT->s); memset(PAT->x, 0, sizeof PAT->x); memset(PAT->r, 0, sizeof PAT->r);
+            memset(plk[song.pat % NPAT], 0, sizeof plk[0]);
             ui_say("PATTERN CLEARED");
         } else {
             memset(PAT->s[t], 0, NSTEP); memset(PAT->x[t], 0, NSTEP); memset(PAT->r[t], 0, NSTEP);
+            lock_clear(plk[song.pat % NPAT], t, 0, NSTEP);
             ui_say("TRACK CLEARED");
         }
         break;
-    case BK_ACCENT:
-        if (ui.shift) { undo_take(); double_track(t); ui_say("DOUBLED"); }
-        else { ui.acc_mode ^= 1u; ui_say(ui.acc_mode ? "ACCENT EDIT" : "STEP EDIT"); }
+    case BK_PLOCK:                               /* P-LOCK (SHIFT: the accent mode) */
+        if (ui.shift) { ui.acc_mode ^= 1u; ui_say(ui.acc_mode ? "ACCENT EDIT" : "STEP EDIT"); break; }
+        if (ui.lockmode == LM_LOCK && ui.wheld) {   /* steps held: their locks go */
+            uint32_t w, c = 0;
+            undo_take();
+            for (w = 0; w < 16u; w++)
+                if ((ui.wheld >> w) & 1u)
+                    c += lock_clear(plk[song.pat % NPAT], t, (ui.bar * 16u + w) % NSTEP, 1);
+            ui.wkeep |= ui.wheld;
+            ui_say(c ? "LOCKS CLEARED" : "NO LOCKS THERE");
+            break;
+        }
+        ui.lockmode = ui.lockmode == LM_LOCK ? LM_OFF : LM_LOCK;
+        ui.wheld = ui.wkeep = ui.sedit = 0;
+        ui_say(ui.lockmode ? "P-LOCK ON" : "P-LOCK OFF");
         break;
-    case BK_FOLLOW:
-        if (ui.shift) { undo_take(); random_track(t); ui_say("RANDOM"); }
-        else { ui.follow ^= 1u; ui_say(ui.follow ? "FOLLOW ON" : "FOLLOW OFF"); }
+    case BK_NUDGE:                               /* NUDGE (SHIFT: follow) */
+        if (ui.shift) { ui.follow ^= 1u; ui_say(ui.follow ? "FOLLOW ON" : "FOLLOW OFF"); break; }
+        if (ui.lockmode == LM_NUDGE && ui.wheld) {   /* steps held: on time again */
+            uint32_t w;
+            undo_take();
+            for (w = 0; w < 16u; w++)
+                if ((ui.wheld >> w) & 1u) {
+                    uint8_t *r = &PAT->r[t][(ui.bar * 16u + w) % NSTEP];
+                    *r = R_MAKE(R_SUB(*r), 0);
+                }
+            ui.wkeep |= ui.wheld;
+            ui_say("ON THE GRID");
+            break;
+        }
+        ui.lockmode = ui.lockmode == LM_NUDGE ? LM_OFF : LM_NUDGE;
+        ui.wheld = ui.wkeep = ui.sedit = 0;
+        ui_say(ui.lockmode ? "NUDGE ON" : "NUDGE OFF");
         break;
-    case BK_TAP:
-        if (ui.shift) {
-            song.click = (uint8_t)((song.click + 1u) % CLICK_N);
-            settings_save();
-            ui_say(song.click == CLICK_ON ? "METRONOME ON" : song.click == CLICK_REC ? "METRONOME REC" : "METRONOME OFF");
+    case BK_FILL:                                /* FILL while held (SHIFT: tap tempo) */
+        if (!ui.shift) {
+            song.fill = 1;
             break;
         }
         if (ui.tap_t && fm1_ms - ui.tap_t < 2000u) {   /* the mean of the last taps */
@@ -1183,7 +1724,7 @@ static void white_key(uint32_t w, int down)
         }
         return;
     }
-    if (ui.page != PG_SEQ && !ui.shift) {        /* off SEQ (LIVE and every other page): the eight sounds at once,
+    if (ui.page != PG_SEQ && !ui.lockmode && !ui.shift) {   /* off SEQ (LIVE and every other page): the eight sounds at once,
                                                   * D4..G5 accented; REC + PLAY writes them */
         if (down) {
             ev_push(EV_HIT, w % 8u, w < 8u ? ui.lvel : 127u | S_ACC);
@@ -1199,8 +1740,9 @@ static void white_key(uint32_t w, int down)
         uint32_t b = 1u << w;
         if ((ui.wheld & b) && !(ui.wkeep & b) && idx < tlen(t)) {
             undo_burst(0x600u + t);
-            PAT->s[t][idx] = 0;                  /* tapped, not held: cleared */
+            PAT->s[t][idx] = 0;                  /* tapped, not held: cleared (its locks with it) */
             PAT->x[t][idx] = PAT->r[t][idx] = 0;
+            lock_clear(plk[song.pat % NPAT], t, idx, 1);
         }
         ui.wheld &= ~b;
         ui.wkeep &= ~b;
@@ -1230,6 +1772,7 @@ static void white_key(uint32_t w, int down)
         undo_burst(0x600u + t);
         *s = 100u;
         PAT->x[t][idx] = PAT->r[t][idx] = 0;
+        lock_clear(plk[song.pat % NPAT], t, idx, 1);
         ui.wkeep |= 1u << w;
         if (!song.playing)
             ev_push(EV_HIT, t, (uint32_t)*s);
@@ -1259,6 +1802,7 @@ static void oct_key(int up)
                     PAT->x[t][b0 + 16u + i] = PAT->x[t][b0 + i];
                     PAT->r[t][b0 + 16u + i] = PAT->r[t][b0 + i];
                 }
+                lock_dup(plk[song.pat % NPAT], t, b0, b0 + 16u, 16u);
                 PAT->len[t] = (uint8_t)((len + 15u) / 16u * 16u + 16u);
                 ui.bar = (uint8_t)(nbars(t) - 1u);
                 ui_say("BAR ADDED");
@@ -1269,6 +1813,8 @@ static void oct_key(int up)
             }
             return;
         }
+    }
+    if (ui.page == PG_SEQ || (ui.lockmode && ui.page != PG_NR)) {   /* (SEQ, P-LOCK, NUDGE: the bar the keys show) */
         ui.follow = 0;
         if (up ? ui.bar + 1u < nbars(t) : ui.bar > 0u)
             ui.bar = (uint8_t)(ui.bar + (up ? 1 : -1));
@@ -1279,11 +1825,105 @@ static void oct_key(int up)
     sel_track((int32_t)t + (up ? 1 : -1));
 }
 
+/* ---- the CC map: a controller from MIDI IN onto a parameter (of the sound it was learnt on) */
+static int cc_ok(uint32_t id)                    /* a parameter a controller may move (no store, no editing of steps) */
+{
+    pdesc_t d = PD[id % P_COUNT];
+    if (!id || id >= P_COUNT || d.max <= d.min)
+        return 0;
+    switch (id) {
+    case P_CLICK: case P_MIDICH: case P_THEME: case P_VERSION: case P_LEN: case P_SVEL: case P_ROT: case P_EUCLID:
+    case P_PLEN: case P_COPY: case P_SACC: case P_PCOPY: case P_PPASTE: case P_SLOT: case P_SWHAT: case P_LWHAT:
+    case P_LOAD: case P_QGRID: case P_QROUND: case P_EVEL: case P_EPROB: case P_EPAN: case P_ESUB: case P_EMICRO:
+    case P_CLKSRC: case P_CLKOUT: case P_LEARN: case P_SROW: case P_SLEN: case P_SEND: case P_SPAT: case P_SREP:
+        return 0;
+    }
+    return 1;
+}
+static int sound_param(uint32_t id)              /* a parameter of the selected sound (a map keeps which sound) */
+{
+    return lockable(id) || (id >= P_L1DEST && id <= P_L2DEPTH) || id == P_OCH || id == P_ONOTE || id == P_SPEED;
+}
+static void cc_name(char *b, uint32_t pid, uint32_t trk, uint32_t n)
+{
+    uint8_t sv = song.sel;
+    if (trk < NTRK) {
+        song.sel = (uint8_t)trk;                 /* (the synth's labels are the sound's kind's) */
+        str_cpy(b, TRK_SHORT[trk], n);
+        str_cat(b, " ", n);
+    } else {
+        b[0] = 0;
+    }
+    str_cat(b, pdesc_of(pid).label, n);
+    song.sel = sv;
+}
+static void cc_learn_arm(uint32_t id)            /* LEARN: the knob turned names the parameter */
+{
+    char m[28];
+    if (id >= P_MIX0 && id <= P_MPAN3) {         /* (the mixer's strips: the sound's own level / pan) */
+        ui.ltrk = (uint8_t)((ui.bank * 4u + (id - P_MIX0) % 4u) % NTRK);
+        id = id <= P_MIX3 ? P_LEVEL : P_PAN;
+    } else {
+        ui.ltrk = sound_param(id) ? song.sel : 0xFFu;
+    }
+    if (!cc_ok(id)) {
+        ui_say("CAN'T BE LEARNT");
+        return;
+    }
+    ui.lpid = (uint8_t)id;
+    ui.learn = 2;
+    cc_name(m, id, ui.ltrk, sizeof m);
+    str_cat(m, ": SEND CC", sizeof m);
+    ui_say(m);
+}
+static void cc_in(uint32_t ch, uint32_t cc, uint32_t val)
+{
+    uint32_t i;
+    char m[28];
+    if (ui.learn == 2) {                         /* LEARN armed: this controller, that parameter */
+        ccmap_t *f = 0;
+        for (i = 0; i < NMAP && !f; i++)
+            if (ccmap[i].pid && ccmap[i].ch == ch && ccmap[i].cc == cc)
+                f = &ccmap[i];
+        for (i = 0; i < NMAP && !f; i++)
+            if (!ccmap[i].pid)
+                f = &ccmap[i];
+        if (!f) {
+            ui_say("CC MAP FULL (32)");
+            ui.learn = 1;
+            return;
+        }
+        f->ch = (uint8_t)ch; f->cc = (uint8_t)cc; f->pid = ui.lpid; f->trk = ui.ltrk;
+        settings_save();
+        ui.learn = 1;
+        str_cpy(m, "CC", sizeof m);
+        fmt_u(m + 2, cc);
+        str_cat(m, " > ", sizeof m);
+        cc_name(m + str_len(m), ui.lpid, ui.ltrk, sizeof m - str_len(m));
+        ui_say(m);
+        return;
+    }
+    for (i = 0; i < NMAP; i++) {
+        const ccmap_t *c = &ccmap[i];
+        if (c->pid && c->ch == ch && c->cc == cc && cc_ok(c->pid)) {
+            uint8_t sv = song.sel, ws = ui.lockmode;
+            pdesc_t d;
+            if (c->trk < NTRK)
+                song.sel = c->trk;
+            ui.lockmode = LM_OFF;                /* (the sound's own value, not a step's) */
+            d = pdesc_of(c->pid);
+            pset(c->pid, d.min + ((int32_t)val * (d.max - d.min) + 63) / 127);
+            ui.lockmode = ws;
+            song.sel = sv;
+        }
+    }
+}
+
 static void ui_input(void)
 {
     uint32_t p = io_pressed(), held = io_held(), keys = io_keys(), released = ui.held_prev & ~held, kd, ku, k, b;
     int32_t e[NE], any = 0;
-    uint32_t glo = (held >> B_GLO) & 1u;
+    uint32_t glo = (held >> B_GLO) & 1u, stepmode;
     ui.held_prev = held;
     for (k = 0; k < NE; k++)
         any |= e[k] = io_enc(k);
@@ -1317,9 +1957,17 @@ static void ui_input(void)
             rng_state ^= fm1_ms * 2654435761u + 1u;
         }
     }
+    while (cc_r != cc_w) {                       /* MIDI IN controllers: the CC map, LEARN */
+        uint32_t c = ccq[cc_r % CCQ];
+        RING_PUBLISH();
+        cc_r++;
+        cc_in(c & 15u, (c >> 8) & 0x7Fu, (c >> 16) & 0x7Fu);
+    }
     if (p & (1u << B_PLAY)) {
         if (ui.shift) seq_restart();
-        else seq_play(!song.playing);
+        else seq_play(!song.playing && !xc.arm);
+        if (!song.playing && song.clk_src == CK_EXT && (seq_start || xc.arm))
+            ui_say("WAITING FOR CLOCK");
     }
     if (p & (1u << B_REC)) {
         ui.rec_t0 = fm1_ms;
@@ -1370,8 +2018,8 @@ static void ui_input(void)
         ui.home_long = 1;
         go_page(PG_INFO);
     }
-    if ((released >> B_HOME) & 1u && !ui.home_long)
-        go_page(PG_KIT);
+    if ((released >> B_HOME) & 1u && !ui.home_long)   /* (tapped again: MIDI, and back) */
+        go_page(ui.page == PG_KIT ? PG_MIDI : PG_KIT);
     if (p & (1u << B_ARP)) {                     /* ARP: tap on / off, held: while held */
         ui.arp_t0 = fm1_ms;
         ui.arp_from = ui.page == PG_NR;
@@ -1390,12 +2038,15 @@ static void ui_input(void)
         if (key_black(k)) {
             if (kd & bit)
                 black_key(w);
+            else if (w == BK_FILL)               /* FILL: let go */
+                song.fill = 0;
         } else {
             white_key(w, (kd & bit) != 0u);
         }
     }
-    /* the knobs (a knob turned while a step is held: STEP EDIT at once) */
-    if (ui.page == PG_SEQ && ui.wheld && !ui.shift && (e[EN_K1] | e[EN_K2] | e[EN_K3] | e[EN_K4])) {
+    stepmode = (ui.page == PG_SEQ || ui.lockmode) && ui.page != PG_NR;
+    /* the knobs (a knob turned while a step is held: STEP EDIT at once; P-LOCK: the step's lock) */
+    if (stepmode && ui.wheld && !ui.shift && (e[EN_K1] | e[EN_K2] | e[EN_K3] | e[EN_K4])) {
         uint32_t w;
         for (w = 0; w < 16u; w++)
             if (((ui.wheld >> w) & 1u) && PAT->s[song.sel][(ui.bar * 16u + w) % NSTEP])
@@ -1403,8 +2054,13 @@ static void ui_input(void)
         ui.wkeep = (uint16_t)(ui.wkeep | ui.sedit);
     }
     if (e[EN_ALGO]) {                            /* ALGORITHM: a new sound, rolled (its own transients); SHIFT: the
-                                                  * sample layer's next / previous sample, the synth layer kept */
-        if (ui.shift) {
+                                                  * sample layer's next / previous sample, the synth layer kept (SEQ:
+                                                  * a random pattern for the track, turned back: the track doubled) */
+        if (ui.shift && ui.page == PG_SEQ) {
+            undo_take();
+            if (e[EN_ALGO] > 0) { random_track(song.sel); ui_say("RANDOM"); }
+            else double_track(song.sel);
+        } else if (ui.shift) {
             sound_t *s = TS;
             char m[24];
             int32_t n = TR_N - TR_SMP0, k = s->smp >= TR_SMP0 ? s->smp - TR_SMP0 : (e[EN_ALGO] > 0 ? -1 : 0);
@@ -1430,13 +2086,50 @@ static void ui_input(void)
         int32_t d = e[EN_K1 + k];
         if (!d || !id)
             continue;
+        ui.hot = (uint8_t)(k + 1u);
+        ui.hot_t = fm1_ms | 1u;
+        if (ui.learn && id != P_LEARN)           /* LEARN: this knob's parameter, for the next CC */
+            cc_learn_arm(id);
+        if (ui.lockmode == LM_LOCK && ui.page != PG_SEQ && ui.sedit && lockable(id)) {   /* P-LOCK: the steps held */
+            uint32_t w, full = 0;
+            pdesc_t pd = pdesc_of(id);
+            char m[28];
+            undo_burst(0xC00u + id);
+            for (w = 0; w < 16u; w++) {
+                uint32_t i = (ui.bar * 16u + w) % NSTEP;
+                const lock_t *l = lock_find(plk[song.pat % NPAT], song.sel, i, id);
+                int32_t cur;
+                if (!((ui.sedit >> w) & 1u) || !PAT->s[song.sel][i])
+                    continue;
+                if (l) cur = lock_val(id, l->val);
+                else { uint32_t sv = ui.lockmode; ui.lockmode = LM_OFF; cur = pget(id); ui.lockmode = (uint8_t)sv; }
+                full |= (uint32_t)(lock_set(plk[song.pat % NPAT], song.sel, i, id, clamp(cur + d, pd.min, pd.max)) != 0);
+            }
+            str_cpy(m, full ? "LOCKS FULL (128)" : "LOCK ", sizeof m);
+            if (!full) str_cat(m, pd.label, sizeof m);
+            ui_say(m);
+            continue;
+        }
+        if (ui.lockmode == LM_LOCK && song.rec && song.playing && !song.erase && !ui.wheld && lockable(id)) {
+            uint32_t t = song.sel % NTRK, i = tpos(t);   /* MOTION REC: the step playing, if it has a hit */
+            if (PAT->s[t][i]) {
+                const lock_t *l = lock_find(plk[song.pat % NPAT], t, i, id);
+                pdesc_t pd = pdesc_of(id);
+                uint32_t sv = ui.lockmode;
+                int32_t cur;
+                ui.lockmode = LM_OFF;
+                cur = l ? lock_val(id, l->val) : pget(id);
+                ui.lockmode = (uint8_t)sv;
+                if (lock_set(plk[song.pat % NPAT], t, i, id, clamp(cur + d, pd.min, pd.max)))
+                    ui_say("LOCKS FULL (128)");
+            }
+            continue;
+        }
         if ((id >= P_V0 && id <= P_DRV) || (id >= P_SSTART && id <= P_SBEND))
             undo_burst(0x800u + song.sel * 64u + id);
         pset(id, pget(id) + d);
-        ui.hot = (uint8_t)(k + 1u);
-        ui.hot_t = fm1_ms | 1u;
     }
-    if (ui.page == PG_SEQ && ui.wheld && !ui.shift) {   /* a step held long: STEP EDIT on the steps held */
+    if (stepmode && ui.wheld && !ui.shift) {     /* a step held long: STEP EDIT (P-LOCK, NUDGE) on the steps held */
         uint32_t w, m = 0;
         for (w = 0; w < 16u; w++)
             if (((ui.wheld >> w) & 1u) && fm1_ms - ui.wdown[w] >= HOLD_MS && PAT->s[song.sel][(ui.bar * 16u + w) % NSTEP])
@@ -1446,10 +2139,10 @@ static void ui_input(void)
             ui.wkeep = (uint16_t)(ui.wkeep | m);   /* (held: kept when let go) */
         }
     }
-    if (ui.page != PG_SEQ)
+    if (!stepmode)
         ui.wheld = ui.wkeep = ui.sedit = 0;
     if (ui.follow && song.playing && ui.page != PG_NR)   /* FOLLOW: the bar playing */
-        ui.bar = (uint8_t)((song.pstep % tlen(song.sel)) / 16u);
+        ui.bar = (uint8_t)(tpos(song.sel) / 16u);
     if (ui.hot_t && fm1_ms - ui.hot_t > 1200u)
         ui.hot_t = 0;
     if (ui.msg_t && fm1_ms - ui.msg_t > 1600u)
@@ -1458,7 +2151,7 @@ static void ui_input(void)
 
 static void ui_leds(void)
 {
-    uint32_t k, b, t = song.sel % NTRK, ps = song.pstep % tlen(t), blink = (fm1_ms / 250u) & 1u;
+    uint32_t k, b, t = song.sel % NTRK, ps = tpos(t), blink = (fm1_ms / 250u) & 1u;
     uint8_t flash = hit_flash;
     hit_flash = 0;
     for (k = 0; k < NTRK; k++)
@@ -1468,8 +2161,8 @@ static void ui_leds(void)
         int on = (b == PAGE_BTN[ui.page % PG_N] && b != B_REC) || (b == B_ENV && ui.page == PG_SAMPLE) ||
                  (b == B_PLAY && song.playing) || (b == B_GLO && ui.shift) ||
                  (b == B_REC && song.rec && (!song.erase || blink)) ||
-                 (b == B_OCTDN && ui.page == PG_SEQ && ui.bar > 0u) ||
-                 (b == B_OCTUP && ui.page == PG_SEQ && ui.bar + 1u < nbars(t)) ||
+                 (b == B_OCTDN && (ui.page == PG_SEQ || ui.lockmode) && ui.bar > 0u) ||
+                 (b == B_OCTUP && (ui.page == PG_SEQ || ui.lockmode) && ui.bar + 1u < nbars(t)) ||
                  (b == B_OCTDN && ui.page == PG_MIX && !ui.bank) || (b == B_OCTUP && ui.page == PG_MIX && ui.bank);
         io_led_button(b, on);
     }
@@ -1478,13 +2171,14 @@ static void ui_leds(void)
         int on = 0;
         if (key_black(k)) {
             on = (w == BK_MUTE && ((song.mute >> t) & 1u)) || (w == BK_SOLO && ((song.solo >> t) & 1u)) ||
-                 (w == BK_ACCENT && ui.acc_mode) || (w == BK_FOLLOW && ui.follow) ||
-                 (w == BK_TAP && song.playing && song.pstep % 4u == 0u && song.pos < FS / 20u);
+                 (w == BK_PLOCK && (ui.shift ? ui.acc_mode : ui.lockmode == LM_LOCK)) ||
+                 (w == BK_NUDGE && (ui.shift ? ui.follow : ui.lockmode == LM_NUDGE)) ||
+                 (w == BK_FILL && (ui.shift ? song.playing && song.pstep % 4u == 0u && song.pos < FS / 20u : song.fill));
         } else if (ui.page == PG_NR) {
             on = w < 8u ? (((nr.held | nr.latched | flash) >> w) & 1u) != 0u : w - 8u == nr.rate;
         } else if (ui.shift) {
             on = w < 8u ? !((song.mute >> w) & 1u) : ((song.solo >> (w - 8u)) & 1u) != 0u;
-        } else if (ui.page != PG_SEQ) {          /* (the steps only on SEQ; elsewhere the pads, lit as hit) */
+        } else if (ui.page != PG_SEQ && !ui.lockmode) {   /* (the steps on SEQ, P-LOCK, NUDGE; elsewhere the pads, lit as hit) */
             on = ((flash >> (w % 8u)) & 1u) != 0u;
         } else {
             uint32_t idx = ui.bar * 16u + w;
@@ -1503,9 +2197,12 @@ static void draw_head(int force)
 {
     char b[24];
     uint32_t t = song.sel % NTRK, blink = song.rec && song.playing ? (fm1_ms / 250u) & 1u : 0u;
+    const char *mode = song.fill ? "FILL" : ui.lockmode == LM_LOCK ? (song.rec && song.playing ? "LOCK REC" : "P-LOCK") :
+                       ui.lockmode == LM_NUDGE ? "NUDGE" : ui.learn ? "LEARN" : song.smode && song.slen ? "SONG" : 0;
     uint32_t sig = t * 7u + song.playing * 131u + song.bpm * 1009u + (ui.msg_t ? hsh(5u, ui.msg) : 0u) +
                    ui.shift * 7333u + song.rec * 191u + song.erase * 4099u + blink * 37u + song.pat * 7919u +
-                   (song.pat_next < NPAT ? song.pat_next * 104729u + 3u : 0u) + ui.bar * 271u + nbars(t) * 6151u;
+                   (song.pat_next < NPAT ? song.pat_next * 104729u + 3u : 0u) + ui.bar * 271u + nbars(t) * 6151u +
+                   (mode ? hsh(9u, mode) : 0u) + song.clk_src * 5u + (song.smode ? song.srow * 61u + 17u : 0u);
     int32_t x;
     if (!force && sig == ui.sig[0])
         return;
@@ -1527,7 +2224,7 @@ static void draw_head(int force)
     } else if (ui.msg_t) {
         cv_text_r(222, CAP_IN(M, H_HEAD), &AF_M, ui.msg, T_ACCENT, T_BG);
     } else {
-        b[0] = 'P';                              /* the pattern (and the one cued), the bar shown, the tempo */
+        b[0] = 'P';                              /* the pattern (and the one cued), the bar shown, the tempo; a mode */
         fmt_u(b + 1, song.pat + 1u);
         if (song.pat_next < NPAT) {
             str_cat(b, ">", sizeof b);
@@ -1537,9 +2234,11 @@ static void draw_head(int force)
         fmt_u(b + str_len(b), ui.bar + 1u);
         str_cat(b, "/", sizeof b);
         fmt_u(b + str_len(b), nbars(t));
-        cv_text_r(170, CAP_IN(S, H_HEAD), &AF_S, b, T_MID, T_BG);
+        if (mode)
+            str_cpy(b, mode, sizeof b);
+        cv_text_r(170, CAP_IN(S, H_HEAD), &AF_S, b, mode ? T_ACCENT : T_MID, T_BG);
         fmt_u(b, song.bpm);
-        cv_text_r(220, CAP_IN(M, H_HEAD), &AF_M, b, T_THEME, T_BG);
+        cv_text_r(220, CAP_IN(M, H_HEAD), &AF_M, b, song.clk_src == CK_EXT ? T_ACCENT : T_THEME, T_BG);
     }
     if (song.playing) {                          /* play: a triangle; stop: a square */
         int32_t i;
@@ -1561,6 +2260,8 @@ static void draw_card(uint32_t c, uint32_t id, int force)
     uint32_t sig;
     uint16_t surf = ui.shift && id ? T_RAISE : T_SURF;
     val[0] = 0;
+    if (id && lock_view(id) && lock_find(plk[song.pat % NPAT], song.sel, held_first(), id))
+        hot = 1;                                 /* (a step's lock: its value lit) */
     if (id) {
         pformat(id, val, &unit);
         ratio = d.max > d.min ? (pget(id) - d.min) * 1000 / (d.max - d.min) : -1;
@@ -1570,7 +2271,7 @@ static void draw_card(uint32_t c, uint32_t id, int force)
     str_cpy(key, id ? d.label : "", sizeof key);
     str_cat(key, val, sizeof key);
     str_cat(key, unit, sizeof key);
-    sig = hsh(c * 31u + (uint32_t)hot * 7u + (uint32_t)(ratio + 2) * 101u + ui.shift * 5u + id * 977u, key);
+    sig = hsh(c * 31u + (uint32_t)hot * 7u + (uint32_t)(ratio + 2) * 101u + ui.shift * 5u + id * 977u + ui.lockmode * 13u, key);
     if (!force && sig == ui.sig[1 + c])
         return;
     ui.sig[1 + c] = sig;
@@ -1601,8 +2302,15 @@ static void g_box(void) { cv_begin(240, H_GRAPH, T_BG); cv_rrect(3, 0, GW, GH, 5
 static void g_grid(void)                         /* the eight tracks, the bar shown (the selected track's) */
 {
     uint32_t t, i;
+    uint16_t lb[NTRK] = {0};                     /* the bar's steps with locks, a track's in bits */
+    for (i = 0; i < NLOCK; i++) {
+        const lock_t *l = &plk[song.pat % NPAT][i];
+        uint32_t lt = (l->key >> 6) % NTRK, ls = l->key & 63u;
+        if (l->pid && ls / 16u == ui.bar % nbars(lt))
+            lb[lt] = (uint16_t)(lb[lt] | 1u << (ls % 16u));
+    }
     for (t = 0; t < NTRK; t++) {
-        uint32_t len = tlen(t), bar = ui.bar % nbars(t), ps = song.pstep % len;
+        uint32_t len = tlen(t), bar = ui.bar % nbars(t), ps = tpos(t);
         int32_t y = 4 + (int32_t)t * 14;
         int on = trk_audible(t);
         uint16_t c = on ? TRK_COL[t] : T_DIM, bg = t == song.sel ? T_RAISE : T_SURF;
@@ -1613,7 +2321,7 @@ static void g_grid(void)                         /* the eight tracks, the bar sh
             uint32_t idx = bar * 16u + i;
             uint8_t s = idx < len ? pat[song.pat % NPAT].s[t][idx] : 0u;
             int32_t x = 32 + (int32_t)i * 12 + (int32_t)(i / 4u) * 2;
-            uint8_t xx = idx < len ? pat[song.pat % NPAT].x[t][idx] : 0u;
+            uint8_t xx = idx < len ? pat[song.pat % NPAT].x[t][idx] : 0u, rr = idx < len ? pat[song.pat % NPAT].r[t][idx] : 0u;
             uint16_t sc = idx >= len ? bg : s ? (s & S_ACC ? ux_mix(c, T_TEXT, 45) : c) : T_LINE;
             if (s && X_COND(xx))                 /* (a step that plays now and then: paler) */
                 sc = ux_mix(sc, bg, 55);
@@ -1621,9 +2329,13 @@ static void g_grid(void)                         /* the eight tracks, the bar sh
                 sc = s ? T_TEXT : T_ACCENT;
             if (t == song.sel && ((ui.sedit >> i) & 1u))
                 cv_rrect(x - 1, y, 12, 12, 3, T_ACCENT, bg);   /* (STEP EDIT: the steps held) */
+            if (s && R_MICRO(rr))                /* (NUDGE: the cell moved early / late) */
+                x += R_MICRO(rr) * 2 / 15 + (R_MICRO(rr) > 0 ? 1 : -1);
             cv_rrect(x, y + 1, 10, 10, 2, sc, bg);
-            if (s && idx < len && pat[song.pat % NPAT].r[t][idx]) {   /* (substeps: the cell cut in as many) */
-                uint32_t k, n = pat[song.pat % NPAT].r[t][idx] + 1u;
+            if (s && ((lb[t] >> i) & 1u))        /* (a step with locks: a notch top left) */
+                cv_rect(x + 1, y + 2, 3, 2, T_BG);
+            if (s && idx < len && R_SUB(rr)) {      /* (substeps: the cell cut in as many) */
+                uint32_t k, n = R_SUB(rr) + 1u;
                 for (k = 1; k < n; k++)
                     cv_rect(x + (int32_t)(k * 10u / n), y + 1, 1, 10, bg);
             }
@@ -1743,7 +2455,7 @@ static void g_patterns(void)                     /* PATTERNS: 16, the one playin
         fmt_u(b, i + 1u);
         cv_text_in(x, y + CAP_IN(S, 38), 24, &AF_S, b, i == song.pat || i == song.pat_next ? T_INK : used ? T_TEXT : T_DIM, c);
     }
-    g_label(12, 106, "K3 COPIES, K4 PASTES THE PATTERN SHOWN", T_DIM);
+    g_label(12, 106, "K3 COPIES, K4 PASTES IT", T_DIM);
 }
 static void g_store(void)
 {
@@ -1858,6 +2570,103 @@ static void g_info(void)                         /* SYSTEM: the version, the mem
     g_label(10, 90, "MADE BY HOLODECK-AUDIOTOOLS.COM", T_ACCENT);
     g_label(10, 104, "BATTERY: ESTIMATE, NOT CALIBRATED", T_DIM);
 }
+static void g_midi(void)                         /* MIDI: the clock, each sound's note out, the CC map */
+{
+    char b[48];
+    uint32_t i, n = 0, y;
+    if (song.clk_src == CK_EXT) {
+        int live = xc.seen && clk_now - (xc.seen & ~1u) < FS / 2u;
+        str_cpy(b, live ? "CLOCK IN: " : "CLOCK IN: NONE", sizeof b);
+        if (live) { fmt_u(b + str_len(b), song.bpm); str_cat(b, " BPM", sizeof b); }
+        g_label(10, 6, b, live ? T_TEXT : C_REC);
+    } else {
+        str_cpy(b, "CLOCK: INTERNAL ", sizeof b);
+        fmt_u(b + str_len(b), song.bpm);
+        str_cat(b, " BPM", sizeof b);
+        g_label(10, 6, b, T_TEXT);
+    }
+    g_label(10, 20, song.clk_out ? "CLOCK OUT: 24 PPQ, START / STOP" : "CLOCK OUT: OFF", song.clk_out ? T_MID : T_DIM);
+    for (i = 0; i < NTRK; i++) {                 /* the sounds' channels */
+        int32_t x = 10 + (int32_t)(i % 4u) * 56, yy = 38 + (int32_t)(i / 4u) * 14;
+        str_cpy(b, TRK_SHORT[i], sizeof b);
+        str_cat(b, " ", sizeof b);
+        if (snd[i].och) fmt_u(b + str_len(b), snd[i].och);
+        else str_cat(b, "-", sizeof b);
+        cv_text_on(x, yy, &AF_S, b, i == song.sel ? T_THEME : snd[i].och ? T_TEXT : T_DIM, T_SURF);
+    }
+    for (i = 0, y = 70; i < NMAP; i++)
+        if (ccmap[i].pid) {
+            if (n < 3u) {
+                str_cpy(b, "CC", sizeof b);
+                fmt_u(b + 2, ccmap[i].cc);
+                str_cat(b, " CH", sizeof b);
+                fmt_u(b + str_len(b), ccmap[i].ch + 1u);
+                str_cat(b, "  ", sizeof b);
+                cc_name(b + str_len(b), ccmap[i].pid, ccmap[i].trk, sizeof b - str_len(b));
+                g_label(10, (int32_t)y, b, T_MID);
+                y += 14;
+            }
+            n++;
+        }
+    if (!n)
+        g_label(10, 70, ui.learn ? "LEARN: TURN A KNOB, THEN SEND A CC" : "NO CC MAPPED (K2 B: LEARN)", ui.learn ? T_ACCENT : T_DIM);
+    else if (n > 3u) {
+        str_cpy(b, "+ ", sizeof b);
+        fmt_u(b + 2, n - 3u);
+        str_cat(b, " MORE", sizeof b);
+        g_label(10, (int32_t)y, b, T_DIM);
+    }
+}
+static void g_song(void)                         /* SONG: its rows (pattern, repeats), the one shown, the one playing */
+{
+    uint32_t k, n = song.slen ? song.slen : 1u, first = ui.scur >= 3u ? ui.scur - 3u : 0u;
+    char b[32];
+    if (first + 7u > n)
+        first = n > 7u ? n - 7u : 0u;
+    for (k = first; k < first + 7u && k < n; k++) {
+        int32_t y = 4 + (int32_t)(k - first) * 15;
+        int on = song.smode && song.playing && k == song.srow, cur = k == ui.scur;
+        if (cur)
+            cv_rrect(6, y - 1, 228, 14, 3, T_RAISE, T_SURF);
+        b[0] = (char)('0' + (k + 1u) / 10u);
+        b[1] = (char)('0' + (k + 1u) % 10u);
+        b[2] = 0;
+        cv_text_on(12, y + 1, &AF_S, b, T_MID, cur ? T_RAISE : T_SURF);
+        str_cpy(b, "P", sizeof b);
+        fmt_u(b + 1, srows[k].pat + 1u);
+        cv_text_on(44, y + 1, &AF_S, b, on ? T_ACCENT : T_TEXT, cur ? T_RAISE : T_SURF);
+        str_cpy(b, "x", sizeof b);
+        fmt_u(b + 1, srows[k].rep ? srows[k].rep : 1u);
+        cv_text_on(90, y + 1, &AF_S, b, on ? T_ACCENT : T_MID, cur ? T_RAISE : T_SURF);
+        if (on) {
+            str_cpy(b, "PLAYING ", sizeof b);
+            fmt_u(b + str_len(b), song.srep + 1u);
+            str_cat(b, "/", sizeof b);
+            fmt_u(b + str_len(b), srows[k].rep ? srows[k].rep : 1u);
+            cv_text_on(140, y + 1, &AF_S, b, T_ACCENT, cur ? T_RAISE : T_SURF);
+        }
+    }
+    g_label(12, 108, song.smode ? (song.send ? "SONG ON: STOPS AT THE END" : "SONG ON: LOOPS") : "SONG OFF: PATTERNS AND CHAIN", song.smode ? T_THEME : T_DIM);
+}
+static void g_mfx(void)                          /* MASTER: the filter's curve */
+{
+    int32_t i, v = song.mflt, prev = 0;
+    cv_rect(10, 70, 220, 1, T_LINE);
+    for (i = 0; i < 220; i++) {
+        int32_t f = i * 255 / 219, c = v < 0 ? 255 + v * 3 : v * 3, h;
+        int32_t dd = v < 0 ? c - f : f - c;      /* (in the pass band: 0; past the corner: down 12 dB an octave or so) */
+        h = !v ? 0 : dd >= 0 ? 0 : dd * 2;
+        if (v && dd > -12 && dd <= 12)
+            h += (int32_t)song.mres * (12 - (dd < 0 ? -dd : dd)) / 40;
+        h = clamp(h, -34, 30);
+        if (i && (h - prev > 1 || prev - h > 1))
+            cv_rect(10 + i, 50 - (h > prev ? h : prev), 1, (h > prev ? h - prev : prev - h) + 1, v ? T_THEME : T_DIM);
+        cv_rect(10 + i, 50 - h, 1, 2, v ? T_THEME : T_DIM);
+        prev = h;
+    }
+    g_label(10, 92, v < 0 ? "LOW-PASS: TURN RIGHT TO OPEN" : v > 0 ? "HIGH-PASS: TURN LEFT TO OPEN" : "FILTER OFF (CENTRE)", v ? T_TEXT : T_MID);
+    g_label(10, 106, "CC LEARN ON THE MIDI PAGE (HOME x2)", T_DIM);
+}
 #include "ui_logo.h"                             /* LOGO_W x LOGO_H, LOGO_RLE (tools/gen_logo.py) */
 #define C_LOGO RGB(240, 140, 52)                 /* the logo's orange marks */
 /* SYSTEM: the logo where the header and the cards are (no header on this page); the letters in TEXT, the marks in
@@ -1910,13 +2719,30 @@ static uint32_t graph_sig(void)
         return h + song.qgrid * 11u + song.qround * 101u + song.click * 1009u;
     if (ui.page == PG_INFO)
         return h + fm1_ms / 1000u;                /* (the load, the battery: once a second) */
+    if (ui.page == PG_MIDI) {
+        for (i = 0; i < NMAP; i++)
+            h = h * 7u + ccmap[i].pid * 131u + ccmap[i].cc;
+        for (t = 0; t < NTRK; t++)
+            h = h * 5u + snd[t].och;
+        return h + song.bpm * 3u + song.clk_src * 7u + song.clk_out * 11u + ui.learn * 13u +
+               (xc.seen && clk_now - (xc.seen & ~1u) < FS / 2u) * 17u;
+    }
+    if (ui.page == PG_SONG) {
+        for (i = 0; i < NSONG; i++)
+            h = h * 3u + srows[i].pat * 17u + srows[i].rep;
+        return h + ui.scur * 7u + song.slen * 11u + song.smode * 13u + song.send * 5u + (song.playing ? song.srow * 23u + song.srep * 29u + 1u : 0u);
+    }
+    if (ui.page == PG_MFX)
+        return h + (uint32_t)(song.mflt + 64) * 3u + song.mres * 257u;
     if (ui.page == PG_SAVE) {
         for (i = 0; i < NSLOT; i++)
             h = h * 3u + ui.used[i];
         return h + ui.slot * 11u + ui.swhat * 101u + ui.lwhat * 7u;
     }
+    for (i = 0; i < NLOCK; i++)                  /* (the locks) */
+        h = h * 3u + plk[song.pat % NPAT][i].key * plk[song.pat % NPAT][i].pid;
     for (t = 0; t < NTRK; t++) {                 /* the grid: the bar shown, the playhead, mute, solo */
-        h = h * 31u + tlen(t) + (trk_audible(t) ? 7u : 0u);
+        h = h * 31u + tlen(t) + (trk_audible(t) ? 7u : 0u) + tpos(t) * 41u;
         for (i = 0; i < 16u; i++)
             h = h * 33u + pat[song.pat % NPAT].s[t][(ui.bar % nbars(t)) * 16u + i] +
                 pat[song.pat % NPAT].x[t][(ui.bar % nbars(t)) * 16u + i] * 7u +
@@ -1942,6 +2768,9 @@ static void draw_graph(int force)
     case PG_LFO1: case PG_LFO2: g_lfo(); break;
     case PG_REC: g_quant(); break;
     case PG_INFO: g_info(); break;
+    case PG_MIDI: g_midi(); break;
+    case PG_SONG: g_song(); break;
+    case PG_MFX: g_mfx(); break;
     default: g_grid(); break;
     }
     cv_blit(0, Y_GRAPH);
@@ -1957,9 +2786,12 @@ static void draw_foot(int force)
     static const khint_t H_LIVE[3] = {{KC_KEYS, "PADS"}, {KC_REC, "REC"}, {KC_SEQ, "STEPS"}};
     static const khint_t H_REC[3] = {{KC_K1, "GRID"}, {KC_K2, "TO"}, {KC_REC, "ARM"}};
     static const khint_t H_SHIFT[3] = {{KC_K14, "ROW B"}, {KC_KEYS, "MUTE"}, {KC_PLAY, "TOP"}};
+    static const khint_t H_LOCK[3] = {{KC_KEYS, "STEP"}, {KC_K14, "LOCK"}, {KC_OCTPM, "BAR"}};
+    static const khint_t H_NUDGE[3] = {{KC_KEYS, "STEP"}, {KC_K1, "NUDGE"}, {KC_OCTPM, "BAR"}};
     char b[32];
     uint32_t sig;
-    const khint_t *h = ui.shift ? H_SHIFT : ui.page == PG_SEQ ? H_SEQ : ui.page == PG_MIX ? (ui.mixpan ? H_MIXPAN : H_MIX) :
+    const khint_t *h = ui.shift ? H_SHIFT : ui.lockmode == LM_LOCK && ui.page != PG_SEQ && ui.page != PG_NR ? H_LOCK :
+                       ui.lockmode == LM_NUDGE && ui.page != PG_NR ? H_NUDGE : ui.page == PG_SEQ ? H_SEQ : ui.page == PG_MIX ? (ui.mixpan ? H_MIXPAN : H_MIX) :
                        ui.page == PG_NR ? H_NR : ui.page == PG_SAVE ? H_SAVE : ui.page == PG_LIVE ? H_LIVE :
                        ui.page == PG_REC ? H_REC : H_PAGE;
     uint32_t gi, gn = 0, gk = 0;
@@ -1972,7 +2804,7 @@ static void draw_foot(int force)
         str_cpy(b, "STEP EDIT", sizeof b);
     if (ui.shift)
         str_cat(b, " B", sizeof b);
-    sig = hsh(ui.page * 31u + ui.shift * 101u + ui.mixpan * 7u + (ui.sedit != 0) * 3u, b);
+    sig = hsh(ui.page * 31u + ui.shift * 101u + ui.mixpan * 7u + (ui.sedit != 0) * 3u + ui.lockmode * 1009u, b);
     if (!force && sig == ui.sig[6])
         return;
     ui.sig[6] = sig;
@@ -2185,6 +3017,8 @@ static void ui_init(void)
     song.click = CLICK_REC;
     ui.copy = 1;
     ui.lvel = 100;
+    song.slen = 1;
+    song.mres = 30;
     for (i = 0; i < NTRK; i++)
         sound_init(i);
     for (i = 0; i < NPAT; i++) {
@@ -2193,6 +3027,11 @@ static void ui_init(void)
         for (t = 0; t < NTRK; t++)
             pat[i].len[t] = 16;
     }
+    memset(plk, 0, sizeof plk);
+    memset(srows, 0, sizeof srows);
+    srows[0].rep = 1;
+    memset(ccmap, 0, sizeof ccmap);
+    seq_reset();
     demo_pattern(&pat[0]);
     store_scan();                                 /* the settings (theme, MIDI IN, metronome), the slots in use */
     if (ui.used[0])                               /* at power-on: patch 1, kit and patterns */

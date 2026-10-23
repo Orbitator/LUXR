@@ -20,6 +20,7 @@ enum { K_DRUM, K_SNARE, K_CLAP, K_HATC, K_HATO, K_CYM, K_N };
 static const uint8_t TRK_KIND[NTRK] = {K_DRUM, K_SNARE, K_CLAP, K_HATC, K_HATO, K_DRUM, K_DRUM, K_CYM};
 static const char *const TRK_NAME[NTRK] = {"KICK", "SNARE", "CLAP", "CL HAT", "OP HAT", "TOM", "RIM", "CYMBAL"};
 static const char *const TRK_SHORT[NTRK] = {"BD", "SD", "CP", "CH", "OH", "TM", "RS", "CY"};
+static const uint8_t GM_NOTE[NTRK] = {36, 38, 39, 42, 46, 45, 37, 49};   /* MIDI OUT: each sound's note at first */
 /* the sample layer: off, the LXR's SNAP (a pitch snap of the synth layer), the LXR's twelve transient samples, sixteen
  * of the sound's own (tools/gen_own_transients.py), sixteen after the classic drum machines (gen_machine_transients.py:
  * 808 909 606 707 DMX SDS, at 22.05 kHz) */
@@ -39,6 +40,7 @@ typedef struct {                 /* a sound; values 0..127 unless noted */
     int8_t pan;                  /* -64..63 */
     lfo_t lfo[2];
     uint8_t preset;              /* the variation it was rolled from (0 = the factory sound) */
+    uint8_t och, onote;          /* MIDI OUT: its channel (0 off, 1..16), its note (LXP7) */
 } sound_t;
 enum { LD_OFF, LD_PITCH, LD_FILTER, LD_DECAY, LD_LEVEL, LD_PAN, LD_SAMPLE, LD_N };
 enum { LW_SINE, LW_TRI, LW_SAW, LW_SQR, LW_SH, LW_N };
@@ -52,14 +54,20 @@ enum { CLICK_OFF, CLICK_REC, CLICK_ON, CLICK_N };
 
 /* a step: 0 = rest, else bits 0..6 the velocity (1..127), bit 7 the accent; its extras (STEP EDIT): when it plays
  * (bits 3..7: 0 always, 1..15 k/16 of the passes, 16..29 the conditions 1:2 2:2 1:4 .. 4:4 1:8 .. 8:8 - the A-th of every
- * B passes) and its pan (bits 0..2: 0 the sound's, k (k - 4) * 16) */
+ * B passes, 30 FILL: only while FILL is held, 31 NOT FILL) and its pan (bits 0..2: 0 the sound's, k (k - 4) * 16);
+ * r: bits 0..2 the substeps, bits 3..7 its timing (NUDGE: -15..+15 32nds of the step, two's complement in 5 bits) */
 #define S_ACC 0x80u
 #define S_VEL(s) ((s) & 0x7Fu)
 #define X_COND(x) ((x) >> 3)
 #define X_PAN(x) ((x) & 7u)
 #define X_PANV(x) (((int32_t)X_PAN(x) - 4) * 16)
 #define C_PROB_N 16u                     /* (codes 1..15: a probability) */
-#define C_N 30u
+#define C_FILL 30u
+#define C_NFILL 31u
+#define C_N 32u
+#define R_SUB(r) ((r) & 7u)
+#define R_MICRO(r) ((int32_t)(((r) >> 3) & 31u) - (((r) & 0x80u) ? 32 : 0))   /* -16..15 (used: -15..15) */
+#define R_MAKE(sub, mic) ((uint8_t)(((sub) & 7u) | (((uint32_t)(mic) & 31u) << 3)))
 static const uint8_t COND_A[14] = {1, 2, 1, 2, 3, 4, 1, 2, 3, 4, 5, 6, 7, 8};
 static const uint8_t COND_B[14] = {2, 2, 4, 4, 4, 4, 8, 8, 8, 8, 8, 8, 8, 8};
 typedef struct {
@@ -67,7 +75,21 @@ typedef struct {
     uint8_t x[NTRK][NSTEP];      /* the steps' extras */
     uint8_t r[NTRK][NSTEP];      /* the steps' substeps: 0 one hit, k k + 1 hits over the step (2..6) */
     uint8_t len[NTRK];           /* steps 1..64 (16 a bar) */
+    int8_t spd[NTRK];            /* the track's speed: SPD_* (0 = as the tempo) */
 } pattern_t;
+/* a track's speed, in 16ths a step: 1/8x .. 2x (a step every d / n 16ths) */
+#define SPD_MIN (-4)
+#define SPD_MAX 2
+static const uint8_t SPD_N[7] = {1, 1, 1, 3, 1, 3, 2}, SPD_D[7] = {8, 4, 2, 4, 1, 2, 1};
+#define SPD_I(v) ((uint32_t)((int32_t)(v) - SPD_MIN) % 7u)
+/* parameter locks: a pool a pattern, each a step of a track (t << 6 | step), the parameter (lx_ui.c P_*, 0 = free) and
+ * its value (as the parameter stores it: int8 values cast) */
+#define NLOCK 128u
+typedef struct { uint16_t key; uint8_t pid, val; } lock_t;
+#define NLK_V 10u                        /* the locks a hit carries */
+/* the song: rows of a pattern and its repeats */
+#define NSONG 32u
+typedef struct { uint8_t pat, rep; } srow_t;
 
 typedef struct {
     uint8_t playing, sel;
@@ -94,7 +116,14 @@ typedef struct {
     uint32_t pstep;              /* 16ths since the pattern began */
     uint32_t loops;              /* the patterns played through since PLAY (the conditions' passes) */
     uint32_t cpu_q8;
+    /* LXP7 */
+    uint8_t fill;                /* FILL held */
+    uint8_t clk_src, clk_out;    /* MIDI clock: CK_INT / CK_EXT; sent (24 a quarter, start / stop) */
+    uint8_t smode, slen, srow, srep, send;   /* SONG: on, its rows, the row and the repeat playing, at its end loop / stop */
+    int8_t mflt;                 /* the master filter: - low-pass, + high-pass, 0 off */
+    uint8_t mres;
 } song_t;
+enum { CK_INT, CK_EXT, CK_N };
 
 /* note repeat (ARP): the pads (white keys 1..8 while it is on) repeat at RATE */
 enum { NR_OFF, NR_4, NR_8, NR_8T, NR_16, NR_16T, NR_32, NR_32T, NR_N };
@@ -104,6 +133,7 @@ enum { NV_FIXED, NV_UP, NV_DOWN, NV_RANDOM, NV_N };
 
 typedef struct {
     uint8_t active, vel, acc, choke;
+    uint8_t nlk, lk[NLK_V][2];   /* the hit's locks (pid, value) */
     int8_t span;                 /* the hit's own pan (a step's), -64..63; 0x7F: the sound's */
     uint32_t ph[3], noise, t;    /* t: samples since the hit */
     uint32_t tph, tinc;          /* the sample layer: its phase (Q20 samples), step */
@@ -113,6 +143,8 @@ typedef struct {
 } voice_t;
 
 static pattern_t pat[NPAT];
+static lock_t plk[NPAT][NLOCK] __attribute__((section(".pool")));   /* each pattern's locks */
+static srow_t srows[NSONG];
 static sound_t snd[NTRK];
 static song_t song;
 static voice_t voice[NTRK];

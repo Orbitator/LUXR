@@ -131,13 +131,33 @@ static const char *const LX_LABEL[K_N][8] = {
     {"PITCH", "DECAY", "RATIO", "FM", "FILTER", "RESO", "NOISE", "DRIVE"},     /* CYMBAL */
 };
 
-/* a hit on track t (the audio ISR: the sequencer, the pads, MIDI) */
+/* a hit's sound: the track's, with the hit's parameter locks over it (lx_ui.c lock_apply) */
+static void lock_apply(sound_t *s, uint32_t pid, uint32_t val);
+static const sound_t *voice_sound(uint32_t t, const voice_t *v, sound_t *tmp)
+{
+    uint32_t k;
+    if (!v->nlk)
+        return &snd[t % NTRK];
+    *tmp = snd[t % NTRK];
+    for (k = 0; k < v->nlk && k < NLK_V; k++)
+        lock_apply(tmp, v->lk[k][0], v->lk[k][1]);
+    return tmp;
+}
+
+/* a hit on track t (the audio ISR: the sequencer, the pads, MIDI), with its locks (nlk of them: pid, value) */
 #define PAN_SOUND 0x7F
-static void voice_hit(uint32_t t, uint32_t vel, uint32_t acc, int32_t pan)   /* pan: a step's, or PAN_SOUND */
+static void voice_hit_lk(uint32_t t, uint32_t vel, uint32_t acc, int32_t pan, uint32_t nlk, const uint8_t (*lk)[2])
 {
     voice_t *v = &voice[t % NTRK];
-    const sound_t *s = &snd[t % NTRK];
+    sound_t tmp;
+    const sound_t *s;
     uint32_t i;
+    v->nlk = (uint8_t)(nlk < NLK_V ? nlk : NLK_V);
+    for (i = 0; i < v->nlk; i++) {
+        v->lk[i][0] = lk[i][0];
+        v->lk[i][1] = lk[i][1];
+    }
+    s = voice_sound(t, v, &tmp);
     if (TRK_KIND[t % NTRK] == K_HATC)           /* the closed hat chokes the open one (a 3 ms fade) */
         for (i = 0; i < NTRK; i++)
             if (TRK_KIND[i] == K_HATO && voice[i].active)
@@ -161,10 +181,13 @@ static void voice_hit(uint32_t t, uint32_t vel, uint32_t acc, int32_t pan)   /* 
     v->noise ^= (t + 1u) * 2654435761u + fm1_ms;
     v->active = 1;
 }
-
-static void lx_render(uint32_t t, voice_t *v, int32_t *out, uint32_t n)
+static void voice_hit(uint32_t t, uint32_t vel, uint32_t acc, int32_t pan)   /* pan: a step's, or PAN_SOUND */
 {
-    const sound_t *s = &snd[t];
+    voice_hit_lk(t, vel, acc, pan, 0, 0);
+}
+
+static void lx_render(uint32_t t, voice_t *v, const sound_t *s, int32_t *out, uint32_t n)
+{
     const uint8_t *p = s->p;
     uint32_t kind = TRK_KIND[t], i, inc = 0, minc = 0, fm = 0, spacing = 441, bursts = 3;
     int32_t gain = v->vel + (v->acc ? 30 : 0), drive = 16 + p[7] / 4, syn = s->syn;
@@ -392,6 +415,8 @@ static void sound_init(uint32_t t)               /* the whole sound: the factory
     s->dly = 0;
     s->rev = t == 2u || t == 7u ? 30 : 8;
     s->drv = 0;
+    s->och = 0;                                  /* (MIDI OUT off) */
+    s->onote = GM_NOTE[t % NTRK];
     for (k = 0; k < 2u; k++) {
         s->lfo[k].dest = LD_OFF;
         s->lfo[k].wave = LW_SINE;
@@ -536,6 +561,29 @@ static void drive_block(int32_t *L, int32_t *R, const int32_t *dv, uint32_t n)
     }
 }
 
+/* the master filter: one knob, below the centre a low-pass coming down, above it a high-pass going up; RESO its peak.
+ * A Chamberlin state-variable filter a side, run twice a sample (as the voices' svf_lp). */
+static int32_t mf_lp[2], mf_bp[2];
+static void mfilter_block(int32_t *L, int32_t *R, uint32_t n)
+{
+    int32_t v = song.mflt, hp = v > 0, f = SVF_F[clamp(hp ? v * 3 : 255 + v * 3, 0, 255)], q = 65534 - song.mres * 380;
+    uint32_t i, c, k;
+    for (c = 0; c < 2u; c++) {
+        int32_t *x = c ? R : L, lp = mf_lp[c], bp = mf_bp[c];
+        for (i = 0; i < n; i++) {
+            int32_t in = clamp(x[i] >> 1, -SVF_LIM, SVF_LIM), h = 0;   /* (at half: the sum has headroom over SVF_LIM) */
+            for (k = 0; k < 2u; k++) {
+                lp = clamp(lp + ((f * bp) >> 15), -SVF_LIM, SVF_LIM);
+                h = clamp(in - lp - ((q * (bp >> 1)) >> 14), -SVF_LIM, SVF_LIM);
+                bp = clamp(bp + ((f * h) >> 15), -SVF_LIM, SVF_LIM);
+            }
+            x[i] = (hp ? h : lp) * 2;
+        }
+        mf_lp[c] = lp;
+        mf_bp[c] = bp;
+    }
+}
+
 /* ------------------------------------------------------------------ mix --- */
 static void seq_block(uint32_t n);               /* lx_seq.c: the steps of this block */
 static int32_t peak[NTRK];                       /* the mixer's meters (Q15, decaying in the UI) */
@@ -548,13 +596,14 @@ static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the 
     for (i = 0; i < n; i++)
         L[i] = R[i] = dsl[i] = dsr[i] = rs[i] = dv[i] = 0;
     for (t = 0; t < NTRK; t++) {
-        const sound_t *s = &snd[t];
+        sound_t tmp;
+        const sound_t *s = voice_sound(t, &voice[t], &tmp);
         int32_t g, pan, pl, pr, dg = s->dly, rg = s->rev, vg = s->drv, pk = 0;
         if (!voice[t].active)
             continue;
         for (i = 0; i < n; i++)
             tb[i] = 0;
-        lx_render(t, &voice[t], tb, n);
+        lx_render(t, &voice[t], s, tb, n);
         if (!trk_audible(t))
             continue;
         g = s->level * 2;                        /* 0..254, 200 at the default */
@@ -589,6 +638,8 @@ static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the 
             }
         }
     }
+    if (song.mflt)                               /* the master filter (performance: MASTER page, a CC) */
+        mfilter_block(L, R, n);
     for (i = 0; i < n; i++) {                    /* DC blocker (~7 Hz) on both sides */
         static int32_t dcl, dcr;
         dcl += (L[i] * 1024 - dcl) >> 10;
