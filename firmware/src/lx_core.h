@@ -41,6 +41,8 @@ typedef struct {                 /* a sound; values 0..127 unless noted */
     lfo_t lfo[2];
     uint8_t preset;              /* the variation it was rolled from (0 = the factory sound) */
     uint8_t och, onote;          /* MIDI OUT: its channel (0 off, 1..16), its note (LXP7) */
+    uint8_t atk, rel, gate;      /* ENV (LXP8): attack (0 = at once), release (after the gate), gate (0 off, k quarters of a
+                                  * step: then the release takes over from the decay) */
 } sound_t;
 enum { LD_OFF, LD_PITCH, LD_FILTER, LD_DECAY, LD_LEVEL, LD_PAN, LD_SAMPLE, LD_N };
 enum { LW_SINE, LW_TRI, LW_SAW, LW_SQR, LW_SH, LW_N };
@@ -134,6 +136,8 @@ enum { NV_FIXED, NV_UP, NV_DOWN, NV_RANDOM, NV_N };
 typedef struct {
     uint8_t active, vel, acc, choke;
     uint8_t nlk, lk[NLK_V][2];   /* the hit's locks (pid, value) */
+    int32_t att;                 /* ENV: the attack's ramp (Q15) */
+    uint32_t gate_n;             /* .. samples to the release (0: none) */
     int8_t span;                 /* the hit's own pan (a step's), -64..63; 0x7F: the sound's */
     uint32_t ph[3], noise, t;    /* t: samples since the hit */
     uint32_t tph, tinc;          /* the sample layer: its phase (Q20 samples), step */

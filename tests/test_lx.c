@@ -1252,7 +1252,7 @@ int main(int argc, char **argv)
             for (i = 0; i < NSTEP; i++)
                 for (k = 0; k < NPAT; k++) { pat[k].s[t][i] = 77; pat[k].x[t][i] = 9; pat[k].r[t][i] = 2; pat[k].len[t] = 64; }
         proj_save(4, SW_ALL);
-        CHECK(!strcmp(ui.msg, "PATCH SAVED"), "every step of every pattern set: saved (%s)", ui.msg);
+        CHECK(!strncmp(ui.msg, "PATCH SAVED", 11), "every step of every pattern set: saved (%s)", ui.msg);
         /* an LXP6 patch as the firmware before wrote it */
         memset(&o, 0, sizeof o);
         o.magic = MAGIC_P6;
@@ -1307,6 +1307,9 @@ int main(int argc, char **argv)
         host_turn(EN_K4, 1);
         CHECK(pat[3].s[2][2] == 0u && pat[5].len[4] == 32u && pat[5].spd[4] == -1 && song.bpm == 140u && snd[0].p[0] == 9u,
               "NEW PATCH: empty, 32 steps, 3/4X, 140 BPM, the kit kept (%u %d %u)", pat[5].len[4], pat[5].spd[4], song.bpm);
+        host_tap(B_OCTUP);                       /* OCT+ on NEW PATCH: saved into the slot chosen at once */
+        CHECK(ui.used[ui.slot] && !strncmp(ui.msg, "PATCH SAVED: ", 13) && (uint32_t)atoi(ui.msg + 13) == ui.slot + 1u,
+              "OCT+ on NEW PATCH: saved at once into the slot chosen (%s)", ui.msg);
     }
     host_boot(35);
     {                                            /* D#4: RANDOM MUTE, the selected sound stays, no sound played */
@@ -1359,6 +1362,63 @@ int main(int argc, char **argv)
         CHECK(song.slen == 1u && srows[0].pat == 9u, "back on SONG: a new song from the first key");
         snprintf(path, sizeof path, "%s/lx_song.ppm", dir);
         host_ppm(path);
+    }
+    host_boot(37);
+    {                                            /* ENV: attack, decay, release after the gate; LXP7 patches read */
+        double e0 = 0, e1 = 0;
+        uint32_t k, j;
+        host_tap(B_ENV);
+        CHECK(ui.page == PG_ENV && knob_id(0) == P_EATK && knob_id(1) == P_V1 && knob_id(2) == P_EREL && knob_id(3) == P_EGATE,
+              "ENV: ATTACK, DECAY, RELEASE, GATE");
+        snd[0].p[1] = 120;                       /* a long kick: the first 10 ms, then the tail after a gate */
+        ev_push(EV_HIT, 0, 120);
+        for (k = 0; k < 10u; k++) { host_run(1, 0, 0); for (j = 0; j < CTL; j++) e0 += out_l[j] * out_l[j]; }
+        host_run(600, 0, 0);
+        host_turn(EN_K1, 60);                    /* ATTACK ~56 ms */
+        ev_push(EV_HIT, 0, 120);
+        for (k = 0; k < 10u; k++) { host_run(1, 0, 0); for (j = 0; j < CTL; j++) e1 += out_l[j] * out_l[j]; }
+        CHECK(snd[0].atk == 60u && e1 < e0 * 0.25, "ATTACK: the first 10 ms softer (%.0f %%)", 100.0 * e1 / (e0 > 0 ? e0 : 1));
+        host_run(600, 0, 0);
+        snd[0].atk = 0;
+        {
+            double t0 = 0, t1 = 0;
+            ev_push(EV_HIT, 0, 120);
+            host_run(150, 0, 0);
+            for (k = 0; k < 20u; k++) { host_run(1, 0, 0); for (j = 0; j < CTL; j++) t0 += out_l[j] * out_l[j]; }
+            host_run(600, 0, 0);
+            snd[0].gate = 4;                     /* a step, then a release of 1 ms */
+            snd[0].rel = 0;
+            ev_push(EV_HIT, 0, 120);
+            host_run(150, 0, 0);
+            for (k = 0; k < 20u; k++) { host_run(1, 0, 0); for (j = 0; j < CTL; j++) t1 += out_l[j] * out_l[j]; }
+            CHECK(t1 < t0 * 0.01, "GATE + short RELEASE: the tail cut after a step (%.2f %%)", 100.0 * t1 / (t0 > 0 ? t0 : 1));
+        }
+        snprintf(path, sizeof path, "%s/lx_env.ppm", dir);
+        ui_draw(1);
+        host_ppm(path);
+        {                                        /* an LXP7 patch: header, its kit (sounds without the envelope), the blob */
+            static uint8_t raw[0x5000];
+            kit7_t k7;
+            uint32_t t, bl, sum;
+            memset(raw, 0xFF, sizeof raw);
+            memset(&k7, 0, sizeof k7);
+            for (t = 0; t < NTRK; t++) { memset(k7.s[t].s6.p, 20 + (int)t, 8); k7.s[t].s6.level = 70; k7.s[t].och = 3; k7.s[t].onote = 50; }
+            k7.ddec = 64;
+            pat[2].s[5][6] = 44;
+            pat_take(&proj_buf);
+            bl = proj_buf.blen;
+            memcpy(raw, "LXP7", 4);
+            wr32(raw + 4, 0x5000u);
+            raw[12] = (uint8_t)bl; raw[13] = (uint8_t)(bl >> 8); raw[14] = raw[15] = 0;
+            memcpy(raw + 16, &k7, sizeof k7);
+            memcpy(raw + 16 + sizeof k7, proj_buf.blob, bl);
+            sum = fnv(raw + 12, 4u + sizeof k7 + bl);
+            wr32(raw + 8, sum);
+            memcpy(h_store + ST_PROJ(8), raw, sizeof raw);
+            host_boot(38);
+            CHECK(ui.used[8] && !proj_load(8, SW_ALL) && snd[4].p[0] == 24u && snd[4].level == 70u && snd[4].och == 3u &&
+                  snd[4].atk == 0u && snd[4].rel == 60u && pat[2].s[5][6] == 44u, "LXP7 slot 9: read, the envelope as before");
+        }
     }
     host_boot(33);
     host_tap(B_SEQ);

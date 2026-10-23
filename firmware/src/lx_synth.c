@@ -179,6 +179,8 @@ static void voice_hit_lk(uint32_t t, uint32_t vel, uint32_t acc, int32_t pan, ui
     v->tlp = 0;
     v->benv = 32767;
     v->noise ^= (t + 1u) * 2654435761u + fm1_ms;
+    v->att = s->atk ? 0 : 32767;
+    v->gate_n = s->gate ? s->gate * step_base() / 4u : 0u;
     v->active = 1;
 }
 static void voice_hit(uint32_t t, uint32_t vel, uint32_t acc, int32_t pan)   /* pan: a step's, or PAN_SOUND */
@@ -199,7 +201,8 @@ static void lx_render(uint32_t t, voice_t *v, const sound_t *s, int32_t *out, ui
                      : s->smp >= TR_SMP0 ? LXR_TRANS[(s->smp - TR_SMP0) % LXR_TRANS_N] : 0;
     uint32_t mach = s->smp >= TR_MACH0, tn = mach ? MACH_TRANS_LEN : LXR_TRANS_LEN, tend = (mach ? 2u * tn : tn) << 20;
     int32_t tk = s->stone < 0 ? 4095 + s->stone * 60 : s->stone * 40, kb = lx_k(18);   /* TONE (Q12), BEND's envelope */
-    uint32_t didx;
+    uint32_t didx, an = s->atk ? 1u + (uint32_t)s->atk * s->atk * 441u / 640u : 1u;   /* ENV: attack in samples, */
+    int32_t ainc = (int32_t)(32767u / an), krel = lx_k(s->rel & 127u);                 /* .. release after the gate */
     switch (kind) {
     case K_DRUM:
         didx = 25u + p[1] * 85u / 127u;
@@ -340,8 +343,12 @@ static void lx_render(uint32_t t, voice_t *v, const sound_t *s, int32_t *out, ui
             if (v->cfade <= 0) { v->active = 0; break; }
             a = (a * v->cfade) >> 15;
         }
+        if (v->att < 32767) {                    /* ENV: the attack */
+            v->att = v->att + ainc < 32767 ? v->att + ainc : 32767;
+            a = (a * v->att) >> 15;
+        }
         out[i] += (((y * a) >> 15) * gain) >> 7;
-        v->amp = lx_dec(v->amp, ka);
+        v->amp = lx_dec(v->amp, v->gate_n && tt >= v->gate_n ? krel : ka);   /* (the gate over: the release) */
         if (v->amp < 8 && tt > 1400u && (!tr || v->tph >= tend || !slvl)) {
             v->active = 0;
             break;
@@ -416,6 +423,9 @@ static void sound_init(uint32_t t)               /* the whole sound: the factory
     s->rev = t == 2u || t == 7u ? 30 : 8;
     s->drv = 0;
     s->och = 0;                                  /* (MIDI OUT off) */
+    s->atk = 0;                                  /* (ENV: at once, the decay alone) */
+    s->rel = 60;
+    s->gate = 0;
     s->onote = GM_NOTE[t % NTRK];
     for (k = 0; k < 2u; k++) {
         s->lfo[k].dest = LD_OFF;

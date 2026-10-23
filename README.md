@@ -24,7 +24,7 @@ In/Out, Notenausgabe pro Sound und CC-Learn – siehe [Performance und MIDI](#pe
 | 7 | RIM | wie KICK (kurz, hoch) |
 | 8 | CYMBAL | Pitch, Decay, Ratio, FM · Filter, Reso, Noise, Drive |
 
-**Sample-Layer** (EDIT dreimal, oder ENV): **44 Transienten pro Sound** zur Wahl:
+**Sample-Layer** (EDIT dreimal): **44 Transienten pro Sound** zur Wahl:
 - **16 eigene** des Sounds (BD 01 … BD 16, SD 01 … usw.), beim Bauen synthetisiert (`tools/gen_own_transients.py`);
 - **16 im Stil der Klassiker** (808 A–B, 909 A–B, 606, 707 A–B, DMX A–B, Linn LM-1 A–B, LinnDrum LM-2 A–B, SDS6, SDS7,
   SDS8), beim Bauen nach deren Bauweise synthetisiert, keine Aufnahmen der Geräte (`tools/gen_machine_transients.py`,
@@ -69,7 +69,8 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | SEQ (2.) | **LIVE PADS** | Pad-Velocity, Quantize-Raster, -Richtung, Metronom | |
 | EDIT | SYNTH 1-4 | Synth-Parameter 1–4 | Parameter 5–8 |
 | EDIT (2.) | SYNTH 5-8 | Synth-Parameter 5–8 (z. B. Tone, Snap, Click, Drive) | Parameter 1–4 |
-| EDIT (3.) / ENV | SAMPLE LAYER | Sample, Level, Pitch, Decay | Synth-Pegel |
+| EDIT (3.) | SAMPLE LAYER | Sample, Level, Pitch, Decay | Synth-Pegel |
+| ENV | **ENVELOPE** | Attack (OFF … 252 ms), Decay (der Decay des Synth-Layers), Release, Gate (OFF oder ¼ … 16 Steps: danach übernimmt das Release den Decay) – alles lockbar | |
 | EDIT (4.) | SAMPLE 2 | Start, Tone, Bend, Synth-Pegel | |
 | EDIT (5.) | SOUND MIX | Volume, Pan, Delay-Send, Reverb-Send | Drive-Send |
 | LFO / LFO (2.) | LFO 1 / LFO 2 | Ziel, Welle, Rate (im Tempo), Tiefe (bipolar) | |
@@ -84,7 +85,7 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | ARP | NOTE REPEAT | Rate, Velocity, Vel-Modus (fest, steigend, fallend, zufällig), Latch | Humanize |
 | GLO (tippen) | MIXER, Seite 1 | Lautstärke der vier Sounds der Bank | Pan der vier Sounds |
 | GLO (nochmal tippen) | MIXER, Seite 2: PAN | Pan der vier Sounds der Bank (L64 … C … R63) | Lautstärke |
-| SAVE | STORE | **Weiße Tasten 1–14 wählen den Platz.** Platz 1–14, **was gespeichert wird** (KIT+PAT, nur KIT, nur PATTERN – OCT+ speichert), **was geladen wird** (KIT+PAT, nur KIT, nur PATTERN), **LOAD** (ein Dreh lädt den Platz; ein leerer Platz gibt ein neues, leeres Patch) | |
+| SAVE | STORE | **Weiße Tasten 1–14 wählen den Platz, OCT+ speichert sofort (auch auf NEW PATCH).** Platz 1–14, **was gespeichert wird** (KIT+PAT, nur KIT, nur PATTERN – OCT+ speichert), **was geladen wird** (KIT+PAT, nur KIT, nur PATTERN), **LOAD** (ein Dreh lädt den Platz; ein leerer Platz gibt ein neues, leeres Patch) | |
 | SAVE (2.) | **NEW PATCH** | Länge (1–64 Steps), Speed (1/8X … 2X), Tempo, **CREATE** (ein Dreh legt das neue Patch an: 16 leere Patterns, Wiedergabe gestoppt, noch nicht gespeichert) | Kit: FACTORY (Werkssounds und FX) oder KEEP (das aktuelle bleibt) |
 | REC (halten) | **QUANTIZE** | Raster (1/16, 1/8, 1/4), Richtung (zum nächsten Rasterpunkt / zum vorherigen), Metronom (aus, bei Aufnahme, an) | |
 
@@ -145,7 +146,7 @@ Plätze als `.luxr`-Datei herunterladen und wieder zurückspielen (auch ältere 
 Installieren zieht die Seite auf Wunsch vorher ein Backup und spielt es danach zurück. Das geht ab dieser LUXR-Version –
 die Firmware davor kennt die Backup-Befehle noch nicht.
 
-**Speicherformat LXP7.** Die Patterns werden gepackt gespeichert (nur gesetzte Steps, oder alle, wenn das kürzer ist),
+**Speicherformat LXP8** (LXP7 plus Hüllkurve). Die Patterns werden gepackt gespeichert (nur gesetzte Steps, oder alle, wenn das kürzer ist),
 damit Locks, NUDGE, SPEED und der Song in die 20 KiB eines Platzes passen. Patches älterer Formate (LXP1–6) werden beim
 Laden umgewandelt und beim nächsten Speichern als LXP7 geschrieben; Backups bleiben in beide Richtungen nutzbar. Passt
 ein Patch nicht mehr (nur bei sehr vielen Locks in sehr vollen Patterns), meldet SAVE „PATCH TOO FULL“ und schreibt
