@@ -140,6 +140,7 @@ typedef struct {
     int32_t att;                 /* ENV: the attack's ramp (Q15) */
     uint32_t gate_n;             /* .. samples to the release (0: none) */
     int8_t span;                 /* the hit's own pan (a step's), -64..63; 0x7F: the sound's */
+    int8_t semi;                 /* the hit's transpose in semitones (a note on the sound's own MIDI channel) */
     uint32_t ph[3], noise, t;    /* t: samples since the hit */
     uint32_t tph, tinc;          /* the sample layer: its phase (Q20 samples), step */
     int32_t tlp, benv;           /* .. its filter's state, its bend's envelope (Q15) */

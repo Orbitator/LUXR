@@ -335,14 +335,45 @@ int main(int argc, char **argv)
     host_tap(B_OCTDN);
     host_key(key_blk(BK_PASTE));
     CHECK(PAT->s[5][0] == (100u | S_ACC), "copy bar 2, paste into bar 1");
-    host_key(key_blk(BK_CLEAR));
-    CHECK(!steps_on(0, 5), "A#4: the track cleared");
-    h_pressed |= 1u << B_GLO; h_held |= 1u << B_GLO;
-    host_run(300, 0, 0);
-    host_key(key_blk(BK_PREV));
-    h_held &= ~(1u << B_GLO);
-    host_run(40, 0, 0);
-    CHECK(steps_on(0, 5) >= 2u, "SHIFT + F#3: undo (%u steps back)", steps_on(0, 5));
+    {                                            /* SEQ page 3, TRACKS: KNOB 4 clears the track, A#4 undoes */
+        uint32_t pg0 = ui.page, n0 = steps_on(0, 5);
+        host_tap(B_SEQ);
+        host_tap(B_SEQ);
+        if (ui.page != PG_TRK) host_tap(B_SEQ);
+        CHECK(ui.page == PG_TRK, "SEQ page 3: TRACKS (%u)", ui.page);
+        CHECK(pget(P_TSEL) == 5, "TRACKS: the sound selected (%d)", pget(P_TSEL));
+        host_turn(EN_K2, 1);
+        CHECK((song.mute >> 5) & 1u, "TRACKS, KNOB 2: mute");
+        host_turn(EN_K2, -1);
+        host_turn(EN_K3, 1);
+        CHECK((song.solo >> 5) & 1u && !((song.mute >> 5) & 1u), "TRACKS, KNOB 3: solo");
+        host_turn(EN_K3, -1);
+        host_turn(EN_K4, 1);
+        CHECK(!steps_on(0, 5), "TRACKS, KNOB 4: the track cleared");
+        host_key(key_blk(BK_UNDO));
+        CHECK(steps_on(0, 5) == n0, "A#4: undo (%u steps back)", steps_on(0, 5));
+        h_pressed |= 1u << B_GLO; h_held |= 1u << B_GLO;
+        host_run(300, 0, 0);
+        host_key(key_blk(BK_UNDO));
+        h_held &= ~(1u << B_GLO);
+        host_run(40, 0, 0);
+        CHECK(!steps_on(0, 5), "SHIFT + A#4: redo");
+        host_key(key_blk(BK_UNDO));
+        CHECK(steps_on(0, 5) == n0, "undo again");
+        pat[0].s[2][3] = 100;
+        song.mute = 0x81;
+        h_pressed |= 1u << B_GLO; h_held |= 1u << B_GLO;
+        host_run(300, 0, 0);
+        host_turn(EN_K2, 1);                     /* row B: ALL ON, CLR PAT */
+        CHECK(!song.mute && !song.solo, "TRACKS B, KNOB 2: all on");
+        host_turn(EN_K4, 1);
+        h_held &= ~(1u << B_GLO);
+        host_run(40, 0, 0);
+        CHECK(!steps_on(0, 2) && !steps_on(0, 5), "TRACKS B, KNOB 4: the pattern cleared");
+        host_key(key_blk(BK_UNDO));
+        CHECK(steps_on(0, 5) == n0 && pat[0].s[2][3], "undo: the pattern back");
+        go_page(pg0);
+    }
 
     /* 5. NOTE REPEAT: ARP tapped, a pad held a bar at 1/16 */
     host_boot(3);
@@ -1156,6 +1187,36 @@ int main(int argc, char **argv)
         CHECK(mout_count(0xF00Fu, 0x9009u, 0, h_mout_n) == 6u, "only the sound with a channel is sent (%u note-ons)", mout_count(0xF00Fu, 0x9009u, 0, h_mout_n));
     }
     host_boot(26);
+    {                                            /* MIDI IN, tonal: a channel only one sound has plays it by the note */
+        uint32_t k, zc[2], m;
+        seq_play(0);
+        for (k = 0; k < NTRK; k++) snd[k].och = 0;
+        snd[5].och = 2;                          /* the tom on channel 2 */
+        song.midi_ch = 0;
+        for (m = 0; m < 2u; m++) {
+            host_midi_in(0x91, m ? 72 : 60, 100);
+            host_run(5, 0, 0);
+            CHECK(voice[5].active && voice[5].semi == (m ? 12 : 0), "MIDI IN ch 2, note %u: the tom, %d semitones", m ? 72 : 60, voice[5].semi);
+            {                                    /* (its pitch: the oscillator's phase over a block) */
+                uint32_t ph = voice[5].ph[0];
+                run_samples(CTL, 0);
+                zc[m] = voice[5].ph[0] - ph;
+            }
+            host_run(800, 0, 0);
+        }
+        CHECK(zc[1] > zc[0] * 1.9 && zc[1] < zc[0] * 2.1, "an octave up: the tom twice as high (%u / %u)", zc[1], zc[0]);
+        voice[1].active = 0;
+        host_midi_in(0x91, 38, 100);             /* (38: the snare by the drum map, not here: the tom, 22 down) */
+        host_run(5, 0, 0);
+        CHECK(voice[5].semi == -22 && !voice[1].active, "note 38 on ch 2: the tom, -22");
+        snd[3].och = 2;                          /* two sounds on channel 2: the drum map again */
+        voice[5].active = voice[1].active = 0;
+        host_midi_in(0x91, 38, 100);
+        host_run(5, 0, 0);
+        CHECK(voice[1].active && !voice[5].active && !voice[1].semi, "two sounds on the channel: the drum map (the snare)");
+        snd[3].och = snd[5].och = 0;
+    }
+    host_boot(26);
     {                                            /* MIDI clock in: EXT follows START and the ticks, the tempo from them */
         uint32_t k, t0;
         double per = 44100.0 * 60.0 / (140.0 * 24.0);
@@ -1236,12 +1297,14 @@ int main(int argc, char **argv)
     {                                            /* the master filter: a low-pass takes the hat's highs */
         double e[2];
         uint32_t m, k, j;
+        sound_init(3);                           /* (the factory hat: a kit stored by a test before is not) */
+        song.mres = 0;                           /* (no resonance: a kit stored before may have it) */
         for (m = 0; m < 2u; m++) {
             song.mflt = (int8_t)(m ? -50 : 0);
             e[m] = 0;
             ev_push(EV_HIT, 3, 120);
-            for (k = 0; k < 10u; k++) {
-                host_run(20, 0, 0);
+            for (k = 0; k < 6000u / CTL; k++) {  /* (every sample of 136 ms: the hat is noise, a few blocks vary) */
+                run_samples(CTL, 0);
                 for (j = 0; j < CTL; j++) e[m] += out_l[j] * out_l[j];
             }
             host_run(300, 0, 0);
@@ -1485,7 +1548,7 @@ int main(int argc, char **argv)
     {                                            /* the screens of every page (doc/screens) */
         static const char *const N[PG_N] = {"kit", "seq", "live", "synth", "synth2", "sample", "sample2", "sound_mix", "lfo",
                                             "lfo2", "fx_sends", "drive", "delay", "delay2", "reverb", "patterns", "repeat",
-                                            "mixer", "store", "quant", "info", "midi", "song", "master"};
+                                            "mixer", "store", "quant", "info", "midi", "song", "master", "new", "env", "learn", "tracks"};
         uint32_t pg;
         (void)N; (void)pg;
     }

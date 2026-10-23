@@ -146,6 +146,14 @@ static const sound_t *voice_sound(uint32_t t, const voice_t *v, sound_t *tmp)
 
 /* a hit on track t (the audio ISR: the sequencer, the pads, MIDI), with its locks (nlk of them: pid, value) */
 #define PAN_SOUND 0x7F
+static int8_t hit_semi;                          /* the next hit's transpose (MIDI IN, tonal: lx_seq.c midi_note) */
+static const uint16_t SEMI_Q12[12] = {4096, 4340, 4598, 4871, 5161, 5468, 5793, 6137, 6502, 6889, 7298, 7732};
+static uint32_t semi_scale(uint32_t inc, int32_t semi)   /* inc x 2^(semi / 12) */
+{
+    int32_t o = semi >= 0 ? semi / 12 : -((11 - semi) / 12), k = semi - o * 12;
+    uint64_t r = (uint64_t)inc * SEMI_Q12[k] >> 12;
+    return (uint32_t)(o >= 0 ? r << o : r >> -o);
+}
 static void voice_hit_lk(uint32_t t, uint32_t vel, uint32_t acc, int32_t pan, uint32_t nlk, const uint8_t (*lk)[2])
 {
     voice_t *v = &voice[t % NTRK];
@@ -176,6 +184,9 @@ static void voice_hit_lk(uint32_t t, uint32_t vel, uint32_t acc, int32_t pan, ui
     /* the sample layer from START (its phase in 44.1 kHz samples, Q20: a 22.05 kHz machine sample spans twice its length) */
     v->tph = (((s->smp >= TR_MACH0 ? 2u * MACH_TRANS_LEN : LXR_TRANS_LEN) * s->sstart) >> 7) << 20;
     v->tinc = (1u << 18) + s->spitch * ((3u << 19) / 127u);   /* Q20: 0.25 .. 1.75 */
+    v->semi = hit_semi;
+    if (v->semi)
+        v->tinc = semi_scale(v->tinc, v->semi);
     v->tlp = 0;
     v->benv = 32767;
     v->noise ^= (t + 1u) * 2654435761u + fm1_ms;
@@ -193,7 +204,7 @@ static void lx_render(uint32_t t, voice_t *v, const sound_t *s, int32_t *out, ui
     const uint8_t *p = s->p;
     uint32_t kind = TRK_KIND[t], i, inc = 0, minc = 0, fm = 0, spacing = 441, bursts = 3;
     int32_t gain = v->vel + (v->acc ? 30 : 0), drive = 16 + p[7] / 4, syn = s->syn;
-    int32_t tune = clamp(song.tune, -24, 24) * 16 + lfo_amt(t, LD_PITCH, 12 * 16), lcut = lfo_amt(t, LD_FILTER, 64);
+    int32_t tune = clamp(song.tune, -24, 24) * 16 + v->semi * 16 + lfo_amt(t, LD_PITCH, 12 * 16), lcut = lfo_amt(t, LD_FILTER, 64);
     int32_t ka, kp = lx_k(15), kc = lx_k(12), kn = 0, kt = 0, ks, kd, f = 0, q = 50000, click = 0, noise = 0, color = 0;
     int32_t slvl = clamp(s->slvl + lfo_amt(t, LD_SAMPLE, 127), 0, 127);
     const int8_t *tr = s->smp >= TR_MACH0 ? MACH_TRANS[t][(s->smp - TR_MACH0) % MACH_TRANS_N]   /* the sample layer's */

@@ -71,6 +71,7 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | HOME (halten) | **SYSTEM** (ohne Kopfzeile, oben das LUXR-Logo) | Version, belegte Plätze und freier Speicher, Audio-Last, Akkuspannung (geschätzt, unkalibriert), About | |
 | SEQ | SEQUENCER | Länge der Spur, Velocity des letzten Steps, Rotate, Euclid | **PAT LEN: jeder Dreh verdoppelt die Patternlänge (zurück: halbiert)**, **COPY x2: Noten in die neuen Takte kopieren (an/aus)**, Accent des letzten Steps, **SPEED der Spur** (1/8X, 1/4X, 1/2X, 3/4X, 1X, 3/2X, 2X) |
 | SEQ (2.) | **LIVE PADS** | Pad-Velocity, Quantize-Raster, -Richtung, Metronom | |
+| SEQ (3.) | **TRACKS** | Spur, Mute, Solo, Spur löschen | alle an, Pattern löschen |
 | EDIT | SYNTH 1-4 | Synth-Parameter 1–4 | Parameter 5–8 |
 | EDIT (2.) | SYNTH 5-8 | Synth-Parameter 5–8 (z. B. Tone, Snap, Click, Drive) | Parameter 1–4 |
 | EDIT (3.) | SAMPLE LAYER | Sample, Level, Pitch, Decay | Synth-Pegel |
@@ -112,6 +113,10 @@ D4–G5 Solo.
 **LIVE PADS (SEQ zweimal).** Alle acht Sounds gleichzeitig spielbar: F3–C4 sind Sound 1–8, D4–G5 dieselben mit Accent.
 Mit REC + PLAY wird jeder Schlag aufgenommen, auf das Raster aus QUANTIZE (REC halten) gelegt.
 
+**TRACKS (SEQ dreimal).** Die acht Spuren mit Notenzahl, Mute (M) und Solo (S). KNOB 1 wählt die Spur, KNOB 2 Mute,
+KNOB 3 Solo, KNOB 4 gedreht löscht die Spur. Zeile B (GLO halten): KNOB 2 alle an (Mute und Solo aus), KNOB 4 löscht das
+ganze Pattern. Alles Gelöschte holt A#4 (UNDO) zurück.
+
 **Schwarze Tasten (11): Funktionen.**
 
 | Taste | normal | mit SHIFT |
@@ -123,7 +128,7 @@ Mit REC + PLAY wird jeder Schlag aufgenommen, auf das Raster aus QUANTIZE (REC h
 | D#4 | **RANDOM MUTE**: schaltet zufällig 1–6 der anderen Sounds stumm (der gewählte bleibt an; jeder Druck ein neuer Satz, A#3 + SHIFT holt alle zurück) | neuer (gewürfelter) Sound, ohne Anspielen |
 | F#4 | Takt kopieren | ganzes Pattern kopieren |
 | G#4 | Takt einfügen | ganzes Pattern einfügen |
-| A#4 | Spur löschen | ganzes Pattern löschen |
+| A#4 | **UNDO** | **REDO** |
 | C#5 | **P-LOCK** an / aus (mit gehaltenen Steps: deren Locks löschen) | Accent-Modus (weiße Tasten setzen Accents) |
 | D#5 | **NUDGE** an / aus (mit gehaltenen Steps: zurück aufs Raster) | Follow (die Anzeige folgt dem laufenden Takt) |
 | F#5 | **FILL**, solange gehalten | Tap-Tempo |
@@ -196,6 +201,12 @@ ob eine Clock ankommt.
 Clap, 42 CH, 46 OH, 45 Tom, 37 Rim, 49 Cymbal); gespeichert mit dem Kit. Gesendet werden die Schläge des Sequencers, der
 Pads und des Note Repeat (nicht die von MIDI IN), mit Velocity (Accent +20) und einer Länge von einem halben Sechzehntel.
 Stumme Spuren senden nicht.
+
+**Tonal spielen (MIDI IN).** Hat ein Sound als einziger einen bestimmten MIDI-Kanal (HOME 2., MIDI CH), spielen Noten auf
+diesem Kanal genau diesen Sound tonal: C3 (Note 60) ist seine eigene Tonhöhe, jede Taste ein Halbton, drei Oktaven nach
+oben und unten (Synth- und Sample-Layer). Teilen sich mehrere Sounds einen Kanal, oder ist es der globale MIDI-Kanal
+(HOME, MIDI CH), gilt wie bisher die Drum-Map (GM-Noten bzw. C3–G3 für Sound 1–8). Mit REC aufgenommene Schläge werden
+ohne Tonhöhe gespeichert.
 
 **CC-Learn.** HOME dreimal (Seite CC LEARN), KNOB 1 auf ON. Dann an irgendeinem Knopf drehen („… SEND CC“) und am externen
 Controller einen Regler bewegen: Kanal und CC sind diesem Parameter zugeordnet (bei Sound-Parametern dem Sound, der

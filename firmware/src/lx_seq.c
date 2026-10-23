@@ -256,6 +256,7 @@ static void ext_tick(void)
             xc.due++;
     }
 }
+#define MIDI_ROOT 60                             /* tonal: the note that plays a sound at its own pitch */
 static void midi_note(uint32_t st, uint32_t d1, uint32_t d2)
 {
     int32_t t;
@@ -280,6 +281,20 @@ static void midi_note(uint32_t st, uint32_t d1, uint32_t d2)
             cc_w++;
         }
         return;
+    }
+    if ((st & 0xF0u) == 0x90u && d2) {            /* a channel only one sound has (its MIDI CH): that sound, tonal */
+        uint32_t k, n = 0, ch = (st & 15u) + 1u;
+        for (k = 0, t = -1; k < NTRK; k++)
+            if (snd[k].och == ch) {
+                t = (int32_t)k;
+                n++;
+            }
+        if (n == 1u && ch != song.midi_ch) {   /* C3 (60) its own pitch, a semitone a key, three octaves each way */
+            hit_semi = (int8_t)clamp((int32_t)d1 - MIDI_ROOT, -36, 36);
+            live_hit((uint32_t)t, d2, d2 > 110u, 0);
+            hit_semi = 0;
+            return;
+        }
     }
     if (song.midi_ch && (st & 15u) + 1u != song.midi_ch)
         return;

@@ -6,7 +6,7 @@
  *           four cards, SHIFT the page's second row · MASTER volume
  *   SHIFT   GLO held (from 250 ms, or at once when another control is used while it is down). GLO tapped: the MIXER,
  *           tapped again its page 2 (PAN) and back.
- *   PAGES   a button tapped again shows its next page: HOME kit, midi (held: system) · SEQ sequencer, live pads · EDIT
+ *   PAGES   a button tapped again shows its next page: HOME kit, midi (held: system) · SEQ sequencer, live pads, tracks · EDIT
  *           synth layer, sample layer, sound mix · ENV sample layer · LFO lfo 1, lfo 2 · FX sends, drive, delay, reverb,
  *           master · SCL patterns, song · ARP note repeat (tap: on / off, held: while held) · GLO mixer, its pans ·
  *           SAVE store · REC held: quantize
@@ -15,8 +15,8 @@
  *           else the sound before / after. Both held 5 s: UBOOT.
  *   WHITE   the 16 steps of the bar shown (C#5: accents) · LIVE: F3..C4 sounds 1..8, D4..G5 the same accented ·
  *           NOTE REPEAT: F3..C4 the pads, D4..G5 the rate · SHIFT: F3..C4 mute sounds 1..8, D4..G5 solo them
- *   BLACK   F#3 sound◂ G#3 sound▸ A#3 mute C#4 solo D#4 random mute F#4 copy G#4 paste A#4 clear C#5 P-LOCK D#5 NUDGE
- *           F#5 FILL (held); SHIFT: undo redo, all on, solo off, new sound, copy / paste / clear the pattern, accent mode,
+ *   BLACK   F#3 sound◂ G#3 sound▸ A#3 mute C#4 solo D#4 random mute F#4 copy G#4 paste A#4 undo C#5 P-LOCK D#5 NUDGE
+ *           F#5 FILL (held); SHIFT: undo redo, all on, solo off, new sound, copy / paste the pattern, redo, accent mode,
  *           follow, tap tempo. P-LOCK / NUDGE: the white keys are the steps on every page (a step held + a knob: its lock /
  *           its timing); P-LOCK + REC + PLAY: the knobs write locks (motion rec)
  * Platform hooks (oc_main.c on the FM-1; host/lx_host.c): io_pressed io_held io_keys io_enc io_led_button io_led_key
@@ -54,19 +54,19 @@ static const uint16_t TRK_COL[NTRK] = {RGB(255, 96, 110), RGB(255, 170, 40), RGB
 #define C_REC RGB(255, 72, 60)
 
 enum { PG_KIT, PG_SEQ, PG_LIVE, PG_VOICE, PG_VOICE2, PG_SAMPLE, PG_SAMPLE2, PG_SND, PG_LFO1, PG_LFO2, PG_FXS, PG_FXD, PG_FXDL, PG_FXDL2, PG_FXR,
-       PG_PAT, PG_NR, PG_MIX, PG_SAVE, PG_REC, PG_INFO, PG_MIDI, PG_SONG, PG_MFX, PG_NEW, PG_ENV, PG_LEARN, PG_N };
+       PG_PAT, PG_NR, PG_MIX, PG_SAVE, PG_REC, PG_INFO, PG_MIDI, PG_SONG, PG_MFX, PG_NEW, PG_ENV, PG_LEARN, PG_TRK, PG_N };
 static const char *const PG_NAME[PG_N] = {"LUXR KIT", "SEQUENCER", "LIVE PADS", "SYNTH 1-4", "SYNTH 5-8", "SAMPLE LAYER", "SAMPLE 2",
                                           "SOUND MIX", "LFO 1", "LFO 2", "FX SENDS", "DRIVE", "DELAY", "DELAY 2", "REVERB",
                                           "PATTERNS", "NOTE REPEAT", "MIXER", "STORE", "QUANTIZE", "SYSTEM", "MIDI", "SONG",
-                                          "MASTER", "NEW PATCH", "ENVELOPE", "CC LEARN"};
+                                          "MASTER", "NEW PATCH", "ENVELOPE", "CC LEARN", "TRACKS"};
 static const uint8_t PAGE_BTN[PG_N] = {B_HOME, B_SEQ, B_SEQ, B_EDIT, B_EDIT, B_EDIT, B_EDIT, B_EDIT, B_LFO, B_LFO, B_FX, B_FX, B_FX, B_FX,
-                                       B_FX, B_SCL, B_ARP, B_GLO, B_SAVE, B_REC, B_HOME, B_HOME, B_SCL, B_FX, B_SAVE, B_ENV, B_HOME};
+                                       B_FX, B_SCL, B_ARP, B_GLO, B_SAVE, B_REC, B_HOME, B_HOME, B_SCL, B_FX, B_SAVE, B_ENV, B_HOME, B_SEQ};
 static const uint8_t PAGE_KC[PG_N] = {KC_HOME, KC_SEQ, KC_SEQ, KC_EDIT, KC_EDIT, KC_EDIT, KC_EDIT, KC_EDIT, KC_LFO, KC_LFO, KC_FX, KC_FX, KC_FX,
-                                      KC_FX, KC_FX, KC_SCL, KC_ARP, KC_GLO, KC_SAVE, KC_REC, KC_HOME, KC_HOME, KC_SCL, KC_FX, KC_SAVE, KC_ENV, KC_HOME};
+                                      KC_FX, KC_FX, KC_SCL, KC_ARP, KC_GLO, KC_SAVE, KC_REC, KC_HOME, KC_HOME, KC_SCL, KC_FX, KC_SAVE, KC_ENV, KC_HOME, KC_SEQ};
 /* a button's pages, in the order its taps show them (a button not listed: none, or its own logic) */
 typedef struct { uint8_t btn, n, pg[6]; } group_t;
 static const group_t GROUPS[] = {
-    {B_SEQ, 2, {PG_SEQ, PG_LIVE}}, {B_EDIT, 5, {PG_VOICE, PG_VOICE2, PG_SAMPLE, PG_SAMPLE2, PG_SND}},
+    {B_SEQ, 3, {PG_SEQ, PG_LIVE, PG_TRK}}, {B_EDIT, 5, {PG_VOICE, PG_VOICE2, PG_SAMPLE, PG_SAMPLE2, PG_SND}},
     {B_ENV, 1, {PG_ENV}}, {B_LFO, 2, {PG_LFO1, PG_LFO2}}, {B_FX, 6, {PG_FXS, PG_FXD, PG_FXDL, PG_FXDL2, PG_FXR, PG_MFX}},
     {B_SCL, 2, {PG_PAT, PG_SONG}}, {B_SAVE, 2, {PG_SAVE, PG_NEW}},
 };
@@ -90,6 +90,7 @@ enum {
     P_SROW, P_SPAT, P_SREP, P_SMODE, P_SLEN, P_SEND,
     P_NLEN, P_NSPD, P_NBPM, P_NGO, P_NKIT,
     P_EATK, P_EREL, P_EGATE, P_RPRE, P_LSEL, P_LDEL,
+    P_TSEL, P_TMUTE, P_TSOLO, P_TCLR, P_TALL, P_PCLR,
     P_COUNT
 };
 enum { FM_NUM, FM_PCT, FM_BIP, FM_NAME, FM_STEPS, FM_PAN, FM_X100, FM_BPM, FM_SMP, FM_PAT, FM_LOAD, FM_TONE, FM_PROB,
@@ -218,6 +219,12 @@ static const pdesc_t PD[P_COUNT] = {
     [P_RPRE] = {"PRE-DLY", FM_PRE, 0, 127, 0},
     [P_LSEL] = {"ENTRY", FM_NUM, 1, NMAP_UI, 0},
     [P_LDEL] = {"DELETE", FM_LOAD, 0, 2, 0},
+    [P_TSEL] = {"TRACK", FM_NAME, 0, NTRK - 1, TRK_NAME},
+    [P_TMUTE] = {"MUTE", FM_NAME, 0, 1, N_OFFON},
+    [P_TSOLO] = {"SOLO", FM_NAME, 0, 1, N_OFFON},
+    [P_TCLR] = {"CLEAR", FM_LOAD, 0, 2, 0},
+    [P_TALL] = {"ALL ON", FM_LOAD, 0, 2, 0},
+    [P_PCLR] = {"CLR PAT", FM_LOAD, 0, 2, 0},
 };
 /* the four cards of each page: row A, row B (SHIFT) */
 static const uint8_t PAGE_P[PG_N][8] = {
@@ -247,6 +254,7 @@ static const uint8_t PAGE_P[PG_N][8] = {
     [PG_MFX] = {P_MFLT, P_MRES, 0, 0, 0, 0, 0, 0},
     [PG_NEW] = {P_NLEN, P_NSPD, P_NBPM, P_NGO, P_NKIT, 0, 0, 0},
     [PG_ENV] = {P_EATK, P_V1, P_EREL, P_EGATE, 0, 0, 0, 0},
+    [PG_TRK] = {P_TSEL, P_TMUTE, P_TSOLO, P_TCLR, 0, P_TALL, 0, P_PCLR},
 };
 
 static struct {
@@ -1412,6 +1420,10 @@ static int32_t pget(uint32_t id)
     case P_RPRE: return song.rev_pre;
     case P_LSEL: return ui.lsel + 1;
     case P_LDEL: return 1;
+    case P_TSEL: return song.sel % NTRK;
+    case P_TMUTE: return (song.mute >> (song.sel % NTRK)) & 1u;
+    case P_TSOLO: return (song.solo >> (song.sel % NTRK)) & 1u;
+    case P_TCLR: case P_TALL: case P_PCLR: return 1;
     case P_EATK: return s->atk;
     case P_EREL: return s->rel;
     case P_EGATE: return s->gate;
@@ -1441,6 +1453,25 @@ static int32_t pget(uint32_t id)
     if (id >= P_MPAN0 && id <= P_MPAN3)
         return snd[(ui.bank * 4u + id - P_MPAN0) % NTRK].pan;
     return 0;
+}
+static void trk_action(uint32_t id)             /* TRACKS, a turn: KNOB 4 the track cleared, B: all on / the pattern cleared */
+{
+    uint32_t t = song.sel % NTRK;
+    if (id == P_TALL) {
+        song.mute = song.solo = 0;
+        ui_say("ALL ON");
+        return;
+    }
+    undo_take();
+    if (id == P_PCLR) {
+        memset(PAT->s, 0, sizeof PAT->s); memset(PAT->x, 0, sizeof PAT->x); memset(PAT->r, 0, sizeof PAT->r);
+        memset(plk[song.pat % NPAT], 0, sizeof plk[0]);
+        ui_say("PATTERN CLEARED");
+    } else {
+        memset(PAT->s[t], 0, NSTEP); memset(PAT->x[t], 0, NSTEP); memset(PAT->r[t], 0, NSTEP);
+        lock_clear(plk[song.pat % NPAT], t, 0, NSTEP);
+        ui_say("TRACK CLEARED");
+    }
 }
 static void pset(uint32_t id, int32_t v)
 {
@@ -1504,6 +1535,11 @@ static void pset(uint32_t id, int32_t v)
         }
         return;
     }
+    if (id == P_TCLR || id == P_TALL || id == P_PCLR) {   /* TRACKS: a turn clears the track / all on / clears the pattern */
+        if (v != pget(id))
+            trk_action(id);
+        return;
+    }
     if (id == P_NGO) {                           /* NEW PATCH, KNOB 4: a turn makes it */
         if (v != pget(id)) {
             patch_new(pget(P_NLEN), ui.nspd, pget(P_NBPM), ui.nkit);
@@ -1519,6 +1555,9 @@ static void pset(uint32_t id, int32_t v)
     v = clamp(v, d.min, d.max);
     switch (id) {
     case P_BPM: song.bpm = (uint8_t)v; break;
+    case P_TSEL: song.sel = (uint8_t)v; if (ui.bar >= nbars(song.sel)) ui.bar = 0; ui.rot = 0; break;
+    case P_TMUTE: song.mute = (uint8_t)((song.mute & ~(1u << t)) | ((uint32_t)v << t)); break;
+    case P_TSOLO: song.solo = (uint8_t)((song.solo & ~(1u << t)) | ((uint32_t)v << t)); break;
     case P_SWING: song.swing = (uint8_t)v; break;
     case P_TUNE: song.tune = (int8_t)v; break;
     case P_KDEC: song.ddec = (uint8_t)v; break;
@@ -1760,7 +1799,7 @@ static void pformat(uint32_t id, char *val, const char **unit)
         else { str_cpy(val, v < 0 ? "LP " : "HP ", 16); fmt_u(val + 3, (uint32_t)(v < 0 ? -v : v)); }
         break;
     case FM_PAT: if (v) { val[0] = 'P'; fmt_u(val + 1, (uint32_t)v); } else str_cpy(val, "-", 16); break;
-    case FM_LOAD: str_cpy(val, id == P_NGO || id == P_LDEL || ui.used[(uint32_t)(v - 1) % NSLOT] ? "TURN" : "EMPTY", 16); break;
+    case FM_LOAD: str_cpy(val, id == P_NGO || id == P_LDEL || id == P_TCLR || id == P_TALL || id == P_PCLR || ui.used[(uint32_t)(v - 1) % NSLOT] ? "TURN" : "EMPTY", 16); break;
     case FM_PCT: fmt_u(val, (uint32_t)v); *unit = "%"; break;
     case FM_BIP: fmt_s(val, v, 1); break;
     case FM_PAN:
@@ -1807,7 +1846,7 @@ static uint32_t key_place(uint32_t k)
     }
     return key_black(k) ? b : w;
 }
-enum { BK_PREV, BK_NEXT, BK_MUTE, BK_SOLO, BK_AUDITION /* (D#4: RANDOM MUTE) */, BK_COPY, BK_PASTE, BK_CLEAR, BK_PLOCK, BK_NUDGE, BK_FILL, BK_N };
+enum { BK_PREV, BK_NEXT, BK_MUTE, BK_SOLO, BK_AUDITION /* (D#4: RANDOM MUTE) */, BK_COPY, BK_PASTE, BK_UNDO, BK_PLOCK, BK_NUDGE, BK_FILL, BK_N };
 
 static void sel_track(int32_t t)
 {
@@ -1912,18 +1951,7 @@ static void black_key(uint32_t b)
         }
         ui_say("PASTED");
         break;
-    case BK_CLEAR:
-        undo_take();
-        if (ui.shift) {
-            memset(PAT->s, 0, sizeof PAT->s); memset(PAT->x, 0, sizeof PAT->x); memset(PAT->r, 0, sizeof PAT->r);
-            memset(plk[song.pat % NPAT], 0, sizeof plk[0]);
-            ui_say("PATTERN CLEARED");
-        } else {
-            memset(PAT->s[t], 0, NSTEP); memset(PAT->x[t], 0, NSTEP); memset(PAT->r[t], 0, NSTEP);
-            lock_clear(plk[song.pat % NPAT], t, 0, NSTEP);
-            ui_say("TRACK CLEARED");
-        }
-        break;
+    case BK_UNDO: undo_do(ui.shift); break;     /* UNDO (SHIFT: REDO); clearing: SEQ page 3, TRACKS */
     case BK_PLOCK:                               /* P-LOCK (SHIFT: the accent mode) */
         if (ui.shift) { ui.acc_mode ^= 1u; ui_say(ui.acc_mode ? "ACCENT EDIT" : "STEP EDIT"); break; }
         if (ui.lockmode == LM_LOCK && ui.wheld) {   /* steps held: their locks go */
@@ -2183,13 +2211,15 @@ static int cc_ok(uint32_t id)                    /* a parameter a controller may
     case P_LOAD: case P_QGRID: case P_QROUND: case P_EVEL: case P_EPROB: case P_EPAN: case P_ESUB: case P_EMICRO:
     case P_CLKSRC: case P_CLKOUT: case P_LEARN: case P_SROW: case P_SLEN: case P_SEND: case P_SPAT: case P_SREP:
     case P_NLEN: case P_NSPD: case P_NBPM: case P_NGO: case P_NKIT: case P_LSEL: case P_LDEL:
+    case P_TSEL: case P_TCLR: case P_TALL: case P_PCLR:
         return 0;
     }
     return 1;
 }
 static int sound_param(uint32_t id)              /* a parameter of the selected sound (a map keeps which sound) */
 {
-    return lockable(id) || (id >= P_L1DEST && id <= P_L2DEPTH) || id == P_OCH || id == P_ONOTE || id == P_SPEED;
+    return lockable(id) || (id >= P_L1DEST && id <= P_L2DEPTH) || id == P_OCH || id == P_ONOTE || id == P_SPEED ||
+           id == P_TMUTE || id == P_TSOLO;
 }
 static void cc_name(char *b, uint32_t pid, uint32_t trk, uint32_t n)
 {
@@ -3023,6 +3053,28 @@ static void g_midi(void)                         /* MIDI: the clock, each sound'
         g_label(10, (int32_t)y, b, T_DIM);
     }
 }
+static void g_tracks(void)                       /* TRACKS: the eight, their notes, mute / solo; the one selected marked */
+{
+    uint32_t t, i;
+    for (t = 0; t < NTRK; t++) {
+        int32_t y = 4 + (int32_t)t * 14, sel = t == song.sel % NTRK, on = trk_audible(t), n = 0;
+        uint16_t bg = sel ? T_RAISE : T_SURF;
+        char b[8];
+        for (i = 0; i < tlen(t); i++)
+            n += PAT->s[t][i] != 0;
+        if (sel)
+            cv_rrect(6, y - 1, 228, 14, 3, T_RAISE, T_SURF);
+        cv_rrect(10, y + 2, 8, 8, 2, on ? TRK_COL[t] : T_DIM, bg);
+        cv_text_fit(24, y + 1, &AF_S, TRK_NAME[t], on ? T_TEXT : T_DIM, bg, 70);
+        fmt_u(b, (uint32_t)n);
+        str_cat(b, n == 1 ? " NOTE" : " NOTES", sizeof b);
+        cv_text_fit(98, y + 1, &AF_S, b, n ? T_MID : T_DIM, bg, 70);
+        cv_rrect(176, y + 1, 24, 11, 3, (song.mute >> t) & 1u ? C_REC : T_LINE, bg);
+        cv_text_in(176, y + 1 + CAP_IN(S, 11), 24, &AF_S, "M", (song.mute >> t) & 1u ? T_INK : T_DIM, (song.mute >> t) & 1u ? C_REC : T_LINE);
+        cv_rrect(204, y + 1, 24, 11, 3, (song.solo >> t) & 1u ? T_ACCENT : T_LINE, bg);
+        cv_text_in(204, y + 1 + CAP_IN(S, 11), 24, &AF_S, "S", (song.solo >> t) & 1u ? T_INK : T_DIM, (song.solo >> t) & 1u ? T_ACCENT : T_LINE);
+    }
+}
 static void g_learn(void)                        /* CC LEARN: every mapping, seven at a time, the one shown marked */
 {
     uint32_t n = cc_count(), k, first = ui.lsel >= 3u ? ui.lsel - 3u : 0u;
@@ -3265,6 +3317,12 @@ static uint32_t graph_sig(void)
         return h + (uint32_t)(song.mflt + 64) * 3u + song.mres * 257u;
     if (ui.page == PG_NEW)
         return h + ui.nlen * 3u + (uint32_t)(ui.nspd + 8) * 101u + ui.nbpm * 1009u + ui.nkit * 7u;
+    if (ui.page == PG_TRK) {
+        for (t = 0; t < NTRK; t++)
+            for (i = 0; i < NSTEP; i++)
+                h = h * 3u + (PAT->s[t][i] != 0);
+        return h + song.mute * 257u + song.solo * 65537u + song.sel * 11u;
+    }
     if (ui.page == PG_LEARN) {
         for (i = 0; i < NMAP; i++)
             h = h * 7u + ccmap[i].pid * 131u + ccmap[i].cc * 3u + ccmap[i].trk;
@@ -3312,6 +3370,7 @@ static void draw_graph(int force)
     case PG_NEW: g_new(); break;
     case PG_ENV: g_env(); break;
     case PG_LEARN: g_learn(); break;
+    case PG_TRK: g_tracks(); break;
     default: g_grid(); break;
     }
     cv_blit(0, Y_GRAPH);
@@ -3329,12 +3388,13 @@ static void draw_foot(int force)
     static const khint_t H_SHIFT[3] = {{KC_K14, "ROW B"}, {KC_KEYS, "MUTE"}, {KC_PLAY, "TOP"}};
     static const khint_t H_LOCK[3] = {{KC_KEYS, "STEP"}, {KC_K14, "LOCK"}, {KC_OCTPM, "BAR"}};
     static const khint_t H_NUDGE[3] = {{KC_KEYS, "STEP"}, {KC_K1, "NUDGE"}, {KC_OCTPM, "BAR"}};
+    static const khint_t H_TRK[3] = {{KC_K1, "TRACK"}, {KC_K4, "CLEAR"}, {KC_GLO, "ROW B"}};
     char b[32];
     uint32_t sig;
     const khint_t *h = ui.shift ? H_SHIFT : ui.lockmode == LM_LOCK && ui.page != PG_SEQ && ui.page != PG_NR ? H_LOCK :
                        ui.lockmode == LM_NUDGE && ui.page != PG_NR ? H_NUDGE : ui.page == PG_SEQ ? H_SEQ : ui.page == PG_MIX ? (ui.mixpan ? H_MIXPAN : H_MIX) :
                        ui.page == PG_NR ? H_NR : ui.page == PG_SAVE ? H_SAVE : ui.page == PG_LIVE ? H_LIVE :
-                       ui.page == PG_REC ? H_REC : H_PAGE;
+                       ui.page == PG_REC ? H_REC : ui.page == PG_TRK ? H_TRK : H_PAGE;
     uint32_t gi, gn = 0, gk = 0;
     str_cpy(b, PG_NAME[ui.page % PG_N], sizeof b);
     if (ui.page == PG_MIX)
