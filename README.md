@@ -123,11 +123,11 @@ ganze Pattern. Alles Gelöschte holt A#4 (UNDO) zurück.
 
 | Taste | normal | mit SHIFT |
 |---|---|---|
-| F#3 | Sound zurück | Undo |
-| G#3 | Sound vor | Redo |
+| F#3 | **SNAPSHOT 1** halten: der gespeicherte Sound-Zustand (Kit, alle Sounds, FX, Master-Filter) klingt, solange gehalten; loslassen: zurück zum Zustand davor | Snapshot 1 speichern (der aktuelle Zustand) |
+| G#3 | **SNAPSHOT 2** (wie F#3) | Snapshot 2 speichern |
 | A#3 | Mute des Sounds | alle wieder an |
 | C#4 | Solo des Sounds | Solo aus |
-| D#4 | **RANDOM MUTE**: schaltet zufällig 1–6 der anderen Sounds stumm (der gewählte bleibt an; jeder Druck ein neuer Satz, A#3 + SHIFT holt alle zurück) | neuer (gewürfelter) Sound, ohne Anspielen |
+| D#4 | **RANDOM MUTE**: schaltet zufällig 1–6 der anderen Sounds stumm (der gewählte bleibt an; jedes Tippen ein neuer Satz); **lang halten: alle wieder an** | neuer (gewürfelter) Sound, ohne Anspielen |
 | F#4 | Takt kopieren | ganzes Pattern kopieren |
 | G#4 | Takt einfügen | ganzes Pattern einfügen |
 | A#4 | **UNDO** | **REDO** |

@@ -15,8 +15,8 @@
  *           else the sound before / after. Both held 5 s: UBOOT.
  *   WHITE   the 16 steps of the bar shown (C#5: accents) · LIVE: F3..C4 sounds 1..8, D4..G5 the same accented ·
  *           NOTE REPEAT: F3..C4 the pads, D4..G5 the rate · SHIFT: F3..C4 mute sounds 1..8, D4..G5 solo them
- *   BLACK   F#3 sound◂ G#3 sound▸ A#3 mute C#4 solo D#4 random mute F#4 copy G#4 paste A#4 undo C#5 P-LOCK D#5 NUDGE
- *           F#5 FILL (held); SHIFT: undo redo, all on, solo off, new sound, copy / paste the pattern, redo, accent mode,
+ *   BLACK   F#3 G#3 snapshot 1 / 2 (held; SHIFT: keep) A#3 mute C#4 solo D#4 random mute (held: all on) F#4 copy G#4 paste A#4 undo C#5 P-LOCK D#5 NUDGE
+ *           F#5 FILL (held); SHIFT: keep snapshot 1 2, all on, solo off, new sound, copy / paste the pattern, redo, accent mode,
  *           follow, tap tempo. P-LOCK / NUDGE: the white keys are the steps on every page (a step held + a knob: its lock /
  *           its timing); P-LOCK + REC + PLAY: the knobs write locks (motion rec)
  * Platform hooks (oc_main.c on the FM-1; host/lx_host.c): io_pressed io_held io_keys io_enc io_led_button io_led_key
@@ -280,6 +280,7 @@ static struct {
     int8_t rot;
     uint32_t hot_t, msg_t, both_t, burst_t, burst_tag, glo_t0, arp_t0, rec_t0, home_t0, tap_t, tap_n, tap_sum;
     uint8_t home_long;
+    uint32_t rm_t;                               /* D#4 down at (0: up, or its hold done) */
     uint8_t lockmode;                            /* LM_*: the white keys are steps on every page (P-LOCK, NUDGE) */
     uint8_t learn, lpid, ltrk;                   /* CC LEARN: 1 on (a knob turned arms it), 2 armed: the next CC maps */
     uint8_t scur;                                /* SONG: the row shown */
@@ -472,6 +473,12 @@ typedef struct {                                 /* the kit: LXP8's (the same by
     uint8_t lrel;
     uint8_t rsv[7];                              /* (zero) */
 } kit_rec_t;
+/* SNAPSHOTS (F#3, G#3): two sound states of the patch, the kit and the master filter; SHIFT + key keeps one, the key
+ * held plays it, let go the sound as it was. In the blob after the song ('S', which ones, each as it is). */
+typedef struct { kit_rec_t k; int8_t mflt; uint8_t mres; } ksnap_t;
+static ksnap_t snaps[2] __attribute__((section(".pool")));
+static ksnap_t snap_bak __attribute__((section(".pool")));
+static uint8_t snap_ok, snap_on;                 /* bit k: snapshot k kept; the one held + 1 (0: none) */
 typedef char kit9_fits[sizeof(kit_rec_t) == sizeof(kit8_t) + 16u ? 1 : -1];
 #define PBLOB (SLOT_SZ - 16u - (uint32_t)sizeof(kit_rec_t))
 #define PBLOB9 (0x5000u - 16u - (uint32_t)sizeof(kit_rec_t))
@@ -784,6 +791,23 @@ static int dec_blob_raw(const uint8_t *b, uint32_t n, int apply)
             srows[0].rep = 1;
         if (song.srow >= song.slen)
             song.srow = 0;
+    }
+    o += 2u * m;
+    if (apply)
+        snap_ok = snap_on = 0;
+    if (o < n && b[o] == 'S') {                  /* the snapshots */
+        NEED(2u);
+        cnt = b[o + 1u] & 3u;
+        o += 2u;
+        for (k = 0; k < 2u; k++)
+            if ((cnt >> k) & 1u) {
+                NEED(sizeof(ksnap_t));
+                if (apply)
+                    memcpy(&snaps[k], b + o, sizeof(ksnap_t));
+                o += sizeof(ksnap_t);
+            }
+        if (apply)
+            snap_ok = (uint8_t)cnt;
     }
 #undef NEED
     return 0;
@@ -1157,6 +1181,16 @@ static int pat_take(proj_t *r)                   /* the patterns, their locks, t
     for (i = 0; i < NPAT; i++)
         enc_pattern(&pat[i], plk[i]);
     enc_tail(&g, song.smode, song.slen ? song.slen : 1u, song.send, srows);
+    if (snap_ok) {                               /* (the snapshots: firmware before ignores what follows the song) */
+        bw_put('S');
+        bw_put(snap_ok);
+        for (i = 0; i < 2u; i++)
+            if ((snap_ok >> i) & 1u) {
+                uint32_t k;
+                for (k = 0; k < sizeof(ksnap_t); k++)
+                    bw_put(((const uint8_t *)&snaps[i])[k]);
+            }
+    }
     return enc_end(r);
 }
 static void proj_save(uint32_t slot, uint32_t what)   /* SW_ALL, or the kit / the patterns into what the slot has */
@@ -1165,6 +1199,8 @@ static void proj_save(uint32_t slot, uint32_t what)   /* SW_ALL, or the kit / th
     int had = what != SW_ALL && !proj_read(slot);
     if (what != SW_PAT || !had)
         kit_take(&r->k);
+    if (snap_on)                                 /* (a snapshot held: the sound as it is underneath) */
+        r->k = snap_bak.k;
     if ((what != SW_KIT || !had) && pat_take(r)) {
         ui_say("PATCH TOO FULL");
         return;
@@ -2022,7 +2058,7 @@ static uint32_t key_place(uint32_t k)
     }
     return key_black(k) ? b : w;
 }
-enum { BK_PREV, BK_NEXT, BK_MUTE, BK_SOLO, BK_AUDITION /* (D#4: RANDOM MUTE) */, BK_COPY, BK_PASTE, BK_UNDO, BK_PLOCK, BK_NUDGE, BK_FILL, BK_N };
+enum { BK_SNAP1, BK_SNAP2, BK_MUTE, BK_SOLO, BK_AUDITION /* (D#4: RANDOM MUTE) */, BK_COPY, BK_PASTE, BK_UNDO, BK_PLOCK, BK_NUDGE, BK_FILL, BK_N };
 
 static void sel_track(int32_t t)
 {
@@ -2052,8 +2088,31 @@ static void black_key(uint32_t b)
     uint32_t t = song.sel % NTRK;
     char m[28];
     switch (b) {
-    case BK_PREV: if (ui.shift) undo_do(0); else sel_track((int32_t)t - 1); break;
-    case BK_NEXT: if (ui.shift) undo_do(1); else sel_track((int32_t)t + 1); break;
+    case BK_SNAP1: case BK_SNAP2: {              /* SNAPSHOT: SHIFT keeps the sound now; held: the one kept, let go: back */
+        uint32_t k = b - BK_SNAP1;
+        str_cpy(m, "SNAPSHOT ", sizeof m);
+        fmt_u(m + str_len(m), k + 1u);
+        if (ui.shift) {
+            if (snap_on) { ui_say("LET GO THE SNAPSHOT FIRST"); break; }
+            kit_take(&snaps[k].k);
+            snaps[k].mflt = song.mflt;
+            snaps[k].mres = song.mres;
+            snap_ok |= (uint8_t)(1u << k);
+            str_cat(m, " KEPT", sizeof m);
+        } else if (!((snap_ok >> k) & 1u)) {
+            str_cat(m, " EMPTY (SHIFT: KEEP)", sizeof m);
+        } else if (!snap_on) {
+            kit_take(&snap_bak.k);
+            snap_bak.mflt = song.mflt;
+            snap_bak.mres = song.mres;
+            kit_put(&snaps[k].k);
+            song.mflt = snaps[k].mflt;
+            song.mres = snaps[k].mres;
+            snap_on = (uint8_t)(k + 1u);
+        }
+        ui_say(m);
+        break;
+    }
     case BK_MUTE:
         if (ui.shift) { song.mute = 0; ui_say("ALL ON"); }
         else { song.mute ^= (uint8_t)(1u << t); ui_say((song.mute >> t) & 1u ? "MUTED" : "UNMUTED"); }
@@ -2069,6 +2128,9 @@ static void black_key(uint32_t b)
             ui_say("NEW SOUND");
             break;
         }
+        ui.rm_t = fm1_ms | 1u;                   /* (tapped: let go; held long: all on, black_hold) */
+        break;
+    case BK_N:                                   /* (RANDOM MUTE, let go after a tap) */
         {
             uint32_t mk, k, n, tries = 0;
             do {                                 /* 1 .. 6 of the other seven, never the same set twice in a row */
@@ -2648,6 +2710,11 @@ static void ui_input(void)
         if (fm1_ms - ui.arp_t0 >= HOLD_MS || ui.arp_from)
             go_page(ui.back == PG_NR ? PG_SEQ : ui.back);
     }
+    if (ui.rm_t && fm1_ms - ui.rm_t >= 600u) {   /* D#4 held: all on again */
+        ui.rm_t = 0;
+        song.mute = song.solo = 0;
+        ui_say("ALL ON");
+    }
     /* the keys */
     for (k = 0; k < 27u; k++) {
         uint32_t bit = 1u << k, w = key_place(k);
@@ -2658,6 +2725,16 @@ static void ui_input(void)
                 black_key(w);
             else if (w == BK_FILL)               /* FILL: let go */
                 song.fill = 0;
+            else if (w == BK_AUDITION && ui.rm_t) {   /* D#4 tapped: RANDOM MUTE */
+                ui.rm_t = 0;
+                black_key(BK_N);
+            }
+            else if (snap_on == w + 1u && w <= BK_SNAP2) {   /* SNAPSHOT let go: the sound as it was */
+                kit_put(&snap_bak.k);
+                song.mflt = snap_bak.mflt;
+                song.mres = snap_bak.mres;
+                snap_on = 0;
+            }
         } else {
             white_key(w, (kd & bit) != 0u);
         }
@@ -2788,7 +2865,8 @@ static void ui_leds(void)
         uint32_t w = key_place(k);
         int on = 0;
         if (key_black(k)) {
-            on = (w == BK_MUTE && ((song.mute >> t) & 1u)) || (w == BK_SOLO && ((song.solo >> t) & 1u)) ||
+            on = (w <= BK_SNAP2 && (snap_on == w + 1u ? blink : (snap_ok >> w) & 1u)) ||
+                 (w == BK_MUTE && ((song.mute >> t) & 1u)) || (w == BK_SOLO && ((song.solo >> t) & 1u)) ||
                  (w == BK_PLOCK && (ui.shift ? ui.acc_mode : ui.lockmode == LM_LOCK)) ||
                  (w == BK_NUDGE && (ui.shift ? ui.follow : ui.lockmode == LM_NUDGE)) ||
                  (w == BK_FILL && (ui.shift ? song.playing && song.pstep % 4u == 0u && song.pos < FS / 20u : song.fill));

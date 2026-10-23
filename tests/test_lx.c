@@ -326,10 +326,36 @@ int main(int argc, char **argv)
     shift_key(key_blk(BK_PLOCK));
     snprintf(path, sizeof path, "%s/lx_seq.ppm", dir);
     host_ppm(path);
-    /* black keys: sound, mute, copy / paste, clear, undo */
-    host_key(key_blk(BK_NEXT));
-    CHECK(song.sel == 6u, "G#3: the next sound");
-    host_key(key_blk(BK_PREV));
+    /* black keys: snapshots, mute, copy / paste, undo */
+    {                                            /* SNAPSHOT 1: SHIFT keeps the sound; held: back to it; let go: as before */
+        uint8_t lv0 = snd[5].level;
+        int8_t mf0 = song.mflt;
+        snd[5].level = 40;
+        song.mflt = -30;
+        shift_key(key_blk(BK_SNAP1));
+        CHECK(snap_ok == 1u, "SHIFT + F#3: snapshot 1 kept");
+        snd[5].level = 90;
+        song.mflt = 0;
+        h_keys |= key_blk(BK_SNAP1);
+        host_run(100, 0, 0);
+        CHECK(snap_on == 1u && snd[5].level == 40u && song.mflt == -30, "F#3 held: snapshot 1 plays (%u %d)", snd[5].level, song.mflt);
+        h_keys &= ~key_blk(BK_SNAP1);
+        host_run(40, 0, 0);
+        CHECK(!snap_on && snd[5].level == 90u && song.mflt == 0, "let go: the sound as before (%u %d)", snd[5].level, song.mflt);
+        host_key(key_blk(BK_SNAP2));
+        CHECK(!snap_on && snd[5].level == 90u, "G#3: snapshot 2 empty, nothing changes");
+        proj_save(13, SW_ALL);
+        snap_ok = 0;
+        CHECK(!proj_load(13, SW_ALL) && snap_ok == 1u && snaps[0].k.s[5].level == 40u && snaps[0].mflt == -30,
+              "the snapshot kept with the patch");
+        memset(h_store + ST_PROJ(13), 0xFF, SLOT_SZ);   /* (the store as it was for the tests after) */
+        ui.used[13] = 0;
+        ui.slot = ui.patch = 0;
+        ui.loaded = 0;
+        settings_save();
+        snd[5].level = lv0;
+        song.mflt = mf0;
+    }
     host_key(key_blk(BK_MUTE));
     CHECK((song.mute >> 5) & 1u, "A#3: mute");
     host_key(key_blk(BK_MUTE));
@@ -1417,6 +1443,14 @@ int main(int argc, char **argv)
         }
         shift_key(key_blk(BK_MUTE));
         CHECK(!song.mute, "SHIFT + A#3: all on again");
+        host_key(key_blk(BK_AUDITION));
+        m0 = song.mute;
+        h_keys |= key_blk(BK_AUDITION);          /* D#4 held long: all on, no new set when let go */
+        host_run(800, 0, 0);
+        CHECK(m0 && !song.mute, "D#4 held: all on again (%02X)", m0);
+        h_keys &= ~key_blk(BK_AUDITION);
+        host_run(40, 0, 0);
+        CHECK(!song.mute, "let go after the hold: still all on");
     }
     host_boot(36);
     {                                            /* the white keys on STORE, PATTERNS, SONG: no sounds, the page's choices */
