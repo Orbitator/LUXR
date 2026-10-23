@@ -1678,6 +1678,17 @@ int main(int argc, char **argv)
         song.lceil = 0;
         CHECK(!proj_load(2, SW_ALL) && song.cthr == 9u && song.crat == 3u && song.catk == 40u && song.crel == 70u && song.cmak == 5u &&
               song.clim == 1u && song.lceil == -4 && song.lrel == 90u, "the compressor and the limiter kept with the kit");
+        song.mflt = -20; song.mres = 80;
+        proj_save(2, SW_ALL);
+        song.mflt = 30; song.mres = 5;
+        CHECK(!proj_load(2, SW_ALL) && song.mflt == -20 && song.mres == 80u, "the master filter kept with the kit (%d %u)", song.mflt, song.mres);
+        {
+            kit_rec_t k;
+            kit_take(&k);
+            k.mf_ok = 0;                         /* (a kit before: the filter open) */
+            kit_put(&k);
+            CHECK(song.mflt == 0 && song.mres == 30u, "a kit without it: the filter open");
+        }
         memset(h_store, 0xFF, sizeof h_store);
     }
     {                                            /* the battery: RAW 620 full (~4.15 V), the curve, USB, the time left */

@@ -471,7 +471,9 @@ typedef struct {                                 /* the kit: LXP8's (the same by
     uint8_t cthr, crat, catk, crel, cmak, clim;   /* the compressor, the limiter (LXPA; zero before: both off) */
     int8_t lceil;                                /* .. its ceiling, its release */
     uint8_t lrel;
-    uint8_t rsv[7];                              /* (zero) */
+    int8_t mflt;                                 /* the master filter, its resonance; mf_ok 1: they are there (0: a kit before) */
+    uint8_t mres, mf_ok;
+    uint8_t rsv[4];                              /* (zero) */
 } kit_rec_t;
 /* SNAPSHOTS (F#3, G#3): two sound states of the patch, the kit and the master filter; SHIFT + key keeps one, the key
  * held plays it, let go the sound as it was. In the blob after the song ('S', which ones, each as it is). */
@@ -1144,6 +1146,7 @@ static void kit_take(kit_rec_t *k)
     k->rev_pre = song.rev_pre;
     k->cthr = song.cthr; k->crat = song.crat; k->catk = song.catk; k->crel = song.crel; k->cmak = song.cmak;
     k->clim = song.clim; k->lceil = song.lceil; k->lrel = song.lrel;
+    k->mflt = song.mflt; k->mres = song.mres; k->mf_ok = 1;
     memset(k->rsv, 0, sizeof k->rsv);
 }
 static void kit_put(const kit_rec_t *k)
@@ -1177,6 +1180,8 @@ static void kit_put(const kit_rec_t *k)
     song.cthr = (uint8_t)(k->cthr <= 40u ? k->cthr : 0u); song.crat = k->crat & 7u; song.catk = k->catk & 127u;
     song.crel = k->crel & 127u; song.cmak = (uint8_t)(k->cmak <= 24u ? k->cmak : 0u); song.clim = k->clim & 1u;
     song.lceil = (int8_t)clamp(k->lceil, -12, 0);
+    song.mflt = k->mf_ok ? (int8_t)clamp(k->mflt, -64, 63) : 0;   /* (a kit before: the filter open, as it was) */
+    song.mres = k->mf_ok ? (uint8_t)(k->mres & 127u) : 30u;
     song.lrel = (uint8_t)(k->lrel || k->clim ? k->lrel & 127u : 40u);   /* (a kit before the limiter's page: its default) */
 }
 static int pat_take(proj_t *r)                   /* the patterns, their locks, the song into r's blob (0 = it fits) */
@@ -1483,6 +1488,7 @@ static void kit_factory(void)
     song.rev_size = 50; song.rev_damp = 40; song.rev_lvl = 90; song.rev_pre = 0;
     song.cthr = 12; song.crat = 0; song.catk = 30; song.crel = 50; song.cmak = 0; song.clim = 0;   /* (1:1, no limiter: the sound as before) */
     song.lceil = 0; song.lrel = 40;
+    song.mflt = 0; song.mres = 30;
 }
 /* NEW PATCH: stopped, 16 empty patterns of len steps at speed spd, the tempo, no song; the factory kit or (keep) the
  * one there. Nothing is saved: SAVE puts it in a slot. */
