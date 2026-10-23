@@ -1325,6 +1325,41 @@ int main(int argc, char **argv)
         shift_key(key_blk(BK_MUTE));
         CHECK(!song.mute, "SHIFT + A#3: all on again");
     }
+    host_boot(36);
+    {                                            /* the white keys on STORE, PATTERNS, SONG: no sounds, the page's choices */
+        reset_count();
+        host_tap(B_SAVE);
+        host_key(key_white(5));
+        host_run(200, watch, 0);
+        CHECK(ui.slot == 5u && hits[5] == 0u, "STORE: key 6 chooses slot 6, no sound (%u)", ui.slot);
+        host_tap(B_SCL);
+        CHECK(ui.page == PG_PAT, "SCL: PATTERNS");
+        host_key(key_white(3));
+        CHECK(song.pat == 3u && song.chain == 1u, "PATTERNS: key 4, pattern 4 alone");
+        h_keys |= key_white(1);                  /* key 2 held, key 5: the chain 2-5 */
+        host_run(60, 0, 0);
+        h_keys |= key_white(4);
+        host_run(60, 0, 0);
+        h_keys = 0;
+        host_run(60, watch, 0);
+        CHECK(song.chain0 == 1u && song.chain == 4u && song.pat == 1u && hits[0] == 0u, "keys 2 + 5: chain 2-5 (%u %u)", song.chain0 + 1u,
+              song.chain);
+        seq_play(1);
+        host_run(2000 * 2 + 500, 0, 0);
+        CHECK(song.pat == 3u, "the chain plays on: pattern 4 in bar 3 (%u)", song.pat + 1u);
+        seq_play(0);
+        host_run(40, 0, 0);
+        host_tap(B_SCL);
+        CHECK(ui.page == PG_SONG, "SCL again: SONG");
+        host_key(key_white(0)); host_key(key_white(2)); host_key(key_white(2)); host_key(key_white(6));
+        CHECK(song.slen == 4u && srows[0].pat == 0u && srows[1].pat == 2u && srows[2].pat == 2u && srows[3].pat == 6u && song.smode,
+              "SONG: keys 1 3 3 7 make the song P1 P3 P3 P7, song on");
+        host_tap(B_SCL); host_tap(B_SCL);        /* back to SONG: the next key starts a new song */
+        host_key(key_white(9));
+        CHECK(song.slen == 1u && srows[0].pat == 9u, "back on SONG: a new song from the first key");
+        snprintf(path, sizeof path, "%s/lx_song.ppm", dir);
+        host_ppm(path);
+    }
     host_boot(33);
     host_tap(B_SEQ);
     {                                            /* the screens of every page (doc/screens) */

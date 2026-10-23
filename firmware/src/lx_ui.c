@@ -252,6 +252,8 @@ static struct {
     uint8_t learn, lpid, ltrk;                   /* CC LEARN: 1 on (a knob turned arms it), 2 armed: the next CC maps */
     uint8_t scur;                                /* SONG: the row shown */
     uint8_t nlen, nbpm, nkit;                    /* NEW PATCH: its length, tempo, kit (factory / kept) */
+    uint8_t pkey;                                /* PATTERNS: the pattern key held + 1 (a second key: a chain) */
+    uint8_t sfresh;                              /* SONG: the next key starts a new song (on entering the page) */
     int8_t nspd;                                 /* .. its tracks' speed */
     uint8_t restoring, rs_slot, rs_done;         /* patches coming in over USB (the update page): the loading screen */
     uint32_t rs_off, rs_t;
@@ -1656,8 +1658,11 @@ static void go_page(uint32_t pg)
     }
     if (pg != ui.page)
         ui.back = ui.page;
+    if (pg == PG_SONG && ui.page != PG_SONG)
+        ui.sfresh = 1;
     ui.page = (uint8_t)pg;
     ui.rot = 0;
+    ui.pkey = 0;
 }
 static void black_key(uint32_t b)
 {
@@ -1807,6 +1812,81 @@ static void black_key(uint32_t b)
         break;
     }
 }
+/* the white keys on STORE, PATTERNS and SONG: no sounds there, the page's own choices */
+static void page_key(uint32_t w, int down)
+{
+    char m[28];
+    if (ui.page == PG_SAVE) {                    /* key k: slot k (1..14) */
+        if (down && w < NSLOT) {
+            ui.slot = (uint8_t)w;
+            str_cpy(m, "SLOT ", sizeof m);
+            fmt_u(m + str_len(m), w + 1u);
+            str_cat(m, ui.used[w] ? " (IN USE)" : " (EMPTY)", sizeof m);
+            ui_say(m);
+        }
+        return;
+    }
+    if (ui.page == PG_PAT) {                     /* key k: pattern k alone; a second key while one is held: the chain
+                                                  * from the lower to the higher (2 and 5: 2 3 4 5) */
+        if (!down) {
+            if (ui.pkey == w + 1u)
+                ui.pkey = 0;
+            return;
+        }
+        if (ui.pkey && ui.pkey != w + 1u) {
+            uint32_t a = ui.pkey - 1u, lo = a < w ? a : w, hi = a < w ? w : a;
+            song.chain0 = (uint8_t)lo;
+            song.chain = (uint8_t)(hi - lo + 1u);
+            if (song.playing) {
+                if (song.pat < lo || song.pat > hi)
+                    song.pat_next = (uint8_t)lo;  /* (from the chain's first at the pattern's end) */
+                else
+                    song.pat_next = 0xFF;
+            } else {
+                song.pat = (uint8_t)lo;
+                song.pat_next = 0xFF;
+            }
+            str_cpy(m, "CHAIN ", sizeof m);
+            fmt_u(m + str_len(m), lo + 1u);
+            str_cat(m, "-", sizeof m);
+            fmt_u(m + str_len(m), hi + 1u);
+            ui_say(m);
+            return;
+        }
+        ui.pkey = (uint8_t)(w + 1u);
+        song.chain = 1;
+        pset(P_PAT, (int32_t)w + 1);             /* (playing: cued for the pattern's end) */
+        song.chain0 = (uint8_t)w;
+        ui_say(song.playing ? "PATTERN CUED" : "PATTERN");
+        return;
+    }
+    if (ui.page == PG_SONG) {                    /* key k after key k: the song's rows in that order (the first key on
+                                                  * this page starts a new song) */
+        if (!down)
+            return;
+        if (ui.sfresh || !song.slen) {
+            ui.sfresh = 0;
+            song.slen = 0;
+            song.srow = song.srep = 0;
+        }
+        if (song.slen >= NSONG) {
+            ui_say("SONG FULL (32 ROWS)");
+            return;
+        }
+        srows[song.slen].pat = (uint8_t)w;
+        srows[song.slen].rep = 1;
+        ui.scur = song.slen;
+        song.slen++;
+        song.smode = 1;
+        str_cpy(m, "ROW ", sizeof m);
+        fmt_u(m + str_len(m), song.slen);
+        str_cat(m, ": P", sizeof m);
+        fmt_u(m + str_len(m), w + 1u);
+        ui_say(m);
+        return;
+    }
+    (void)w;                                     /* (NEW PATCH: the keys do nothing) */
+}
 static void white_key(uint32_t w, int down)
 {
     uint32_t t = song.sel % NTRK, idx;
@@ -1818,6 +1898,10 @@ static void white_key(uint32_t w, int down)
         } else if (down) {
             nr.rate = (uint8_t)(w - 8u);
         }
+        return;
+    }
+    if (!ui.shift && (ui.page == PG_SAVE || ui.page == PG_NEW || ui.page == PG_PAT || ui.page == PG_SONG)) {
+        page_key(w, down);                       /* (STORE: the slots; PATTERNS: patterns and chains; SONG: its rows) */
         return;
     }
     if (ui.page != PG_SEQ && !ui.lockmode && !ui.shift) {   /* off SEQ (LIVE and every other page): the eight sounds at once,
@@ -2284,6 +2368,20 @@ static void ui_leds(void)
                  (w == BK_PLOCK && (ui.shift ? ui.acc_mode : ui.lockmode == LM_LOCK)) ||
                  (w == BK_NUDGE && (ui.shift ? ui.follow : ui.lockmode == LM_NUDGE)) ||
                  (w == BK_FILL && (ui.shift ? song.playing && song.pstep % 4u == 0u && song.pos < FS / 20u : song.fill));
+        } else if (!ui.shift && ui.page == PG_SAVE) {   /* the slots: lit in use, the one chosen blinking */
+            on = w < NSLOT && (w == ui.slot ? blink : ui.used[w]);
+        } else if (!ui.shift && ui.page == PG_PAT) {    /* the patterns: lit in the chain, the one playing blinking */
+            on = (w + NPAT - song.chain0) % NPAT < song.chain;
+            if (w == song.pat)
+                on = blink;
+        } else if (!ui.shift && ui.page == PG_SONG) {   /* the patterns the song uses, the one playing blinking */
+            uint32_t r;
+            for (r = 0; r < song.slen && r < NSONG && !on; r++)
+                on = srows[r].pat == w;
+            if (song.playing && song.smode && w == song.pat)
+                on = blink;
+        } else if (!ui.shift && ui.page == PG_NEW) {
+            on = 0;
         } else if (ui.page == PG_NR) {
             on = w < 8u ? (((nr.held | nr.latched | flash) >> w) & 1u) != 0u : w - 8u == nr.rate;
         } else if (ui.shift) {

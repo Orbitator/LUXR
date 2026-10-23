@@ -79,12 +79,12 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | FX (4.) | DELAY 2 | Ton, Pegel | |
 | FX (5.) | REVERB (global, im Kit) | Größe (Nachhallzeit), Dämpfung, Pegel – ein Plate-Hall nach Dattorro | |
 | FX (6.) | **MASTER** | Filter (links der Mitte Tiefpass, rechts Hochpass, Mitte aus), Resonanz – per CC anlernbar, nicht gespeichert | |
-| SCL | PATTERNS | Pattern (spielend: wechselt am Pattern-Ende), Chain (spielt N Patterns nacheinander), **Copy** (ein Dreh kopiert das angezeigte Pattern), **Paste** (ein Dreh fügt es ins angezeigte Pattern ein) | |
-| SCL (2.) | **SONG** | Zeile (1–32), ihr Pattern, ihre Wiederholungen (1–16), Song an / aus | Anzahl Zeilen, am Ende: LOOP / STOP |
+| SCL | PATTERNS | Pattern (spielend: wechselt am Pattern-Ende), Chain (spielt N Patterns nacheinander), **Copy** (ein Dreh kopiert das angezeigte Pattern), **Paste** (ein Dreh fügt es ins angezeigte Pattern ein). **Weiße Tasten:** Taste k = Pattern k; eine Taste halten und eine zweite drücken = Chain vom kleineren bis zum größeren (2 + 5: 2-3-4-5) | |
+| SCL (2.) | **SONG** | Zeile (1–32), ihr Pattern, ihre Wiederholungen (1–16), Song an / aus. **Weiße Tasten:** nacheinander gedrückt ergeben sie die Zeilen des Songs (die erste Taste nach dem Öffnen der Seite beginnt einen neuen Song, SONG geht an) | Anzahl Zeilen, am Ende: LOOP / STOP |
 | ARP | NOTE REPEAT | Rate, Velocity, Vel-Modus (fest, steigend, fallend, zufällig), Latch | Humanize |
 | GLO (tippen) | MIXER, Seite 1 | Lautstärke der vier Sounds der Bank | Pan der vier Sounds |
 | GLO (nochmal tippen) | MIXER, Seite 2: PAN | Pan der vier Sounds der Bank (L64 … C … R63) | Lautstärke |
-| SAVE | STORE | Platz 1–14, **was gespeichert wird** (KIT+PAT, nur KIT, nur PATTERN – OCT+ speichert), **was geladen wird** (KIT+PAT, nur KIT, nur PATTERN), **LOAD** (ein Dreh lädt den Platz; ein leerer Platz gibt ein neues, leeres Patch) | |
+| SAVE | STORE | **Weiße Tasten 1–14 wählen den Platz.** Platz 1–14, **was gespeichert wird** (KIT+PAT, nur KIT, nur PATTERN – OCT+ speichert), **was geladen wird** (KIT+PAT, nur KIT, nur PATTERN), **LOAD** (ein Dreh lädt den Platz; ein leerer Platz gibt ein neues, leeres Patch) | |
 | SAVE (2.) | **NEW PATCH** | Länge (1–64 Steps), Speed (1/8X … 2X), Tempo, **CREATE** (ein Dreh legt das neue Patch an: 16 leere Patterns, Wiedergabe gestoppt, noch nicht gespeichert) | Kit: FACTORY (Werkssounds und FX) oder KEEP (das aktuelle bleibt) |
 | REC (halten) | **QUANTIZE** | Raster (1/16, 1/8, 1/4), Richtung (zum nächsten Rasterpunkt / zum vorherigen), Metronom (aus, bei Aufnahme, an) | |
 
