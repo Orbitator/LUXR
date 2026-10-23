@@ -2475,12 +2475,56 @@ static void cc_in(uint32_t ch, uint32_t cc, uint32_t val)
     }
 }
 
+/* the battery: PB1's divider, calibrated on a full cell (about 4.15 V while playing = RAW 620: 6.694 mV a step); its
+ * charge from a Li-ion curve under load; the time left from how fast it has fallen since the last charge */
+#define BATT_UV 6694u                            /* microvolts an ADC step */
+static struct { uint32_t mv, t, t0, pq, p0q; uint8_t ok, usb, warn; } bt;
+static const uint16_t BATT_MV[11] = {3450, 3600, 3670, 3710, 3750, 3790, 3840, 3900, 3970, 4050, 4150};   /* 0, 10 .. 100 % */
+static uint32_t batt_pq(uint32_t mv)             /* the charge in per mille */
+{
+    uint32_t k;
+    if (mv <= BATT_MV[0]) return 0;
+    for (k = 1; k < 11u; k++)
+        if (mv < BATT_MV[k])
+            return (k - 1u) * 100u + (mv - BATT_MV[k - 1u]) * 100u / (BATT_MV[k] - BATT_MV[k - 1u]);
+    return 1000;
+}
+static void batt_tick(void)                      /* once a second (the main loop) */
+{
+    int32_t raw;
+    if (bt.ok && fm1_ms - bt.t < 1000u)
+        return;
+    bt.t = fm1_ms;
+    raw = io_batt();
+    if (raw < 0)
+        return;
+    bt.mv = bt.ok ? (bt.mv * 15u + (uint32_t)raw * BATT_UV / 1000u) / 16u : (uint32_t)raw * BATT_UV / 1000u;   /* (~16 s) */
+    bt.ok = 1;
+    bt.usb = bt.mv > (bt.usb ? 4250u : 4300u);   /* (more than a cell gives: USB, charging) */
+    bt.pq = batt_pq(bt.mv);
+    if (bt.usb || !bt.t0 || bt.pq > bt.p0q) {    /* the measuring starts again: charged, or the level up */
+        bt.t0 = fm1_ms | 1u;
+        bt.p0q = bt.pq;
+    }
+    if (!bt.usb && bt.pq <= 100u && !bt.warn) {
+        bt.warn = 1;
+        ui_say("BATTERY LOW");
+    }
+    if (bt.pq > 150u)
+        bt.warn = 0;
+}
+static uint32_t batt_left(void)                  /* minutes left (0: not known yet: 5 min and 1 % fallen at least) */
+{
+    uint32_t dt = (fm1_ms - bt.t0) / 60000u, dp = bt.p0q - bt.pq;
+    return bt.usb || dt < 5u || dp < 10u ? 0u : bt.pq * dt / dp + 1u;
+}
 static void ui_input(void)
 {
     uint32_t p = io_pressed(), held = io_held(), keys = io_keys(), released = ui.held_prev & ~held, kd, ku, k, b;
     int32_t e[NE], any = 0;
     uint32_t glo = (held >> B_GLO) & 1u, stepmode;
     ui.held_prev = held;
+    batt_tick();
     for (k = 0; k < NE; k++)
         any |= e[k] = io_enc(k);
     kd = keys & ~ui.keys;
@@ -3173,23 +3217,39 @@ static void g_info(void)                         /* SYSTEM: the version, the mem
     fmt_u(b + str_len(b), song.cpu_q8 * 100u / 256u);
     str_cat(b, " %", sizeof b);
     g_label(10, 44, b, T_TEXT);
-    if (bat >= 0) {                              /* (a divider of 1:2 at 3.3 V assumed: not calibrated) */
-        uint32_t mv = (uint32_t)bat * 6600u / 1023u;
-        str_cpy(b, "BATTERY ~", sizeof b);
-        fmt_u(b + str_len(b), mv / 1000u);
-        str_cat(b, ".", sizeof b);
-        fmt_u(b + str_len(b), mv / 100u % 10u);
-        fmt_u(b + str_len(b), mv / 10u % 10u);
-        str_cat(b, " V (RAW ", sizeof b);
-        fmt_u(b + str_len(b), (uint32_t)bat);
-        str_cat(b, ")", sizeof b);
-    } else {
+    (void)bat;
+    if (!bt.ok) {
         str_cpy(b, "BATTERY: NOT READABLE", sizeof b);
+    } else if (bt.usb) {
+        str_cpy(b, "BATTERY: USB, CHARGING", sizeof b);
+    } else {                                     /* the charge, the voltage */
+        str_cpy(b, "BATTERY ", sizeof b);
+        fmt_u(b + str_len(b), (bt.pq + 5u) / 10u);
+        str_cat(b, " %  ", sizeof b);
+        fmt_u(b + str_len(b), bt.mv / 1000u);
+        str_cat(b, ".", sizeof b);
+        fmt_u(b + str_len(b), bt.mv / 100u % 10u);
+        fmt_u(b + str_len(b), bt.mv / 10u % 10u);
+        str_cat(b, " V", sizeof b);
     }
-    g_label(10, 58, b, T_TEXT);
+    g_label(10, 58, b, bt.ok && !bt.usb && bt.pq <= 100u ? C_REC : T_TEXT);
     g_label(10, 76, "LXR-STYLE DRUMS FOR THE M-VAVE FM-1", T_MID);
     g_label(10, 90, "MADE BY HOLODECK-AUDIOTOOLS.COM", T_ACCENT);
-    g_label(10, 104, "BATTERY: ESTIMATE, NOT CALIBRATED", T_DIM);
+    if (bt.ok && !bt.usb) {                      /* the time left: from the fall since the last charge */
+        uint32_t m = batt_left();
+        if (m) {
+            str_cpy(b, "TIME LEFT ABOUT ", sizeof b);
+            if (m >= 60u) {
+                fmt_u(b + str_len(b), m / 60u);
+                str_cat(b, " H ", sizeof b);
+            }
+            fmt_u(b + str_len(b), m % 60u);
+            str_cat(b, " MIN", sizeof b);
+        } else {
+            str_cpy(b, "TIME LEFT: MEASURING ...", sizeof b);
+        }
+        g_label(10, 104, b, T_DIM);
+    }
 }
 static void g_midi(void)                         /* MIDI: the clock, each sound's note out, the CC map */
 {
@@ -3523,7 +3583,7 @@ static uint32_t graph_sig(void)
     if (ui.page == PG_REC)
         return h + song.qgrid * 11u + song.qround * 101u + song.click * 1009u;
     if (ui.page == PG_INFO)
-        return h + fm1_ms / 1000u;                /* (the load, the battery: once a second) */
+        return h + fm1_ms / 1000u + bt.mv;        /* (the load, the battery: once a second) */
     if (ui.page == PG_MIDI) {
         for (i = 0; i < NMAP; i++)
             h = h * 7u + ccmap[i].pid * 131u + ccmap[i].cc;

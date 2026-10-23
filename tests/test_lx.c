@@ -1634,6 +1634,22 @@ int main(int argc, char **argv)
               song.clim == 1u && song.lceil == -4 && song.lrel == 90u, "the compressor and the limiter kept with the kit");
         memset(h_store, 0xFF, sizeof h_store);
     }
+    {                                            /* the battery: RAW 620 full (~4.15 V), the curve, USB, the time left */
+        uint32_t k;
+        h_batt = 620;
+        bt.ok = 0;
+        bt.t = 0;
+        batt_tick();
+        CHECK(bt.mv >= 4140u && bt.mv <= 4160u && batt_pq(bt.mv) >= 990u && !bt.usb, "RAW 620: %u mV, %u %%", bt.mv, batt_pq(bt.mv) / 10u);
+        CHECK(batt_pq(3790) == 500u && batt_pq(3400) == 0u && batt_pq(4300) == 1000u, "the curve: 3.79 V half, 3.45 V empty");
+        h_batt = 764;                            /* (USB: the charger's voltage) */
+        for (k = 0; k < 40u; k++) { bt.t = fm1_ms - 1000u; batt_tick(); }
+        CHECK(bt.usb, "RAW 764: USB, charging (%u mV)", bt.mv);
+        bt.usb = 0; bt.t0 = fm1_ms - 30u * 60000u; bt.p0q = 900; bt.pq = 750;   /* 15 % in 30 min: 75 % = 2.5 h */
+        CHECK(batt_left() >= 149u && batt_left() <= 151u, "time left: %u min", batt_left());
+        h_batt = 612;
+        bt.ok = 0;
+    }
     host_boot(39);
     {                                            /* the metronome audible; the reverb's pre-delay; new sounds: no sends */
         double e = 0, w0 = 0, w1 = 0;

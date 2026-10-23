@@ -69,7 +69,7 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | HOME | KIT | Tempo, Swing, Tune (alle), Decay (alle) | MIDI-Kanal, Theme, Version |
 | HOME (2.) | **MIDI** | Clock (INT / EXT), Clock Out (aus / an), Ausgabekanal des Sounds (OFF, 1–16), seine Note | MIDI-IN-Kanal |
 | HOME (3.) | **CC LEARN** | LEARN (OFF, ON, CLEAR), Eintrag (blättert durch die Liste aller Zuordnungen, die das Bild zeigt), DELETE (ein Dreh löscht den gewählten Eintrag) | |
-| HOME (halten) | **SYSTEM** (ohne Kopfzeile, oben das LUXR-Logo) | Version, belegte Plätze und freier Speicher, Audio-Last, Akkuspannung (geschätzt, unkalibriert), About | |
+| HOME (halten) | **SYSTEM** (ohne Kopfzeile, oben das LUXR-Logo) | Version, belegte Plätze und freier Speicher, Audio-Last, Akku in % und Volt (kalibriert: voll ≈ 4,15 V beim Spielen), mit USB „CHARGING“, Restlaufzeit (gemessen am Abfall seit dem letzten Laden, ab 5 min und 1 %), unter 10 % „BATTERY LOW“, About | |
 | SEQ | SEQUENCER | Länge der Spur, Velocity des letzten Steps, Rotate, Euclid | **PAT LEN: jeder Dreh verdoppelt die Patternlänge (zurück: halbiert)**, **COPY x2: Noten in die neuen Takte kopieren (an/aus)**, Accent des letzten Steps, **SPEED der Spur** (1/8X, 1/4X, 1/2X, 3/4X, 1X, 3/2X, 2X) |
 | SEQ (2.) | **LIVE PADS** | Pad-Velocity, Quantize-Raster, -Richtung, Metronom | |
 | SEQ (3.) | **TRACKS** | Spur, Mute, Solo, Spur löschen | alle an, Pattern löschen |
