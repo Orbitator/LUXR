@@ -621,7 +621,7 @@ static void mfilter_block(int32_t *L, int32_t *R, uint32_t n)
 /* the master's compressor (GLO page 3): peak detection of both sides together, a block's gain from the envelope in
  * log2 (Q8: 1/256 octave = 0.0235 dB), ramped over the block; then the volume; then the limiter (at 0.85 into the soft clip, a
  * block known before it plays: no overshoot) */
-static const uint16_t L2T[256] = {
+static const uint8_t L2T[256] = {
     0, 1, 3, 4, 6, 7, 9, 10, 11, 13, 14, 16, 17, 18, 20, 21,
     22, 24, 25, 26, 28, 29, 30, 32, 33, 34, 36, 37, 38, 40, 41, 42,
     44, 45, 46, 47, 49, 50, 51, 52, 54, 55, 56, 57, 59, 60, 61, 62,

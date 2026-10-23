@@ -39,7 +39,7 @@ jobs:
         run: sudo apt-get -qq install -y clang >/dev/null && sh tests/run.sh || echo "::warning::host tests failed"
         continue-on-error: true
       - name: Firmware
-        env: { JIELI_DOCKER: "0" }
+        env: { JIELI_DOCKER: "0", FELUCCA_SIZE: "1" }   # (the main-loop code built for size: tools/size_fns.py)
         shell: bash
         run: |
           set -o pipefail

@@ -22,7 +22,9 @@ SIZE_FILES = ["ui.c", "favorites.c", "menu_items.c", "icons.c", "ui_graph.c", "u
               "editor.c", "editor_preferences.c", "editor_backup.c", "editor_menu.c", "console.c",
               "usb.c", "midi_uart.c", "midi_control.c", "midi_clock.c", "seq.c", "song_chain.c", "chord.c", "motion.c",
               "panel.c", "lcd.c", "gfx.c", "ota.c", "ota_hw.c", "up_fm6.c", "slice_store.c", "params.c", "editor_fm6.c",
-              "ui_layer.c", "ui_name.c", "ui_slice.c", "ui_events.c", "main.c", "libc.c", "storage_hw.c", "engines.c", "fm4_convert.c"]
+              "ui_layer.c", "ui_name.c", "ui_slice.c", "ui_events.c", "main.c", "libc.c", "storage_hw.c", "engines.c", "fm4_convert.c",
+              "lx_ui.c", "lx_seq.c", "oc_main.c", "oc_ui.c", "oc_proto.c", "oc_font.c", "oneclick.c", "panel.c"]   # (LUXR's; what
+              # the audio ISR reaches of lx_seq.c stays -Os by isr_reach)
 ISR_ROOTS = ("fm1_alnk0_irq", "fm1_timer5_irq")      # hal/fm1_isr.S: the audio ISR, the key / LED scan (+ USB poll)
 DEF = re.compile(r"^(?:static|void|int|uint\w*|int\w*|const)\b[^;=(]*?\b([A-Za-z_]\w*)\s*\(", re.M)
 IR_DEF = re.compile(r"^(define [^\n]*?@\"?([\w.]+)\"?\([^\n]*\)(?: unnamed_addr| local_unnamed_addr)?)( #\d+[^\n]*\{)$",
@@ -49,7 +51,8 @@ def definitions(text):
 def size_names():
     names = set()
     for f in SIZE_FILES:
-        names.update(definitions((SRC / f).read_text()))
+        if (SRC / f).is_file():                  # (the files of the other firmwares: not in this tree)
+            names.update(definitions((SRC / f).read_text()))
     return names
 
 
