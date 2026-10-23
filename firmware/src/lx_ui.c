@@ -54,15 +54,15 @@ static const uint16_t TRK_COL[NTRK] = {RGB(255, 96, 110), RGB(255, 170, 40), RGB
 #define C_REC RGB(255, 72, 60)
 
 enum { PG_KIT, PG_SEQ, PG_LIVE, PG_VOICE, PG_VOICE2, PG_SAMPLE, PG_SAMPLE2, PG_SND, PG_LFO1, PG_LFO2, PG_FXS, PG_FXD, PG_FXDL, PG_FXDL2, PG_FXR,
-       PG_PAT, PG_NR, PG_MIX, PG_SAVE, PG_REC, PG_INFO, PG_MIDI, PG_SONG, PG_MFX, PG_NEW, PG_ENV, PG_LEARN, PG_TRK, PG_COMP, PG_N };
+       PG_PAT, PG_NR, PG_MIX, PG_SAVE, PG_REC, PG_INFO, PG_MIDI, PG_SONG, PG_MFX, PG_NEW, PG_ENV, PG_LEARN, PG_TRK, PG_COMP, PG_LIM, PG_N };
 static const char *const PG_NAME[PG_N] = {"LUXR KIT", "SEQUENCER", "LIVE PADS", "SYNTH 1-4", "SYNTH 5-8", "SAMPLE LAYER", "SAMPLE 2",
                                           "SOUND MIX", "LFO 1", "LFO 2", "FX SENDS", "DRIVE", "DELAY", "DELAY 2", "REVERB",
                                           "PATTERNS", "NOTE REPEAT", "MIXER", "STORE", "QUANTIZE", "SYSTEM", "MIDI", "SONG",
-                                          "MASTER", "NEW PATCH", "ENVELOPE", "CC LEARN", "TRACKS", "COMPRESSOR"};
+                                          "MASTER", "NEW PATCH", "ENVELOPE", "CC LEARN", "TRACKS", "COMPRESSOR", "LIMITER"};
 static const uint8_t PAGE_BTN[PG_N] = {B_HOME, B_SEQ, B_SEQ, B_EDIT, B_EDIT, B_EDIT, B_EDIT, B_EDIT, B_LFO, B_LFO, B_FX, B_FX, B_FX, B_FX,
-                                       B_FX, B_SCL, B_ARP, B_GLO, B_SAVE, B_REC, B_HOME, B_HOME, B_SCL, B_FX, B_SAVE, B_ENV, B_HOME, B_SEQ, B_GLO};
+                                       B_FX, B_SCL, B_ARP, B_GLO, B_SAVE, B_REC, B_HOME, B_HOME, B_SCL, B_FX, B_SAVE, B_ENV, B_HOME, B_SEQ, B_GLO, B_GLO};
 static const uint8_t PAGE_KC[PG_N] = {KC_HOME, KC_SEQ, KC_SEQ, KC_EDIT, KC_EDIT, KC_EDIT, KC_EDIT, KC_EDIT, KC_LFO, KC_LFO, KC_FX, KC_FX, KC_FX,
-                                      KC_FX, KC_FX, KC_SCL, KC_ARP, KC_GLO, KC_SAVE, KC_REC, KC_HOME, KC_HOME, KC_SCL, KC_FX, KC_SAVE, KC_ENV, KC_HOME, KC_SEQ, KC_GLO};
+                                      KC_FX, KC_FX, KC_SCL, KC_ARP, KC_GLO, KC_SAVE, KC_REC, KC_HOME, KC_HOME, KC_SCL, KC_FX, KC_SAVE, KC_ENV, KC_HOME, KC_SEQ, KC_GLO, KC_GLO};
 /* a button's pages, in the order its taps show them (a button not listed: none, or its own logic) */
 typedef struct { uint8_t btn, n, pg[6]; } group_t;
 static const group_t GROUPS[] = {
@@ -92,10 +92,11 @@ enum {
     P_EATK, P_EREL, P_EGATE, P_RPRE, P_LSEL, P_LDEL,
     P_TSEL, P_TMUTE, P_TSOLO, P_TCLR, P_TALL, P_PCLR,
     P_CTHR, P_CRAT, P_CATK, P_CREL, P_CMAK, P_CLIM,
+    P_LCEIL, P_LREL,
     P_COUNT
 };
 enum { FM_NUM, FM_PCT, FM_BIP, FM_NAME, FM_STEPS, FM_PAN, FM_X100, FM_BPM, FM_SMP, FM_PAT, FM_LOAD, FM_TONE, FM_PROB,
-       FM_SPAN, FM_SUB, FM_MICRO, FM_FILT, FM_NOTE, FM_CH, FM_ATK, FM_TIME, FM_GATE, FM_PRE, FM_DBN, FM_DBP, FM_CATK, FM_CREL };
+       FM_SPAN, FM_SUB, FM_MICRO, FM_FILT, FM_NOTE, FM_CH, FM_ATK, FM_TIME, FM_GATE, FM_PRE, FM_DBN, FM_DBP, FM_CATK, FM_CREL, FM_DBS, FM_LREL };
 typedef struct { const char *label; uint8_t fmt; int16_t min, max; const char *const *names; } pdesc_t;
 static const char *const N_OFFON[] = {"OFF", "ON"};
 static const char *const N_LDEST[] = {"OFF", "PITCH", "FILTER", "DECAY", "LEVEL", "PAN", "SAMPLE"};
@@ -233,6 +234,8 @@ static const pdesc_t PD[P_COUNT] = {
     [P_CREL] = {"RELEASE", FM_CREL, 0, 127, 0},
     [P_CMAK] = {"MAKEUP", FM_DBP, 0, 24, 0},
     [P_CLIM] = {"LIMITER", FM_NAME, 0, 1, N_OFFON},
+    [P_LCEIL] = {"CEILING", FM_DBS, -12, 6, 0},
+    [P_LREL] = {"RELEASE", FM_LREL, 0, 127, 0},
 };
 /* the four cards of each page: row A, row B (SHIFT) */
 static const uint8_t PAGE_P[PG_N][8] = {
@@ -263,7 +266,8 @@ static const uint8_t PAGE_P[PG_N][8] = {
     [PG_NEW] = {P_NLEN, P_NSPD, P_NBPM, P_NGO, P_NKIT, 0, 0, 0},
     [PG_ENV] = {P_EATK, P_V1, P_EREL, P_EGATE, 0, 0, 0, 0},
     [PG_TRK] = {P_TSEL, P_TMUTE, P_TSOLO, P_TCLR, 0, P_TALL, 0, P_PCLR},
-    [PG_COMP] = {P_CTHR, P_CRAT, P_CATK, P_CREL, P_CMAK, P_CLIM, 0, 0},
+    [PG_COMP] = {P_CTHR, P_CRAT, P_CATK, P_CREL, 0, 0, 0, 0},
+    [PG_LIM] = {P_CMAK, P_CLIM, P_LCEIL, P_LREL, 0, 0, 0, 0},
 };
 
 static struct {
@@ -464,7 +468,9 @@ typedef struct {                                 /* the kit: LXP8's (the same by
     uint8_t dly_mode, dly_div2;
     uint8_t rev_pre;
     uint8_t cthr, crat, catk, crel, cmak, clim;   /* the compressor, the limiter (LXPA; zero before: both off) */
-    uint8_t rsv[9];                              /* (zero) */
+    int8_t lceil;                                /* .. its ceiling, its release */
+    uint8_t lrel;
+    uint8_t rsv[7];                              /* (zero) */
 } kit_rec_t;
 typedef char kit9_fits[sizeof(kit_rec_t) == sizeof(kit8_t) + 16u ? 1 : -1];
 #define PBLOB (SLOT_SZ - 16u - (uint32_t)sizeof(kit_rec_t))
@@ -1107,7 +1113,7 @@ static void kit_take(kit_rec_t *k)
     k->dly_mode = song.dly_mode; k->dly_div2 = song.dly_div2;
     k->rev_pre = song.rev_pre;
     k->cthr = song.cthr; k->crat = song.crat; k->catk = song.catk; k->crel = song.crel; k->cmak = song.cmak;
-    k->clim = song.clim;
+    k->clim = song.clim; k->lceil = song.lceil; k->lrel = song.lrel;
     memset(k->rsv, 0, sizeof k->rsv);
 }
 static void kit_put(const kit_rec_t *k)
@@ -1140,6 +1146,8 @@ static void kit_put(const kit_rec_t *k)
     song.rev_pre = k->rev_pre & 127u;
     song.cthr = (uint8_t)(k->cthr <= 40u ? k->cthr : 0u); song.crat = k->crat & 7u; song.catk = k->catk & 127u;
     song.crel = k->crel & 127u; song.cmak = (uint8_t)(k->cmak <= 24u ? k->cmak : 0u); song.clim = k->clim & 1u;
+    song.lceil = (int8_t)clamp(k->lceil, -12, 6);
+    song.lrel = (uint8_t)(k->lrel || k->clim ? k->lrel & 127u : 40u);   /* (a kit before the limiter's page: its default) */
 }
 static int pat_take(proj_t *r)                   /* the patterns, their locks, the song into r's blob (0 = it fits) */
 {
@@ -1419,6 +1427,7 @@ static void kit_factory(void)
     song.dly_div = 1; song.dly_div2 = 2; song.dly_mode = DL_MONO; song.dly_fb = 50; song.dly_tone = 60; song.dly_lvl = 110;
     song.rev_size = 50; song.rev_damp = 40; song.rev_lvl = 90; song.rev_pre = 0;
     song.cthr = 12; song.crat = 0; song.catk = 30; song.crel = 50; song.cmak = 0; song.clim = 0;   /* (1:1, no limiter: the sound as before) */
+    song.lceil = 0; song.lrel = 40;
 }
 /* NEW PATCH: stopped, 16 empty patterns of len steps at speed spd, the tempo, no song; the factory kit or (keep) the
  * one there. Nothing is saved: SAVE puts it in a slot. */
@@ -1567,6 +1576,8 @@ static int32_t pget(uint32_t id)
     case P_CREL: return song.crel;
     case P_CMAK: return song.cmak;
     case P_CLIM: return song.clim;
+    case P_LCEIL: return song.lceil;
+    case P_LREL: return song.lrel;
     case P_EATK: return s->atk;
     case P_EREL: return s->rel;
     case P_EGATE: return s->gate;
@@ -1704,6 +1715,8 @@ static void pset(uint32_t id, int32_t v)
     case P_CREL: song.crel = (uint8_t)v; break;
     case P_CMAK: song.cmak = (uint8_t)v; break;
     case P_CLIM: song.clim = (uint8_t)(v != 0); break;
+    case P_LCEIL: song.lceil = (int8_t)v; break;
+    case P_LREL: song.lrel = (uint8_t)v; break;
     case P_TSEL: song.sel = (uint8_t)v; if (ui.bar >= nbars(song.sel)) ui.bar = 0; ui.rot = 0; break;
     case P_TMUTE: song.mute = (uint8_t)((song.mute & ~(1u << t)) | ((uint32_t)v << t)); break;
     case P_TSOLO: song.solo = (uint8_t)((song.solo & ~(1u << t)) | ((uint32_t)v << t)); break;
@@ -1927,6 +1940,10 @@ static void pformat(uint32_t id, char *val, const char **unit)
         *unit = "MS";
         break;
     }
+    case FM_DBS: if (v > 0) { val[0] = '+'; fmt_u(val + 1, (uint32_t)v); } else if (v < 0) { val[0] = '-'; fmt_u(val + 1, (uint32_t)-v); }
+                 else str_cpy(val, "0", 16);
+                 *unit = "DB"; break;
+    case FM_LREL: fmt_u(val, (100u + (uint32_t)v * (uint32_t)v * 9900u / 16129u) / 10u); *unit = "MS"; break;
     case FM_CREL: fmt_u(val, (200u + (uint32_t)v * (uint32_t)v * 9800u / 16129u) / 10u); *unit = "MS"; break;
     case FM_GATE:                                /* (quarters of a step) */
         if (!v) str_cpy(val, "OFF", 16);
@@ -2482,8 +2499,10 @@ static void ui_input(void)
     if (released & (1u << B_GLO)) {
         if (!ui.glo_used && fm1_ms - ui.glo_t0 < SHIFT_MS)
         {                                        /* GLO tapped: the mixer; on it, page 2 (pan) and back */
-            if (ui.page == PG_MIX && !ui.mixpan) ui.mixpan = 1;   /* MIXER, its pans, the compressor, the mixer again */
+            if (ui.page == PG_MIX && !ui.mixpan) ui.mixpan = 1;   /* MIXER, its pans, the compressor, the limiter, the
+                                                                    * mixer again */
             else if (ui.page == PG_MIX) go_page(PG_COMP);
+            else if (ui.page == PG_COMP) go_page(PG_LIM);
             else { go_page(PG_MIX); ui.mixpan = 0; }
         }
         ui.shift = 0;
@@ -3249,6 +3268,8 @@ static void g_comp(void)                         /* COMPRESSOR: its curve (-48 .
             int32_t mx = 130 + (int32_t)k * 50, gr = k ? lim_gr : cmp_gr, h = clamp(gr * 92 / 96, 0, 92);
             cv_rect(mx, 6, 14, 92, T_RAISE);
             cv_rect(mx, 6, 14, h, k ? C_REC : T_ACCENT);
+            if (k && song.clim)                  /* (the ceiling: its dB under the meter's name) */
+                cv_rect(mx - 3, 6 + h, 20, 1, T_TEXT);
             cv_text_in(mx - 12, 102, 38, &AF_S, L[k], k && !song.clim ? T_DIM : T_MID, T_SURF);
             b[0] = '-';
             fmt_u(b + 1, (uint32_t)gr / 4u);
@@ -3480,8 +3501,8 @@ static uint32_t graph_sig(void)
 {
     uint32_t h = ui.page * 7u + ui.shift * 3u + song.sel * 131u + ui.bar * 17u + song.pat * 7919u + ui.cur * 37u;
     uint32_t i, t;
-    if (ui.page == PG_MIX || ui.page == PG_COMP)
-        return h + fm1_ms / 50u + song.cthr * 3u + song.crat * 101u + song.cmak * 1009u + song.clim * 7u;                 /* (the meters move) */
+    if (ui.page == PG_MIX || ui.page == PG_COMP || ui.page == PG_LIM)
+        return h + fm1_ms / 50u + song.cthr * 3u + song.crat * 101u + song.cmak * 1009u + song.clim * 7u + (uint32_t)(song.lceil + 12) * 13u;                 /* (the meters move) */
     if (ui.page == PG_NR)
         return h + nr.rate * 101u + (nr.held | nr.latched) * 1009u + nr.latch + song.rec * 3u + song.playing * 5u;
     if (ui.page == PG_SAMPLE || ui.page == PG_SAMPLE2)
@@ -3574,7 +3595,7 @@ static void draw_graph(int force)
     case PG_ENV: g_env(); break;
     case PG_LEARN: g_learn(); break;
     case PG_TRK: g_tracks(); break;
-    case PG_COMP: g_comp(); break;
+    case PG_COMP: case PG_LIM: g_comp(); break;
     default: g_grid(); break;
     }
     cv_blit(0, Y_GRAPH);
@@ -3593,13 +3614,14 @@ static void draw_foot(int force)
     static const khint_t H_LOCK[3] = {{KC_KEYS, "STEP"}, {KC_K14, "LOCK"}, {KC_OCTPM, "BAR"}};
     static const khint_t H_NUDGE[3] = {{KC_KEYS, "STEP"}, {KC_K1, "NUDGE"}, {KC_OCTPM, "BAR"}};
     static const khint_t H_TRK[3] = {{KC_K1, "TRACK"}, {KC_K4, "CLEAR"}, {KC_GLO, "ROW B"}};
-    static const khint_t H_COMP[3] = {{KC_K14, "COMP"}, {KC_GLO, "B: GAIN"}, {KC_GLO, "MIXER"}};
+    static const khint_t H_COMP[3] = {{KC_K14, "COMP"}, {KC_PLAY, "PLAY"}, {KC_GLO, "LIMITER"}};
+    static const khint_t H_LIM[3] = {{KC_K14, "LIMIT"}, {KC_PLAY, "PLAY"}, {KC_GLO, "MIXER"}};
     char b[32];
     uint32_t sig;
     const khint_t *h = ui.shift ? H_SHIFT : ui.lockmode == LM_LOCK && ui.page != PG_SEQ && ui.page != PG_NR ? H_LOCK :
                        ui.lockmode == LM_NUDGE && ui.page != PG_NR ? H_NUDGE : ui.page == PG_SEQ ? H_SEQ : ui.page == PG_MIX ? (ui.mixpan ? H_MIXPAN : H_MIX) :
                        ui.page == PG_NR ? H_NR : ui.page == PG_SAVE ? H_SAVE : ui.page == PG_LIVE ? H_LIVE :
-                       ui.page == PG_REC ? H_REC : ui.page == PG_TRK ? H_TRK : ui.page == PG_COMP ? H_COMP : H_PAGE;
+                       ui.page == PG_REC ? H_REC : ui.page == PG_TRK ? H_TRK : ui.page == PG_COMP ? H_COMP : ui.page == PG_LIM ? H_LIM : H_PAGE;
     uint32_t gi, gn = 0, gk = 0;
     str_cpy(b, PG_NAME[ui.page % PG_N], sizeof b);
     if (ui.page == PG_MIX)
@@ -3623,9 +3645,9 @@ static void draw_foot(int force)
             for (gk = 0; gk < gn && GROUPS[gi].pg[gk] != ui.page; gk++)
                 ;
         }
-    if (ui.page == PG_MIX || ui.page == PG_COMP) {
-        gn = 3;
-        gk = ui.page == PG_COMP ? 2u : ui.mixpan;
+    if (ui.page == PG_MIX || ui.page == PG_COMP || ui.page == PG_LIM) {
+        gn = 4;
+        gk = ui.page == PG_LIM ? 3u : ui.page == PG_COMP ? 2u : ui.mixpan;
     }
     for (gi = 0; !ui.shift && gn > 1u && gi < gn; gi++)
         cv_rrect(236 - (int32_t)(gn - gi) * 9, 7, 6, 6, 3, gi == gk ? T_THEME : T_LINE, T_BG);

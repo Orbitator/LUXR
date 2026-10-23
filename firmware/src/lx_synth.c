@@ -706,28 +706,43 @@ static void comp_block(int32_t *L, int32_t *R, uint32_t n)   /* before the volum
         R[i] = (int32_t)clamp64(((int64_t)R[i] * g) >> 15, -(1 << 19), 1 << 19);
     }
 }
-static void lim_block(int32_t *o, uint32_t n)    /* the output (stereo, interleaved, before saturation) */
+static int32_t lim_dl[2u * CTL];                 /* the limiter's look-ahead: the block before, still to play */
+static uint32_t lim_pk;                          /* (its peak) */
+static void lim_block(int32_t *o, uint32_t n)    /* the output (stereo, interleaved, before the soft clip): played a block
+                                                  * late, the gain ramped over each block to what the block after needs
+                                                  * (no steps, no overshoot); CEILING -12 .. +6 dB of 1.0 into the soft clip */
 {
-    uint32_t i, pk = 0, ceil_ = 28000u, need;   /* (0.85 into the soft clip: it stays near linear) */
+    uint32_t i, pk = 0, top, ceil_, need, g0 = lim_g;
+    for (i = 0; i < 2u * n; i++) {
+        uint32_t a = (uint32_t)(o[i] < 0 ? -o[i] : o[i]);
+        int32_t x = o[i];
+        if (a > pk) pk = a;
+        o[i] = lim_dl[i];                        /* (the block before out, this one kept) */
+        lim_dl[i] = x;
+    }
+    top = pk > lim_pk ? pk : lim_pk;             /* (what plays now and what plays next) */
+    lim_pk = pk;
     if (!song.clim) {
         lim_g = 32768u;
         lim_gr = 0;
         return;
     }
-    for (i = 0; i < 2u * n; i++) {
-        uint32_t a = (uint32_t)(o[i] < 0 ? -o[i] : o[i]);
-        if (a > pk) pk = a;
-    }
-    need = pk > ceil_ ? (ceil_ << 15) / pk : 32768u;   /* (28000 << 15 fits 32 bits) */
+    ceil_ = exp2q15(clamp(song.lceil, -12, 6) * 256 / 6);
+    if (ceil_ > 65535u) ceil_ = 65535u;
+    need = top > ceil_ ? (ceil_ << 15) / top : 32768u;
     if (need < lim_g)
-        lim_g = need;                            /* (at once: this block already) */
-    else
-        lim_g += ((32768u - lim_g) * cmp_k(1500u)) >> 16;   /* back in ~150 ms */
-    if (lim_g > 32768u) lim_g = 32768u;
+        lim_g = need;
+    else {                                       /* RELEASE 10 .. 1000 ms */
+        lim_g += ((32768u - lim_g) * cmp_k(100u + (uint32_t)song.lrel * song.lrel * 9900u / 16129u)) >> 16;
+        if (lim_g > need) lim_g = need;
+    }
     lim_gr = (uint8_t)clamp((log2q8(32768u) - log2q8(lim_g)) * 6 * 4 / 256, 0, 255);
-    if (lim_g < 32768u)
-        for (i = 0; i < 2u * n; i++)
-            o[i] = (int32_t)(((int64_t)o[i] * lim_g) >> 15);
+    if (g0 < 32768u || lim_g < 32768u)
+        for (i = 0; i < n; i++) {
+            int32_t g = (int32_t)g0 + ((int32_t)lim_g - (int32_t)g0) * (int32_t)(i + 1u) / (int32_t)n;
+            o[2u * i] = (int32_t)(((int64_t)o[2u * i] * g) >> 15);
+            o[2u * i + 1u] = (int32_t)(((int64_t)o[2u * i + 1u] * g) >> 15);
+        }
 }
 
 /* ------------------------------------------------------------------ mix --- */

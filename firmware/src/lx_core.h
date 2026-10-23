@@ -125,6 +125,8 @@ typedef struct {
     uint8_t smode, slen, srow, srep, send;   /* SONG: on, its rows, the row and the repeat playing, at its end loop / stop */
     int8_t mflt;                 /* the master filter: - low-pass, + high-pass, 0 off */
     uint8_t mres;
+    int8_t lceil;                /* the limiter's ceiling, dB of 1.0 into the soft clip (-12 .. +6) */
+    uint8_t lrel;                /* .. its release (10 .. 1000 ms) */
     uint8_t cthr, crat, catk, crel, cmak, clim;   /* the compressor: threshold -dB, ratio, attack, release, makeup +dB; the
                                                  * limiter on (LXPA, the kit) */
 } song_t;
