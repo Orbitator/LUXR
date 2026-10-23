@@ -1210,6 +1210,16 @@ int main(int argc, char **argv)
         host_ppm(path);
         host_boot(28);                           /* (the map is kept with the settings) */
         CHECK(ccmap[0].pid == P_V1 && ccmap[1].pid == P_MFLT, "the CC map after a power-on");
+        host_tap(B_HOME); host_tap(B_HOME); host_tap(B_HOME);
+        CHECK(ui.page == PG_LEARN && knob_id(0) == P_LEARN && knob_id(1) == P_LSEL && knob_id(2) == P_LDEL, "HOME three times: CC LEARN");
+        snprintf(path, sizeof path, "%s/lx_learn.ppm", dir);
+        host_ppm(path);
+        host_turn(EN_K2, 1);
+        CHECK(ui.lsel == 1u, "K2: the second entry");
+        host_turn(EN_K3, 1);
+        CHECK(ccmap[0].pid == P_V1 && !ccmap[1].pid && ui.lsel == 0u, "K3: the master filter's entry deleted, the decay's kept");
+        host_tap(B_HOME);
+        CHECK(ui.page == PG_KIT, "HOME again: KIT");
         pset(P_LEARN, 2);
         CHECK(!ccmap[0].pid && !ccmap[1].pid, "LEARN CLEAR: the map empty");
     }

@@ -54,15 +54,15 @@ static const uint16_t TRK_COL[NTRK] = {RGB(255, 96, 110), RGB(255, 170, 40), RGB
 #define C_REC RGB(255, 72, 60)
 
 enum { PG_KIT, PG_SEQ, PG_LIVE, PG_VOICE, PG_VOICE2, PG_SAMPLE, PG_SAMPLE2, PG_SND, PG_LFO1, PG_LFO2, PG_FXS, PG_FXD, PG_FXDL, PG_FXDL2, PG_FXR,
-       PG_PAT, PG_NR, PG_MIX, PG_SAVE, PG_REC, PG_INFO, PG_MIDI, PG_SONG, PG_MFX, PG_NEW, PG_ENV, PG_N };
+       PG_PAT, PG_NR, PG_MIX, PG_SAVE, PG_REC, PG_INFO, PG_MIDI, PG_SONG, PG_MFX, PG_NEW, PG_ENV, PG_LEARN, PG_N };
 static const char *const PG_NAME[PG_N] = {"LUXR KIT", "SEQUENCER", "LIVE PADS", "SYNTH 1-4", "SYNTH 5-8", "SAMPLE LAYER", "SAMPLE 2",
                                           "SOUND MIX", "LFO 1", "LFO 2", "FX SENDS", "DRIVE", "DELAY", "DELAY 2", "REVERB",
                                           "PATTERNS", "NOTE REPEAT", "MIXER", "STORE", "QUANTIZE", "SYSTEM", "MIDI", "SONG",
-                                          "MASTER", "NEW PATCH", "ENVELOPE"};
+                                          "MASTER", "NEW PATCH", "ENVELOPE", "CC LEARN"};
 static const uint8_t PAGE_BTN[PG_N] = {B_HOME, B_SEQ, B_SEQ, B_EDIT, B_EDIT, B_EDIT, B_EDIT, B_EDIT, B_LFO, B_LFO, B_FX, B_FX, B_FX, B_FX,
-                                       B_FX, B_SCL, B_ARP, B_GLO, B_SAVE, B_REC, B_HOME, B_HOME, B_SCL, B_FX, B_SAVE, B_ENV};
+                                       B_FX, B_SCL, B_ARP, B_GLO, B_SAVE, B_REC, B_HOME, B_HOME, B_SCL, B_FX, B_SAVE, B_ENV, B_HOME};
 static const uint8_t PAGE_KC[PG_N] = {KC_HOME, KC_SEQ, KC_SEQ, KC_EDIT, KC_EDIT, KC_EDIT, KC_EDIT, KC_EDIT, KC_LFO, KC_LFO, KC_FX, KC_FX, KC_FX,
-                                      KC_FX, KC_FX, KC_SCL, KC_ARP, KC_GLO, KC_SAVE, KC_REC, KC_HOME, KC_HOME, KC_SCL, KC_FX, KC_SAVE, KC_ENV};
+                                      KC_FX, KC_FX, KC_SCL, KC_ARP, KC_GLO, KC_SAVE, KC_REC, KC_HOME, KC_HOME, KC_SCL, KC_FX, KC_SAVE, KC_ENV, KC_HOME};
 /* a button's pages, in the order its taps show them (a button not listed: none, or its own logic) */
 typedef struct { uint8_t btn, n, pg[6]; } group_t;
 static const group_t GROUPS[] = {
@@ -89,7 +89,7 @@ enum {
     P_SPEED, P_EMICRO, P_MFLT, P_MRES, P_CLKSRC, P_CLKOUT, P_OCH, P_ONOTE, P_LEARN,
     P_SROW, P_SPAT, P_SREP, P_SMODE, P_SLEN, P_SEND,
     P_NLEN, P_NSPD, P_NBPM, P_NGO, P_NKIT,
-    P_EATK, P_EREL, P_EGATE, P_RPRE,
+    P_EATK, P_EREL, P_EGATE, P_RPRE, P_LSEL, P_LDEL,
     P_COUNT
 };
 enum { FM_NUM, FM_PCT, FM_BIP, FM_NAME, FM_STEPS, FM_PAN, FM_X100, FM_BPM, FM_SMP, FM_PAT, FM_LOAD, FM_TONE, FM_PROB,
@@ -118,6 +118,7 @@ static const char *const N_SEND[] = {"LOOP", "STOP"};
 static const char *const N_NKIT[] = {"FACTORY", "KEEP"};
 static const char *N_THEME[UI_NPALETTES];
 #define NSLOT 14u
+#define NMAP_UI 32                               /* (= NMAP: the CC map's entries) */
 static const pdesc_t PD[P_COUNT] = {
     [P_BPM] = {"TEMPO", FM_BPM, 60, 200, 0},
     [P_SWING] = {"SWING", FM_PCT, 0, 50, 0},
@@ -199,7 +200,7 @@ static const pdesc_t PD[P_COUNT] = {
     [P_CLKOUT] = {"CLK OUT", FM_NAME, 0, 1, N_OFFON},
     [P_OCH] = {"OUT CH", FM_CH, 0, 16, 0},
     [P_ONOTE] = {"NOTE", FM_NOTE, 0, 127, 0},
-    [P_LEARN] = {"CC LEARN", FM_NAME, 0, 2, N_LEARN},
+    [P_LEARN] = {"LEARN", FM_NAME, 0, 2, N_LEARN},
     [P_SROW] = {"ROW", FM_NUM, 1, NSONG, 0},
     [P_SPAT] = {"PATTERN", FM_NUM, 1, NPAT, 0},
     [P_SREP] = {"REPEAT", FM_NUM, 1, 16, 0},
@@ -215,6 +216,8 @@ static const pdesc_t PD[P_COUNT] = {
     [P_EREL] = {"RELEASE", FM_TIME, 0, 127, 0},
     [P_EGATE] = {"GATE", FM_GATE, 0, 64, 0},
     [P_RPRE] = {"PRE-DLY", FM_PRE, 0, 127, 0},
+    [P_LSEL] = {"ENTRY", FM_NUM, 1, NMAP_UI, 0},
+    [P_LDEL] = {"DELETE", FM_LOAD, 0, 2, 0},
 };
 /* the four cards of each page: row A, row B (SHIFT) */
 static const uint8_t PAGE_P[PG_N][8] = {
@@ -238,7 +241,8 @@ static const uint8_t PAGE_P[PG_N][8] = {
     [PG_MIX] = {P_MIX0, P_MIX1, P_MIX2, P_MIX3, P_MPAN0, P_MPAN1, P_MPAN2, P_MPAN3},
     [PG_SAVE] = {P_SLOT, P_SWHAT, P_LWHAT, P_LOAD, 0, 0, 0, 0},
     [PG_REC] = {P_QGRID, P_QROUND, P_CLICK, 0, 0, 0, 0, 0},
-    [PG_MIDI] = {P_CLKSRC, P_CLKOUT, P_OCH, P_ONOTE, P_MIDICH, P_LEARN, 0, 0},
+    [PG_MIDI] = {P_CLKSRC, P_CLKOUT, P_OCH, P_ONOTE, P_MIDICH, 0, 0, 0},
+    [PG_LEARN] = {P_LEARN, P_LSEL, P_LDEL, 0, 0, 0, 0, 0},
     [PG_SONG] = {P_SROW, P_SPAT, P_SREP, P_SMODE, P_SLEN, P_SEND, 0, 0},
     [PG_MFX] = {P_MFLT, P_MRES, 0, 0, 0, 0, 0, 0},
     [PG_NEW] = {P_NLEN, P_NSPD, P_NBPM, P_NGO, P_NKIT, 0, 0, 0},
@@ -259,6 +263,7 @@ static struct {
     uint8_t scur;                                /* SONG: the row shown */
     uint8_t nlen, nbpm, nkit;                    /* NEW PATCH: its length, tempo, kit (factory / kept) */
     uint8_t pkey;                                /* PATTERNS: the pattern key held + 1 (a second key: a chain) */
+    uint8_t lsel;                                /* CC LEARN: the entry shown (0 ..) */
     uint8_t sfresh;                              /* SONG: the next key starts a new song (on entering the page) */
     int8_t nspd;                                 /* .. its tracks' speed */
     uint8_t restoring, rs_slot, rs_done;         /* patches coming in over USB (the update page): the loading screen */
@@ -372,6 +377,22 @@ typedef struct {
     ccmap_t map[NMAP];
 } set_rec_t;
 static ccmap_t ccmap[NMAP];
+static uint32_t cc_count(void)                   /* the entries in use (kept together from the start) */
+{
+    uint32_t i, n = 0;
+    for (i = 0; i < NMAP; i++)
+        n += ccmap[i].pid != 0u;
+    return n;
+}
+static void cc_pack(void)                        /* the entries in use to the start, in their order */
+{
+    uint32_t i, o = 0;
+    for (i = 0; i < NMAP; i++)
+        if (ccmap[i].pid)
+            ccmap[o++] = ccmap[i];
+    for (; o < NMAP; o++)
+        memset(&ccmap[o], 0, sizeof ccmap[o]);
+}
 /* the formats before LXP7, as they were laid out (read only) */
 typedef struct {                                 /* a sound of LXP4..6 */
     uint8_t p[8], smp, slvl, spitch, sdec, sstart;
@@ -1385,6 +1406,8 @@ static int32_t pget(uint32_t id)
     }
     case P_SPEED: return PAT->spd[song.sel % NTRK];
     case P_RPRE: return song.rev_pre;
+    case P_LSEL: return ui.lsel + 1;
+    case P_LDEL: return 1;
     case P_EATK: return s->atk;
     case P_EREL: return s->rel;
     case P_EGATE: return s->gate;
@@ -1454,6 +1477,26 @@ static void pset(uint32_t id, int32_t v)
                 patch_new(16, 0, song.bpm, 0);
                 ui_say("EMPTY: NEW PATCH");
             }
+        }
+        return;
+    }
+    if (id == P_LDEL) {                          /* CC LEARN, KNOB 3: a turn deletes the entry shown */
+        if (v != pget(id)) {
+            uint32_t n = cc_count();
+            char m[28];
+            if (!n) {
+                ui_say("NOTHING MAPPED");
+                return;
+            }
+            cc_pack();
+            str_cpy(m, "DELETED: CC", sizeof m);
+            fmt_u(m + str_len(m), ccmap[ui.lsel % NMAP].cc);
+            memset(&ccmap[ui.lsel % NMAP], 0, sizeof ccmap[0]);
+            cc_pack();
+            if (ui.lsel && ui.lsel >= cc_count())
+                ui.lsel--;
+            settings_save();
+            ui_say(m);
         }
         return;
     }
@@ -1568,6 +1611,11 @@ static void pset(uint32_t id, int32_t v)
     case P_CLKOUT: song.clk_out = (uint8_t)v; settings_save(); break;
     case P_OCH: s->och = (uint8_t)v; break;
     case P_RPRE: song.rev_pre = (uint8_t)v; break;
+    case P_LSEL: {
+        uint32_t n = cc_count();
+        ui.lsel = (uint8_t)(n ? ((uint32_t)v - 1u < n ? (uint32_t)v - 1u : n - 1u) : 0u);
+        break;
+    }
     case P_EATK: s->atk = (uint8_t)v; break;
     case P_EREL: s->rel = (uint8_t)v; break;
     case P_EGATE: s->gate = (uint8_t)v; break;
@@ -1708,7 +1756,7 @@ static void pformat(uint32_t id, char *val, const char **unit)
         else { str_cpy(val, v < 0 ? "LP " : "HP ", 16); fmt_u(val + 3, (uint32_t)(v < 0 ? -v : v)); }
         break;
     case FM_PAT: if (v) { val[0] = 'P'; fmt_u(val + 1, (uint32_t)v); } else str_cpy(val, "-", 16); break;
-    case FM_LOAD: str_cpy(val, id == P_NGO || ui.used[(uint32_t)(v - 1) % NSLOT] ? "TURN" : "EMPTY", 16); break;
+    case FM_LOAD: str_cpy(val, id == P_NGO || id == P_LDEL || ui.used[(uint32_t)(v - 1) % NSLOT] ? "TURN" : "EMPTY", 16); break;
     case FM_PCT: fmt_u(val, (uint32_t)v); *unit = "%"; break;
     case FM_BIP: fmt_s(val, v, 1); break;
     case FM_PAN:
@@ -2130,7 +2178,7 @@ static int cc_ok(uint32_t id)                    /* a parameter a controller may
     case P_PLEN: case P_COPY: case P_SACC: case P_PCOPY: case P_PPASTE: case P_SLOT: case P_SWHAT: case P_LWHAT:
     case P_LOAD: case P_QGRID: case P_QROUND: case P_EVEL: case P_EPROB: case P_EPAN: case P_ESUB: case P_EMICRO:
     case P_CLKSRC: case P_CLKOUT: case P_LEARN: case P_SROW: case P_SLEN: case P_SEND: case P_SPAT: case P_SREP:
-    case P_NLEN: case P_NSPD: case P_NBPM: case P_NGO: case P_NKIT:
+    case P_NLEN: case P_NSPD: case P_NBPM: case P_NGO: case P_NKIT: case P_LSEL: case P_LDEL:
         return 0;
     }
     return 1;
@@ -2180,6 +2228,7 @@ static void cc_in(uint32_t ch, uint32_t cc, uint32_t val)
         for (i = 0; i < NMAP && !f; i++)
             if (ccmap[i].pid && ccmap[i].ch == ch && ccmap[i].cc == cc)
                 f = &ccmap[i];
+        cc_pack();
         for (i = 0; i < NMAP && !f; i++)
             if (!ccmap[i].pid)
                 f = &ccmap[i];
@@ -2189,6 +2238,7 @@ static void cc_in(uint32_t ch, uint32_t cc, uint32_t val)
             return;
         }
         f->ch = (uint8_t)ch; f->cc = (uint8_t)cc; f->pid = ui.lpid; f->trk = ui.ltrk;
+        ui.lsel = (uint8_t)(f - ccmap);
         settings_save();
         ui.learn = 1;
         str_cpy(m, "CC", sizeof m);
@@ -2329,7 +2379,7 @@ static void ui_input(void)
         go_page(PG_INFO);
     }
     if ((released >> B_HOME) & 1u && !ui.home_long)   /* (tapped again: MIDI, and back) */
-        go_page(ui.page == PG_KIT ? PG_MIDI : PG_KIT);
+        go_page(ui.page == PG_KIT ? PG_MIDI : ui.page == PG_MIDI ? PG_LEARN : PG_KIT);
     if (p & (1u << B_ARP)) {                     /* ARP: tap on / off, held: while held */
         ui.arp_t0 = fm1_ms;
         ui.arp_from = ui.page == PG_NR;
@@ -2943,13 +2993,55 @@ static void g_midi(void)                         /* MIDI: the clock, each sound'
             n++;
         }
     if (!n)
-        g_label(10, 70, ui.learn ? "LEARN: TURN A KNOB, THEN SEND A CC" : "NO CC MAPPED (K2 B: LEARN)", ui.learn ? T_ACCENT : T_DIM);
+        g_label(10, 70, ui.learn ? "LEARN: TURN A KNOB, THEN SEND A CC" : "NO CC MAPPED (HOME AGAIN: CC LEARN)", ui.learn ? T_ACCENT : T_DIM);
     else if (n > 3u) {
         str_cpy(b, "+ ", sizeof b);
         fmt_u(b + 2, n - 3u);
         str_cat(b, " MORE", sizeof b);
         g_label(10, (int32_t)y, b, T_DIM);
     }
+}
+static void g_learn(void)                        /* CC LEARN: every mapping, seven at a time, the one shown marked */
+{
+    uint32_t n = cc_count(), k, first = ui.lsel >= 3u ? ui.lsel - 3u : 0u;
+    char b[48];
+    cc_pack();
+    if (!n) {
+        g_label(12, 20, "NO CONTROLLER MAPPED YET", T_TEXT);
+        g_label(12, 44, "K1 ON, TURN THE KNOB OF A PARAMETER", T_MID);
+        g_label(12, 60, "(ANY PAGE), THEN MOVE A CONTROL ON", T_MID);
+        g_label(12, 76, "YOUR CONTROLLER. UP TO 32.", T_MID);
+        return;
+    }
+    if (first + 7u > n)
+        first = n > 7u ? n - 7u : 0u;
+    for (k = first; k < first + 7u && k < n; k++) {
+        int32_t y = 4 + (int32_t)(k - first) * 15;
+        int cur = k == ui.lsel;
+        uint16_t bg = cur ? T_RAISE : T_SURF;
+        if (cur)
+            cv_rrect(6, y - 1, 216, 14, 3, T_RAISE, T_SURF);
+        b[0] = (char)('0' + (k + 1u) / 10u);
+        b[1] = (char)('0' + (k + 1u) % 10u);
+        b[2] = 0;
+        cv_text_on(10, y + 1, &AF_S, b, T_DIM, bg);
+        str_cpy(b, "CC", sizeof b);
+        fmt_u(b + 2, ccmap[k].cc);
+        str_cat(b, " CH", sizeof b);
+        fmt_u(b + str_len(b), ccmap[k].ch + 1u);
+        cv_text_on(32, y + 1, &AF_S, b, cur ? T_THEME : T_MID, bg);
+        cc_name(b, ccmap[k].pid, ccmap[k].trk, sizeof b);
+        cv_text_fit(104, y + CAP_IN(S, 12), &AF_S, b, cur ? T_TEXT : T_MID, bg, 116);
+    }
+    if (n > 7u) {                                /* (a scroll bar on the right) */
+        int32_t h = 104 * 7 / (int32_t)n, y = 4 + (104 - h) * (int32_t)first / (int32_t)(n - 7u);
+        cv_rrect(226, 4, 4, 104, 2, T_LINE, T_SURF);
+        cv_rrect(226, y, 4, h, 2, T_THEME, T_LINE);
+    }
+    str_cpy(b, "", sizeof b);
+    fmt_u(b, n);
+    str_cat(b, n == 1u ? " MAPPING  K2 CHOOSES, K3 DELETES" : " MAPPINGS  K2 CHOOSES, K3 DELETES", sizeof b);
+    g_label(12, 108, b, T_DIM);
 }
 static void g_song(void)                         /* SONG: its rows (pattern, repeats), the one shown, the one playing */
 {
@@ -3151,6 +3243,11 @@ static uint32_t graph_sig(void)
         return h + (uint32_t)(song.mflt + 64) * 3u + song.mres * 257u;
     if (ui.page == PG_NEW)
         return h + ui.nlen * 3u + (uint32_t)(ui.nspd + 8) * 101u + ui.nbpm * 1009u + ui.nkit * 7u;
+    if (ui.page == PG_LEARN) {
+        for (i = 0; i < NMAP; i++)
+            h = h * 7u + ccmap[i].pid * 131u + ccmap[i].cc * 3u + ccmap[i].trk;
+        return h + ui.lsel * 101u + ui.learn * 13u;
+    }
     if (ui.page == PG_ENV)
         return h + TS->atk * 3u + TS->rel * 101u + TS->gate * 1009u + TS->p[1] * 10007u + song.ddec * 7u + song.bpm * 13u;
     if (ui.page == PG_SAVE) {
@@ -3192,6 +3289,7 @@ static void draw_graph(int force)
     case PG_MFX: g_mfx(); break;
     case PG_NEW: g_new(); break;
     case PG_ENV: g_env(); break;
+    case PG_LEARN: g_learn(); break;
     default: g_grid(); break;
     }
     cv_blit(0, Y_GRAPH);

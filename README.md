@@ -66,7 +66,8 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | Taste | Seite | Knöpfe 1–4 | mit SHIFT |
 |---|---|---|---|
 | HOME | KIT | Tempo, Swing, Tune (alle), Decay (alle) | MIDI-Kanal, Theme, Version |
-| HOME (2.) | **MIDI** | Clock (INT / EXT), Clock Out (aus / an), Ausgabekanal des Sounds (OFF, 1–16), seine Note | MIDI-IN-Kanal, **CC LEARN** (OFF, ON, CLEAR) |
+| HOME (2.) | **MIDI** | Clock (INT / EXT), Clock Out (aus / an), Ausgabekanal des Sounds (OFF, 1–16), seine Note | MIDI-IN-Kanal |
+| HOME (3.) | **CC LEARN** | LEARN (OFF, ON, CLEAR), Eintrag (blättert durch die Liste aller Zuordnungen, die das Bild zeigt), DELETE (ein Dreh löscht den gewählten Eintrag) | |
 | HOME (halten) | **SYSTEM** (ohne Kopfzeile, oben das LUXR-Logo) | Version, belegte Plätze und freier Speicher, Audio-Last, Akkuspannung (geschätzt, unkalibriert), About | |
 | SEQ | SEQUENCER | Länge der Spur, Velocity des letzten Steps, Rotate, Euclid | **PAT LEN: jeder Dreh verdoppelt die Patternlänge (zurück: halbiert)**, **COPY x2: Noten in die neuen Takte kopieren (an/aus)**, Accent des letzten Steps, **SPEED der Spur** (1/8X, 1/4X, 1/2X, 3/4X, 1X, 3/2X, 2X) |
 | SEQ (2.) | **LIVE PADS** | Pad-Velocity, Quantize-Raster, -Richtung, Metronom | |
@@ -196,7 +197,7 @@ Clap, 42 CH, 46 OH, 45 Tom, 37 Rim, 49 Cymbal); gespeichert mit dem Kit. Gesende
 Pads und des Note Repeat (nicht die von MIDI IN), mit Velocity (Accent +20) und einer Länge von einem halben Sechzehntel.
 Stumme Spuren senden nicht.
 
-**CC-Learn.** MIDI-Seite, SHIFT, KNOB 2 auf ON. Dann an irgendeinem Knopf drehen („… SEND CC“) und am externen
+**CC-Learn.** HOME dreimal (Seite CC LEARN), KNOB 1 auf ON. Dann an irgendeinem Knopf drehen („… SEND CC“) und am externen
 Controller einen Regler bewegen: Kanal und CC sind diesem Parameter zugeordnet (bei Sound-Parametern dem Sound, der
 gerade gewählt war, auch Mixer-Streifen gehen). LEARN bleibt an für weitere Zuordnungen; OFF beendet, CLEAR löscht alle.
 Bis 32 Zuordnungen, global gespeichert (überleben Patchwechsel und Updates). Nicht anlernbar sind Speicher-, Step- und
