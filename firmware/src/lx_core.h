@@ -125,6 +125,8 @@ typedef struct {
     uint8_t smode, slen, srow, srep, send;   /* SONG: on, its rows, the row and the repeat playing, at its end loop / stop */
     int8_t mflt;                 /* the master filter: - low-pass, + high-pass, 0 off */
     uint8_t mres;
+    uint8_t cthr, crat, catk, crel, cmak, clim;   /* the compressor: threshold -dB, ratio, attack, release, makeup +dB; the
+                                                 * limiter on (LXPA, the kit) */
 } song_t;
 enum { CK_INT, CK_EXT, CK_N };
 

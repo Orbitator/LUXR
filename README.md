@@ -47,7 +47,8 @@ Rechteck, S&H), Rate im Tempo (1/16 … 8 Takte, ab dem Takt, in dem PLAY starte
 ## Bedienung
 
 **GLO lange halten (ab 250 ms) = SHIFT.** Wird GLO zusammen mit einem anderen Bedienelement gedrückt, gilt SHIFT
-sofort. GLO kurz tippen öffnet den MIXER, nochmal tippen schaltet auf dessen Seite 2 (PAN) und zurück.
+sofort. GLO kurz tippen öffnet den MIXER, nochmal tippen schaltet auf dessen Seite 2 (PAN), ein drittes Mal auf den
+COMPRESSOR, dann wieder zum MIXER.
 Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts).
 
 | Bedienelement | normal | mit SHIFT |
@@ -90,6 +91,7 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | ARP | NOTE REPEAT | Rate, Velocity, Vel-Modus (fest, steigend, fallend, zufällig), Latch | Humanize |
 | GLO (tippen) | MIXER, Seite 1 | Lautstärke der vier Sounds der Bank | Pan der vier Sounds |
 | GLO (nochmal tippen) | MIXER, Seite 2: PAN | Pan der vier Sounds der Bank (L64 … C … R63) | Lautstärke |
+| GLO (dritte Seite) | **COMPRESSOR** | THRESH (0 … −40 dB), RATIO (1:1 … 10:1, LIMIT), ATTACK (0,5–50 ms), RELEASE (20–1000 ms) | MAKEUP (0 … +24 dB), LIMITER an/aus |
 | SAVE | STORE | **Weiße Tasten wählen den Platz (die 16 der Gruppe, in der KNOB 1 steht: 1–16, 17–32, 33–36; heller hinterlegt), OCT+ speichert sofort (auch auf NEW PATCH).** Platz 1–36, **was gespeichert wird** (KIT+PAT, nur KIT, nur PATTERN – OCT+ speichert), **was geladen wird** (KIT+PAT, nur KIT, nur PATTERN), **LOAD** (ein Dreh lädt den Platz; ein leerer Platz gibt ein neues, leeres Patch) | |
 | SAVE (2.) | **NEW PATCH** | Länge (1–64 Steps), Speed (1/8X … 2X), Tempo, **CREATE** (ein Dreh legt das neue Patch an: 16 leere Patterns, Wiedergabe gestoppt, noch nicht gespeichert) | Kit: FACTORY (Werkssounds und FX) oder KEEP (das aktuelle bleibt) |
 | REC (halten) | **QUANTIZE** | Raster (1/16, 1/8, 1/4), Richtung (zum nächsten Rasterpunkt / zum vorherigen), Metronom (aus, bei Aufnahme, an) | |
@@ -203,6 +205,12 @@ ob eine Clock ankommt.
 Clap, 42 CH, 46 OH, 45 Tom, 37 Rim, 49 Cymbal); gespeichert mit dem Kit. Gesendet werden die Schläge des Sequencers, der
 Pads und des Note Repeat (nicht die von MIDI IN), mit Velocity (Accent +20) und einer Länge von einem halben Sechzehntel.
 Stumme Spuren senden nicht.
+
+**Master-Kompressor und Limiter (GLO dreimal).** Der Kompressor sitzt hinter dem Master-Filter und vor der Lautstärke,
+beide Seiten gemeinsam (das Panorama bleibt). 0 dB entspricht dem vollen Ausgang bei Standard-Lautstärke. Die Grafik zeigt
+die Kennlinie, den aktuellen Pegel darauf (roter Punkt) und die Absenkung von Kompressor und Limiter. Der LIMITER sitzt ganz
+am Ende und hält die Spitzen unter dem Soft-Clip des Ausgangs (er kennt jeden Block, bevor er klingt: kein Überschwingen).
+Beides wird mit dem Kit gespeichert; ab Werk ist der Kompressor 1:1 (aus) und der Limiter aus – der Klang bleibt wie bisher.
 
 **Tonal spielen (MIDI IN).** Hat ein Sound als einziger einen bestimmten MIDI-Kanal (HOME 2., MIDI CH), spielen Noten auf
 diesem Kanal genau diesen Sound tonal: C3 (Note 60) ist seine eigene Tonhöhe, jede Taste ein Halbton, drei Oktaven nach

@@ -617,6 +617,119 @@ static void mfilter_block(int32_t *L, int32_t *R, uint32_t n)
     }
 }
 
+/* ------------------------------------------------------ the compressor --- */
+/* the master's compressor (GLO page 3): peak detection of both sides together, a block's gain from the envelope in
+ * log2 (Q8: 1/256 octave = 0.0235 dB), ramped over the block; then the volume; then the limiter (at 0.85 into the soft clip, a
+ * block known before it plays: no overshoot) */
+static const uint16_t L2T[256] = {
+    0, 1, 3, 4, 6, 7, 9, 10, 11, 13, 14, 16, 17, 18, 20, 21,
+    22, 24, 25, 26, 28, 29, 30, 32, 33, 34, 36, 37, 38, 40, 41, 42,
+    44, 45, 46, 47, 49, 50, 51, 52, 54, 55, 56, 57, 59, 60, 61, 62,
+    63, 65, 66, 67, 68, 69, 71, 72, 73, 74, 75, 77, 78, 79, 80, 81,
+    82, 84, 85, 86, 87, 88, 89, 90, 92, 93, 94, 95, 96, 97, 98, 99,
+    100, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 116, 117,
+    118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133,
+    134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149,
+    150, 151, 152, 153, 154, 155, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164,
+    165, 166, 167, 168, 169, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 178,
+    179, 180, 181, 182, 183, 184, 185, 185, 186, 187, 188, 189, 190, 191, 192, 192,
+    193, 194, 195, 196, 197, 198, 198, 199, 200, 201, 202, 203, 203, 204, 205, 206,
+    207, 208, 208, 209, 210, 211, 212, 212, 213, 214, 215, 216, 216, 217, 218, 219,
+    220, 220, 221, 222, 223, 224, 224, 225, 226, 227, 228, 228, 229, 230, 231, 231,
+    232, 233, 234, 234, 235, 236, 237, 238, 238, 239, 240, 241, 241, 242, 243, 244,
+    244, 245, 246, 247, 247, 248, 249, 249, 250, 251, 252, 252, 253, 254, 255, 255
+};
+static const uint16_t E2T[256] = {
+    32768, 32857, 32946, 33035, 33125, 33215, 33305, 33395, 33486, 33576, 33667, 33759, 33850, 33942, 34034, 34126,
+    34219, 34312, 34405, 34498, 34591, 34685, 34779, 34874, 34968, 35063, 35158, 35253, 35349, 35445, 35541, 35637,
+    35734, 35831, 35928, 36025, 36123, 36221, 36319, 36417, 36516, 36615, 36715, 36814, 36914, 37014, 37114, 37215,
+    37316, 37417, 37518, 37620, 37722, 37824, 37927, 38030, 38133, 38236, 38340, 38444, 38548, 38653, 38757, 38863,
+    38968, 39074, 39180, 39286, 39392, 39499, 39606, 39714, 39821, 39929, 40037, 40146, 40255, 40364, 40473, 40583,
+    40693, 40804, 40914, 41025, 41136, 41248, 41360, 41472, 41584, 41697, 41810, 41923, 42037, 42151, 42265, 42380,
+    42495, 42610, 42726, 42841, 42958, 43074, 43191, 43308, 43425, 43543, 43661, 43780, 43898, 44017, 44137, 44256,
+    44376, 44497, 44617, 44738, 44859, 44981, 45103, 45225, 45348, 45471, 45594, 45718, 45842, 45966, 46091, 46216,
+    46341, 46467, 46593, 46719, 46846, 46973, 47100, 47228, 47356, 47484, 47613, 47742, 47871, 48001, 48131, 48262,
+    48393, 48524, 48655, 48787, 48920, 49052, 49185, 49319, 49452, 49586, 49721, 49856, 49991, 50126, 50262, 50399,
+    50535, 50672, 50810, 50947, 51085, 51224, 51363, 51502, 51642, 51782, 51922, 52063, 52204, 52346, 52488, 52630,
+    52773, 52916, 53059, 53203, 53347, 53492, 53637, 53782, 53928, 54074, 54221, 54368, 54515, 54663, 54811, 54960,
+    55109, 55258, 55408, 55558, 55709, 55860, 56012, 56163, 56316, 56468, 56622, 56775, 56929, 57083, 57238, 57393,
+    57549, 57705, 57861, 58018, 58176, 58333, 58491, 58650, 58809, 58968, 59128, 59289, 59449, 59611, 59772, 59934,
+    60097, 60260, 60423, 60587, 60751, 60916, 61081, 61247, 61413, 61579, 61746, 61914, 62081, 62250, 62419, 62588,
+    62757, 62928, 63098, 63269, 63441, 63613, 63785, 63958, 64132, 64306, 64480, 64655, 64830, 65006, 65182, 65359
+};
+static const uint8_t CRATIO[8] = {0, 85, 128, 171, 192, 213, 230, 255};   /* 1 - 1 / ratio (Q8): 1:1 .. 10:1, LIMIT */
+static int32_t log2q8(uint32_t x)                /* log2(x) in Q8 (x > 0) */
+{
+    uint32_t n = 31u - (uint32_t)__builtin_clz(x), m = (n >= 8u ? x >> (n - 8u) : x << (8u - n)) & 255u;
+    return (int32_t)(n * 256u + L2T[m]);
+}
+static uint32_t exp2q15(int32_t l)               /* 2^(l / 256) in Q15 (l: -16 .. +8 octaves) */
+{
+    int32_t o = l >> 8;
+    uint32_t f = E2T[l & 255];
+    return o >= 0 ? f << (o > 8 ? 8 : o) : (o < -24 ? 0u : f >> -o);
+}
+static int64_t clamp64(int64_t v, int64_t lo, int64_t hi) { return v < lo ? lo : v > hi ? hi : v; }
+static uint32_t cmp_env, cmp_g = 32768u, lim_g = 32768u;   /* the envelope (|x|), the gains (Q15) */
+static uint8_t cmp_gr, lim_gr;                   /* their reduction now, in dB x 4 (the screen) */
+static uint32_t cmp_k(uint32_t ms10)             /* a block's one-pole step (Q16) for a time constant in 1/10 ms */
+{
+    uint32_t blocks10 = ms10 * 441u / (CTL * 100u) + 1u;   /* (10 x blocks: 1378 blocks a second) */
+    return 655360u / (blocks10 + 10u);
+}
+static void comp_block(int32_t *L, int32_t *R, uint32_t n)   /* before the volume */
+{
+    uint32_t i, pk = 0, g0 = cmp_g, g1;
+    int32_t over, red;
+    for (i = 0; i < n; i++) {
+        uint32_t a = (uint32_t)(L[i] < 0 ? -L[i] : L[i]), b = (uint32_t)(R[i] < 0 ? -R[i] : R[i]);
+        if (a > pk) pk = a;
+        if (b > pk) pk = b;
+    }
+    {                                            /* ATTACK 0.5 .. 50 ms, RELEASE 20 .. 1000 ms */
+        uint32_t atk = 5u + (uint32_t)song.catk * song.catk * 495u / 16129u, rel = 200u + (uint32_t)song.crel * song.crel * 9800u / 16129u;
+        uint32_t k = pk > cmp_env ? cmp_k(atk) : cmp_k(rel);
+        if (pk > cmp_env) cmp_env += (uint32_t)(((uint64_t)(pk - cmp_env) * k) >> 16);
+        else cmp_env -= (uint32_t)(((uint64_t)(cmp_env - pk) * k) >> 16);
+    }
+    /* the threshold (0 .. -40 dB) against 0 dB: 65536 here, the output's soft clip full at the volume's default */
+    over = cmp_env ? log2q8(cmp_env) - (log2q8(65536u) - (int32_t)song.cthr * 256 / 6) : -1;   /* (6 dB an octave) */
+    red = over > 0 ? over * CRATIO[song.crat & 7u] / 255 : 0;
+    cmp_gr = (uint8_t)clamp(red * 6 * 4 / 256, 0, 255);
+    g1 = exp2q15(-red + (int32_t)song.cmak * 256 / 6);
+    cmp_g = g1;
+    if (g0 == 32768u && g1 == 32768u)
+        return;
+    for (i = 0; i < n; i++) {
+        int64_t g = (int32_t)g0 + ((int32_t)g1 - (int32_t)g0) * (int32_t)(i + 1u) / (int32_t)n;   /* (no 64-bit division) */
+        L[i] = (int32_t)clamp64(((int64_t)L[i] * g) >> 15, -(1 << 19), 1 << 19);   /* (MAKEUP: the volume's product in range) */
+        R[i] = (int32_t)clamp64(((int64_t)R[i] * g) >> 15, -(1 << 19), 1 << 19);
+    }
+}
+static void lim_block(int32_t *o, uint32_t n)    /* the output (stereo, interleaved, before saturation) */
+{
+    uint32_t i, pk = 0, ceil_ = 28000u, need;   /* (0.85 into the soft clip: it stays near linear) */
+    if (!song.clim) {
+        lim_g = 32768u;
+        lim_gr = 0;
+        return;
+    }
+    for (i = 0; i < 2u * n; i++) {
+        uint32_t a = (uint32_t)(o[i] < 0 ? -o[i] : o[i]);
+        if (a > pk) pk = a;
+    }
+    need = pk > ceil_ ? (ceil_ << 15) / pk : 32768u;   /* (28000 << 15 fits 32 bits) */
+    if (need < lim_g)
+        lim_g = need;                            /* (at once: this block already) */
+    else
+        lim_g += ((32768u - lim_g) * cmp_k(1500u)) >> 16;   /* back in ~150 ms */
+    if (lim_g > 32768u) lim_g = 32768u;
+    lim_gr = (uint8_t)clamp((log2q8(32768u) - log2q8(lim_g)) * 6 * 4 / 256, 0, 255);
+    if (lim_g < 32768u)
+        for (i = 0; i < 2u * n; i++)
+            o[i] = (int32_t)(((int64_t)o[i] * lim_g) >> 15);
+}
+
 /* ------------------------------------------------------------------ mix --- */
 static void seq_block(uint32_t n);               /* lx_seq.c: the steps of this block */
 static int32_t peak[NTRK];                       /* the mixer's meters (Q15, decaying in the UI) */
@@ -680,8 +793,12 @@ static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the 
         L[i] -= dcl >> 10;
         R[i] -= dcr >> 10;
     }
+    comp_block(L, R, n);
     for (i = 0; i < n; i++) {
-        out[2u * i] = sat(((L[i] >> 2) * (int32_t)m) >> 9) >> 1;
-        out[2u * i + 1u] = sat(((R[i] >> 2) * (int32_t)m) >> 9) >> 1;
+        out[2u * i] = ((L[i] >> 2) * (int32_t)m) >> 9;
+        out[2u * i + 1u] = ((R[i] >> 2) * (int32_t)m) >> 9;
     }
+    lim_block(out, n);
+    for (i = 0; i < 2u * n; i++)
+        out[i] = sat(out[i]) >> 1;
 }

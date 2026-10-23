@@ -291,6 +291,8 @@ int main(int argc, char **argv)
     host_ppm(path);
     host_tap(B_OCTDN);
     host_tap(B_GLO);
+    CHECK(ui.page == PG_COMP, "GLO again: the compressor");
+    host_tap(B_GLO);
     CHECK(ui.page == PG_MIX && !ui.mixpan, "GLO again: back to the levels");
     host_turn(EN_K1, -10);
     CHECK(snd[0].level == 100u, "page 1 K1: kick level %u", snd[0].level);
@@ -1584,6 +1586,49 @@ int main(int argc, char **argv)
         CHECK(ST_PROJ(NSLOT) <= sizeof h_store && NSLOT == 36u, "36 slots in the store");
         memset(h_store, 0xFF, sizeof h_store);
     }
+    host_boot(42);
+    {                                            /* GLO: MIXER, PAN, COMPRESSOR; the compressor and the limiter bring the level
+                                                  * down; kept with the kit */
+        static float pk[3];
+        static double en[3];
+        uint32_t m;
+        host_tap(B_GLO);
+        host_tap(B_GLO);
+        host_tap(B_GLO);
+        CHECK(ui.page == PG_COMP, "GLO three times: COMPRESSOR (%u)", ui.page);
+        host_tap(B_GLO);
+        CHECK(ui.page == PG_MIX && !ui.mixpan, "GLO again: the mixer");
+        CHECK(!song.crat && !song.clim && song.cthr == 12u, "the factory: compressor 1:1, no limiter");
+        kit_factory();
+        demo_pattern(&pat[song.pat % NPAT]);
+        for (m = 0; m < 3u; m++) {
+            uint32_t k, j;
+            song.crat = m == 1u ? 7u : 0u;       /* 0: off; 1: LIMIT at -20 dB; 2: the limiter alone */
+            song.cthr = 20;
+            song.clim = m == 2u;
+            seq_play(0);
+            host_run(300, 0, 0);
+            seq_play(1);
+            pk[m] = 0;
+            en[m] = 0;
+            for (k = 0; k < 2000u; k++) {
+                run_samples(CTL, 0);
+                for (j = 0; j < CTL; j++) {
+                    if (fabsf(out_l[j]) > pk[m]) pk[m] = fabsf(out_l[j]);
+                    en[m] += out_l[j] * out_l[j];
+                }
+            }
+        }
+        seq_play(0);
+        CHECK(en[1] < en[0] * 0.4, "COMPRESSOR LIMIT at -20 dB: the level down (%.0f %%)", 100.0 * en[1] / en[0]);
+        CHECK(pk[2] < pk[0] && pk[2] <= 0.5f * 0.75f, "LIMITER: the peaks held under the soft clip (%.3f -> %.3f)", pk[0], pk[2]);
+        song.cthr = 9; song.crat = 3; song.catk = 40; song.crel = 70; song.cmak = 5; song.clim = 1;
+        proj_save(2, SW_ALL);
+        song.cthr = song.crat = song.catk = song.crel = song.cmak = song.clim = 0;
+        CHECK(!proj_load(2, SW_ALL) && song.cthr == 9u && song.crat == 3u && song.catk == 40u && song.crel == 70u && song.cmak == 5u &&
+              song.clim == 1u, "the compressor kept with the kit");
+        memset(h_store, 0xFF, sizeof h_store);
+    }
     host_boot(39);
     {                                            /* the metronome audible; the reverb's pre-delay; new sounds: no sends */
         double e = 0, w0 = 0, w1 = 0;
@@ -1628,7 +1673,7 @@ int main(int argc, char **argv)
     {                                            /* the screens of every page (doc/screens) */
         static const char *const N[PG_N] = {"kit", "seq", "live", "synth", "synth2", "sample", "sample2", "sound_mix", "lfo",
                                             "lfo2", "fx_sends", "drive", "delay", "delay2", "reverb", "patterns", "repeat",
-                                            "mixer", "store", "quant", "info", "midi", "song", "master", "new", "env", "learn", "tracks"};
+                                            "mixer", "store", "quant", "info", "midi", "song", "master", "new", "env", "learn", "tracks", "comp"};
         uint32_t pg;
         (void)N; (void)pg;
     }
