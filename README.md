@@ -37,6 +37,9 @@ Seite SAMPLE: Sample, Level, Pitch (25 … 175 %), Decay (FULL = ganzes Sample);
 der Amp-Hüllkurve eingemischt. Jeder Werks- und jeder gewürfelte Sound spielt immer ein Transienten-Sample.
 Das Drehen an Knöpfen spielt den Sound nicht an (anspielen: die weiße Taste des Sounds auf einer Seite außer SEQ).
 
+Werkssounds und gewürfelte Sounds haben Decay 50 und keine Sends; die Hi-Hats stehen im Panorama auf L23 (CH) und R23 (OH),
+alle anderen in der Mitte.
+
 **Pro Sound außerdem** (wie in der Web-App): Volume, Pan, Sends für Delay, Reverb und Drive (EDIT dreimal: SOUND MIX) und
 **zwei LFOs** (LFO, nochmal: LFO 2) mit Ziel (Pitch, Filter, Decay, Level, Pan, Sample), Welle (Sinus, Dreieck, Säge,
 Rechteck, S&H), Rate im Tempo (1/16 … 8 Takte, ab dem Takt, in dem PLAY startete) und bipolarer Tiefe (−64 … +63).
@@ -78,7 +81,7 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | FX (2.) | DRIVE (global, im Kit) | Modus (SOFT, HARD, FOLD), Stärke, Ton, Pegel | |
 | FX (3.) | DELAY (global, im Kit) | **Modus** (MONO, STEREO: links und rechts je eine Zeit, PINGPONG: die Wiederholungen wechseln die Seite), Zeit (1/8 … 3/4; in STEREO die linke), Zeit rechts (STEREO), Feedback | |
 | FX (4.) | DELAY 2 | Ton, Pegel | |
-| FX (5.) | REVERB (global, im Kit) | Größe (Nachhallzeit), Dämpfung, Pegel – ein Plate-Hall nach Dattorro | |
+| FX (5.) | REVERB (global, im Kit) | Größe (Nachhallzeit), Dämpfung, Pegel, **Pre-Delay** (OFF … 180 ms) – ein Plate-Hall nach Dattorro | |
 | FX (6.) | **MASTER** | Filter (links der Mitte Tiefpass, rechts Hochpass, Mitte aus), Resonanz – per CC anlernbar, nicht gespeichert | |
 | SCL | PATTERNS | Pattern (spielend: wechselt am Pattern-Ende), Chain (spielt N Patterns nacheinander), **Copy** (ein Dreh kopiert das angezeigte Pattern), **Paste** (ein Dreh fügt es ins angezeigte Pattern ein). **Weiße Tasten:** Taste k = Pattern k; eine Taste halten und eine zweite drücken = Chain vom kleineren bis zum größeren (2 + 5: 2-3-4-5) | |
 | SCL (2.) | **SONG** | Zeile (1–32), ihr Pattern, ihre Wiederholungen (1–16), Song an / aus. **Weiße Tasten:** nacheinander gedrückt ergeben sie die Zeilen des Songs (die erste Taste nach dem Öffnen der Seite beginnt einen neuen Song, SONG geht an) | Anzahl Zeilen, am Ende: LOOP / STOP |
@@ -146,7 +149,7 @@ Plätze als `.luxr`-Datei herunterladen und wieder zurückspielen (auch ältere 
 Installieren zieht die Seite auf Wunsch vorher ein Backup und spielt es danach zurück. Das geht ab dieser LUXR-Version –
 die Firmware davor kennt die Backup-Befehle noch nicht.
 
-**Speicherformat LXP8** (LXP7 plus Hüllkurve). Die Patterns werden gepackt gespeichert (nur gesetzte Steps, oder alle, wenn das kürzer ist),
+**Speicherformat LXP9** (Hüllkurve, Pre-Delay; LXP1–8 werden gelesen). Die Patterns werden gepackt gespeichert (nur gesetzte Steps, oder alle, wenn das kürzer ist),
 damit Locks, NUDGE, SPEED und der Song in die 20 KiB eines Platzes passen. Patches älterer Formate (LXP1–6) werden beim
 Laden umgewandelt und beim nächsten Speichern als LXP7 geschrieben; Backups bleiben in beide Richtungen nutzbar. Passt
 ein Patch nicht mehr (nur bei sehr vielen Locks in sehr vollen Patterns), meldet SAVE „PATCH TOO FULL“ und schreibt

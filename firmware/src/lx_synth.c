@@ -358,14 +358,14 @@ static void lx_render(uint32_t t, voice_t *v, const sound_t *s, int32_t *out, ui
 
 /* the sounds at power-on (preset 0) and the ranges PRESETS rolls the others in (lo, hi per parameter) */
 static const uint8_t LX_FACTORY[NTRK][8] = {
-    {14, 80, 80, 34, 0, 10, 50, 20},             /* KICK */
-    {54, 44, 80, 58, 76, 50, 40, 10},            /* SNARE */
-    {60, 56, 40, 60, 30, 30, 0, 10},             /* CLAP */
-    {80, 20, 50, 90, 50, 20, 20, 0},             /* CL HAT */
-    {80, 60, 50, 90, 50, 10, 20, 0},             /* OP HAT */
+    {14, 50, 80, 34, 0, 10, 50, 20},             /* KICK */
+    {54, 50, 80, 58, 76, 50, 40, 10},            /* SNARE */
+    {60, 50, 40, 60, 30, 30, 0, 10},             /* CLAP */
+    {80, 50, 50, 90, 50, 20, 20, 0},             /* CL HAT */
+    {80, 50, 50, 90, 50, 10, 20, 0},             /* OP HAT */
     {44, 50, 40, 40, 0, 10, 20, 0},              /* TOM */
-    {90, 14, 40, 20, 26, 30, 80, 30},            /* RIM */
-    {60, 70, 60, 60, 70, 40, 20, 0},             /* CYMBAL */
+    {90, 50, 40, 20, 26, 30, 80, 30},            /* RIM */
+    {60, 50, 60, 60, 70, 40, 20, 0},             /* CYMBAL */
 };
 static const uint8_t LX_RANGE[NTRK][8][2] = {
     {{8, 22}, {55, 100}, {40, 110}, {20, 50}, {0, 0}, {0, 30}, {20, 90}, {0, 60}},
@@ -410,6 +410,10 @@ static void sound_preset(uint32_t t, uint32_t k)   /* track t's sound k: 0 the f
     s->spitch = k ? (uint8_t)(40u + xrand(&x) % 50u) : 64;
     s->sdec = k && xrand(&x) % 3u == 0u ? (uint8_t)(50u + xrand(&x) % 70u) : 127;
     s->preset = (uint8_t)k;
+    if (k) {                                     /* (a rolled sound: no sends, the hats panned apart, the rest centred) */
+        s->dly = s->rev = s->drv = 0;
+        s->pan = (int8_t)(TRK_KIND[t % NTRK] == K_HATC ? -23 : TRK_KIND[t % NTRK] == K_HATO ? 23 : 0);
+    }
 }
 static void sound_init(uint32_t t)               /* the whole sound: the factory one, centred, the LFOs off */
 {
@@ -418,9 +422,9 @@ static void sound_init(uint32_t t)               /* the whole sound: the factory
     sound_preset(t, 0);
     s->syn = 127;
     s->level = 100;
-    s->pan = (int8_t)((const int8_t[NTRK]){0, 0, 6, -12, -12, 14, 10, 16})[t % NTRK];
-    s->dly = 0;
-    s->rev = t == 2u || t == 7u ? 30 : 8;
+    s->pan = (int8_t)(TRK_KIND[t % NTRK] == K_HATC ? -23 : TRK_KIND[t % NTRK] == K_HATO ? 23 : 0);   /* (the hats apart, */
+    s->dly = 0;                                  /* .. no sends) */
+    s->rev = 0;
     s->drv = 0;
     s->och = 0;                                  /* (MIDI OUT off) */
     s->atk = 0;                                  /* (ENV: at once, the decay alone) */
@@ -453,6 +457,9 @@ enum { RV_I1 = 210, RV_I2 = 159, RV_I3 = 562, RV_I4 = 410,
 static int16_t rv_mem[RV_I1 + RV_I2 + RV_I3 + RV_I4 + RV_LA1 + RV_LD1 + RV_LA2 + RV_LD2 + RV_RA1 + RV_RD1 + RV_RA2 + RV_RD2 +
                       4u * RV_EXC + 4u] __attribute__((section(".pool")));
 static line_t rv_in[4], rv_la1, rv_ld1, rv_la2, rv_ld2, rv_ra1, rv_rd1, rv_ra2, rv_rd2;
+#define RV_PRE_N 8192u                           /* the reverb's pre-delay: up to 180 ms */
+static int16_t rv_pre[RV_PRE_N] __attribute__((section(".pool")));
+static uint32_t rv_pw;
 static int32_t rv_bw, rv_dl, rv_dr;              /* the input's low-pass, the halves' damping */
 static uint32_t rv_ph;
 static void rv_init(void)
@@ -492,6 +499,7 @@ static void fx_block(int32_t *L, int32_t *R, const int32_t *dsl, const int32_t *
     int32_t decay = 13000 + song.rev_size * 18000 / 127;     /* 0.40 .. 0.95 */
     int32_t damp = 32767 - song.rev_damp * 26000 / 127;      /* (the damping's pass: 1.0 .. 0.2) */
     int32_t md1, md2;
+    uint32_t pre = (uint32_t)song.rev_pre * 7938u / 127u;   /* (0 .. 180 ms) */
     if (!rv_in[0].b)                             /* (the lines laid out at the first block) */
         rv_init();
     if (dt >= DLY_N)
@@ -504,6 +512,10 @@ static void fx_block(int32_t *L, int32_t *R, const int32_t *dsl, const int32_t *
     for (i = 0; i < n; i++) {
         int32_t dL = dly_buf[0][(dly_w - dt) & (DLY_N - 1u)], dR = dly_buf[1][(dly_w - dt2) & (DLY_N - 1u)];
         int32_t x = rsend[i] >> 2, a, b, rl_, rr_, d;
+        rv_pre[rv_pw & (RV_PRE_N - 1u)] = (int16_t)s16(x);   /* PRE-DELAY */
+        if (pre)
+            x = rv_pre[(rv_pw - pre) & (RV_PRE_N - 1u)];
+        rv_pw++;
         uint32_t w = dly_w++ & (DLY_N - 1u);
         dly_lp[0] += ((dL - dly_lp[0]) * dk) >> 8;   /* darker repeats */
         dly_lp[1] += ((dR - dly_lp[1]) * dk) >> 8;
@@ -642,7 +654,7 @@ static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the 
         for (i = 0; i < n; i++) {
             uint32_t pp = p0 + i;
             if (pp < 1800u) {
-                int32_t c = (sine(pp * (bar ? 146100u : 97400u)) * (int32_t)(1800u - pp) / 1800) >> 2;
+                int32_t c = (sine(pp * (bar ? 194783000u : 126609000u)) * (int32_t)(1800u - pp) / 1800) >> 1;   /* 2 kHz / 1.3 kHz */
                 L[i] += c;
                 R[i] += c;
             }

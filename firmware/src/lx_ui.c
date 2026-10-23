@@ -89,11 +89,11 @@ enum {
     P_SPEED, P_EMICRO, P_MFLT, P_MRES, P_CLKSRC, P_CLKOUT, P_OCH, P_ONOTE, P_LEARN,
     P_SROW, P_SPAT, P_SREP, P_SMODE, P_SLEN, P_SEND,
     P_NLEN, P_NSPD, P_NBPM, P_NGO, P_NKIT,
-    P_EATK, P_EREL, P_EGATE,
+    P_EATK, P_EREL, P_EGATE, P_RPRE,
     P_COUNT
 };
 enum { FM_NUM, FM_PCT, FM_BIP, FM_NAME, FM_STEPS, FM_PAN, FM_X100, FM_BPM, FM_SMP, FM_PAT, FM_LOAD, FM_TONE, FM_PROB,
-       FM_SPAN, FM_SUB, FM_MICRO, FM_FILT, FM_NOTE, FM_CH, FM_ATK, FM_TIME, FM_GATE };
+       FM_SPAN, FM_SUB, FM_MICRO, FM_FILT, FM_NOTE, FM_CH, FM_ATK, FM_TIME, FM_GATE, FM_PRE };
 typedef struct { const char *label; uint8_t fmt; int16_t min, max; const char *const *names; } pdesc_t;
 static const char *const N_OFFON[] = {"OFF", "ON"};
 static const char *const N_LDEST[] = {"OFF", "PITCH", "FILTER", "DECAY", "LEVEL", "PAN", "SAMPLE"};
@@ -214,6 +214,7 @@ static const pdesc_t PD[P_COUNT] = {
     [P_EATK] = {"ATTACK", FM_ATK, 0, 127, 0},
     [P_EREL] = {"RELEASE", FM_TIME, 0, 127, 0},
     [P_EGATE] = {"GATE", FM_GATE, 0, 64, 0},
+    [P_RPRE] = {"PRE-DLY", FM_PRE, 0, 127, 0},
 };
 /* the four cards of each page: row A, row B (SHIFT) */
 static const uint8_t PAGE_P[PG_N][8] = {
@@ -231,7 +232,7 @@ static const uint8_t PAGE_P[PG_N][8] = {
     [PG_FXD] = {P_DMODE, P_DAMT, P_DTONE, P_DLVL, 0, 0, 0, 0},
     [PG_FXDL] = {P_DLMODE, P_DTIME, P_DTIME2, P_DFB, 0, 0, 0, 0},
     [PG_FXDL2] = {P_DLTONE, P_DLLVL, 0, 0, 0, 0, 0, 0},
-    [PG_FXR] = {P_RSIZE, P_RDAMP, P_RLVL, 0, 0, 0, 0, 0},
+    [PG_FXR] = {P_RSIZE, P_RDAMP, P_RLVL, P_RPRE, 0, 0, 0, 0},
     [PG_PAT] = {P_PAT, P_CHAIN, P_PCOPY, P_PPASTE, 0, 0, 0, 0},
     [PG_NR] = {P_NRRATE, P_NRVEL, P_NRVMODE, P_NRLATCH, P_NRHUMAN, 0, 0, 0},
     [PG_MIX] = {P_MIX0, P_MIX1, P_MIX2, P_MIX3, P_MPAN0, P_MPAN1, P_MPAN2, P_MPAN3},
@@ -350,7 +351,8 @@ static void fmt_u(char *b, uint32_t v);
 #define MAGIC_SET 0x3354584Cu                    /* "LXT3": + the MIDI clock, the CC map */
 #define MAGIC_SET2 0x3254584Cu                   /* "LXT2" */
 #define MAGIC_SET1 0x3154584Cu                   /* "LXT1" (LUXR's first) */
-#define MAGIC_PROJ 0x3850584Cu                   /* "LXP8": the sounds' envelope (attack, release, gate) */
+#define MAGIC_PROJ 0x3950584Cu                   /* "LXP9": the reverb's pre-delay, and room in the kit for more */
+#define MAGIC_P8 0x3850584Cu                     /* (the sounds' envelope: attack, release, gate) */
 #define MAGIC_P7 0x3750584Cu                     /* (packed patterns, the locks, NUDGE, the speeds, the song, MIDI OUT) */
 #define MAGIC_P6 0x3650584Cu                     /* (the conditions A:B, the delay's modes) */
 #define MAGIC_P5 0x3550584Cu                     /* (the substeps; probability and pan in nibbles; one delay time) */
@@ -403,13 +405,23 @@ typedef struct {
 } kit7_t;
 #define PBLOB7 (0x5000u - 16u - (uint32_t)sizeof(kit7_t))
 typedef char kit7_fits[sizeof(sound7_t) == 32u && sizeof(kit7_t) == 271u ? 1 : -1];
-/* LXP8 */
-typedef struct {                                 /* the kit */
+typedef struct {                                 /* the kit of LXP8 */
     sound_t s[NTRK];
     int8_t tune;
     uint8_t ddec, drv_mode, drv_amt, drv_tone, drv_lvl, dly_div, dly_fb, dly_tone, dly_lvl, rev_size, rev_damp, rev_lvl;
     uint8_t dly_mode, dly_div2;
+} kit8_t;
+#define PBLOB8 (0x5000u - 16u - (uint32_t)sizeof(kit8_t))
+/* LXP9 */
+typedef struct {                                 /* the kit: LXP8's (the same bytes first), the pre-delay, room for more */
+    sound_t s[NTRK];
+    int8_t tune;
+    uint8_t ddec, drv_mode, drv_amt, drv_tone, drv_lvl, dly_div, dly_fb, dly_tone, dly_lvl, rev_size, rev_damp, rev_lvl;
+    uint8_t dly_mode, dly_div2;
+    uint8_t rev_pre;
+    uint8_t rsv[15];                             /* (zero) */
 } kit_rec_t;
+typedef char kit9_fits[sizeof(kit_rec_t) == sizeof(kit8_t) + 16u ? 1 : -1];
 #define PBLOB (0x5000u - 16u - (uint32_t)sizeof(kit_rec_t))
 typedef struct { uint32_t magic, size, sum; uint16_t blen, pad; kit_rec_t k; uint8_t blob[PBLOB]; } proj_t;
 typedef char proj_fits[sizeof(proj_t) == 0x5000u && sizeof(proj_t) >= sizeof(proj6_t) && ST_PROJ(NSLOT) <= 0x49000u ? 1 : -1];
@@ -454,7 +466,7 @@ static int proj_read(uint32_t slot)              /* into proj_buf (from any form
 {
     return io_store_read(ST_PROJ(slot), stage, sizeof stage) || proj_convert(stage, sizeof stage);
 }
-static int slot_magic(uint32_t m) { return m == MAGIC_PROJ || m == MAGIC_P7 || m == MAGIC_P6 || m == MAGIC_P5 || m == MAGIC_P4; }
+static int slot_magic(uint32_t m) { return m == MAGIC_PROJ || m == MAGIC_P8 || m == MAGIC_P7 || m == MAGIC_P6 || m == MAGIC_P5 || m == MAGIC_P4; }
 static uint32_t rd32(const uint8_t *b) { return b[0] | (uint32_t)b[1] << 8 | (uint32_t)b[2] << 16 | (uint32_t)b[3] << 24; }
 
 /* ---- the blob: the patterns packed, then the rest of them
@@ -676,6 +688,7 @@ static void sound_from6(sound_t *d, const sound6_t *o, uint32_t t)
 static void kit_from6(kit_rec_t *d, const kit6_t *o)
 {
     uint32_t t;
+    memset(d, 0, sizeof *d);
     for (t = 0; t < NTRK; t++)
         sound_from6(&d->s[t], &o->s[t], t);
     d->tune = o->tune; d->ddec = o->ddec; d->drv_mode = o->drv_mode; d->drv_amt = o->drv_amt; d->drv_tone = o->drv_tone;
@@ -734,6 +747,21 @@ static int proj_convert(const uint8_t *raw, uint32_t n)
         memcpy(r, raw, sizeof *r);
         return r->size == sizeof *r && r->blen <= PBLOB && r->sum == proj_sum(r) && !dec_blob(r, 0) ? 0 : -2;
     }
+    if (magic == MAGIC_P8) {                     /* LXP8: its kit (no pre-delay), its blob as it is */
+        uint32_t bl = n >= 16u ? (uint32_t)(raw[12] | raw[13] << 8) : 0u;
+        if (n < 16u + sizeof(kit8_t) + bl || rd32(raw + 4) != 0x5000u || bl > PBLOB8 || bl > PBLOB ||
+            rd32(raw + 8) != fnv(raw + 12, 4u + sizeof(kit8_t) + bl))
+            return -2;
+        memset(&r->k, 0, sizeof r->k);
+        memcpy(&r->k, raw + 16, sizeof(kit8_t));
+        memcpy(r->blob, raw + 16u + sizeof(kit8_t), bl);
+        r->blen = (uint16_t)bl;
+        r->pad = 0;
+        r->magic = MAGIC_PROJ;
+        r->size = sizeof *r;
+        r->sum = proj_sum(r);
+        return dec_blob(r, 0) ? -2 : 0;
+    }
     if (magic == MAGIC_P7) {                     /* LXP7: its kit (no envelope yet), its blob as it is */
         static kit7_t k7;
         uint32_t bl = n >= 16u ? (uint32_t)(raw[12] | raw[13] << 8) : 0u;
@@ -741,6 +769,7 @@ static int proj_convert(const uint8_t *raw, uint32_t n)
             rd32(raw + 8) != fnv(raw + 12, 4u + sizeof k7 + bl))
             return -2;
         memcpy(&k7, raw + 16, sizeof k7);
+        memset(&r->k, 0, sizeof r->k);
         for (t = 0; t < NTRK; t++) {
             sound_from6(&r->k.s[t], &k7.s[t].s6, t);
             r->k.s[t].och = k7.s[t].och;
@@ -914,6 +943,8 @@ static void kit_take(kit_rec_t *k)
     k->dly_div = song.dly_div; k->dly_fb = song.dly_fb; k->dly_tone = song.dly_tone; k->dly_lvl = song.dly_lvl;
     k->rev_size = song.rev_size; k->rev_damp = song.rev_damp; k->rev_lvl = song.rev_lvl;
     k->dly_mode = song.dly_mode; k->dly_div2 = song.dly_div2;
+    k->rev_pre = song.rev_pre;
+    memset(k->rsv, 0, sizeof k->rsv);
 }
 static void kit_put(const kit_rec_t *k)
 {
@@ -942,6 +973,7 @@ static void kit_put(const kit_rec_t *k)
     song.dly_lvl = k->dly_lvl & 127u;
     song.rev_size = k->rev_size & 127u; song.rev_damp = k->rev_damp & 127u; song.rev_lvl = k->rev_lvl & 127u;
     song.dly_mode = k->dly_mode % DL_N; song.dly_div2 = k->dly_div2 % 6u;
+    song.rev_pre = k->rev_pre & 127u;
 }
 static int pat_take(proj_t *r)                   /* the patterns, their locks, the song into r's blob (0 = it fits) */
 {
@@ -1217,7 +1249,7 @@ static void kit_factory(void)
     song.ddec = 64;
     song.drv_mode = DM_SOFT; song.drv_amt = 40; song.drv_tone = 90; song.drv_lvl = 100;
     song.dly_div = 1; song.dly_div2 = 2; song.dly_mode = DL_MONO; song.dly_fb = 50; song.dly_tone = 60; song.dly_lvl = 110;
-    song.rev_size = 70; song.rev_damp = 30; song.rev_lvl = 110;
+    song.rev_size = 70; song.rev_damp = 30; song.rev_lvl = 110; song.rev_pre = 0;
 }
 /* NEW PATCH: stopped, 16 empty patterns of len steps at speed spd, the tempo, no song; the factory kit or (keep) the
  * one there. Nothing is saved: SAVE puts it in a slot. */
@@ -1352,6 +1384,7 @@ static int32_t pget(uint32_t id)
                id == P_EPAN ? (int32_t)X_PAN(x) : !X_COND(x) ? 16 : X_COND(x) < C_PROB_N ? (int32_t)X_COND(x) : (int32_t)X_COND(x) + 1;
     }
     case P_SPEED: return PAT->spd[song.sel % NTRK];
+    case P_RPRE: return song.rev_pre;
     case P_EATK: return s->atk;
     case P_EREL: return s->rel;
     case P_EGATE: return s->gate;
@@ -1534,6 +1567,7 @@ static void pset(uint32_t id, int32_t v)
     case P_CLKSRC: song.clk_src = (uint8_t)v; settings_save(); break;
     case P_CLKOUT: song.clk_out = (uint8_t)v; settings_save(); break;
     case P_OCH: s->och = (uint8_t)v; break;
+    case P_RPRE: song.rev_pre = (uint8_t)v; break;
     case P_EATK: s->atk = (uint8_t)v; break;
     case P_EREL: s->rel = (uint8_t)v; break;
     case P_EGATE: s->gate = (uint8_t)v; break;
@@ -1643,6 +1677,7 @@ static void pformat(uint32_t id, char *val, const char **unit)
         else { fmt_u(val, ms / 1000u); str_cat(val, ".", 16); fmt_u(val + str_len(val), ms / 100u % 10u); *unit = "S"; }
         break;
     }
+    case FM_PRE: if (!v) str_cpy(val, "OFF", 16); else { fmt_u(val, (uint32_t)v * 180u / 127u); *unit = "MS"; } break;
     case FM_GATE:                                /* (quarters of a step) */
         if (!v) str_cpy(val, "OFF", 16);
         else {

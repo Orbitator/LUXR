@@ -113,6 +113,7 @@ typedef struct {
     uint8_t dly_div, dly_fb, dly_tone, dly_lvl;    /* the delay: time (16ths), feedback, tone, return */
     uint8_t dly_mode, dly_div2;                    /* .. DM_MONO / STEREO / PING PONG, the right side's time (STEREO) */
     uint8_t rev_size, rev_damp, rev_lvl;           /* the reverb */
+    uint8_t rev_pre;                               /* .. its pre-delay (0 .. 127: 0 .. 180 ms; LXP9) */
     uint16_t master_q12;
     uint32_t step, pos;          /* the global 16th, samples into it */
     uint32_t pstep;              /* 16ths since the pattern began */

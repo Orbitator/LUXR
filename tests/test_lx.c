@@ -286,7 +286,7 @@ int main(int argc, char **argv)
     CHECK(snd[0].pan == -20 && snd[0].level == 110u, "page 2 K1: kick pan %d (level %u kept)", snd[0].pan, snd[0].level);
     host_tap(B_OCTUP);
     host_turn(EN_K3, 30);
-    CHECK(snd[6].pan == 40, "page 2, bank 5-8, K3: rim pan %d", snd[6].pan);
+    CHECK(snd[6].pan == 30, "page 2, bank 5-8, K3: rim pan %d", snd[6].pan);
     snprintf(path, sizeof path, "%s/lx_mixer_pan.ppm", dir);
     host_ppm(path);
     host_tap(B_OCTDN);
@@ -687,7 +687,9 @@ int main(int argc, char **argv)
     host_boot(10);
     host_tap(B_FX);
     reset_count();
-    host_key(key_white(2));
+    h_keys |= key_white(2);                      /* (watched while the key is down: the clap is short) */
+    host_run(40, watch, 0);
+    h_keys &= ~key_white(2);
     host_run(40, watch, 0);
     CHECK(hits[2] == 1u && !pat[0].s[song.sel][2], "FX page, white key 3: the clap played, no step set");
     h_keys |= key_white(5);
@@ -975,12 +977,12 @@ int main(int argc, char **argv)
         h_keys &= ~key_white(0);
         host_run(40, 0, 0);
         l = lock_find(plk[0], 0, 0, P_V1);
-        CHECK(l && l->val == 100u && snd[0].p[1] == 80u && pat[0].s[0][0], "a lock on step 1: DECAY 100, the sound kept at 80 (%u)",
+        CHECK(l && l->val == 70u && snd[0].p[1] == 50u && pat[0].s[0][0], "a lock on step 1: DECAY 70, the sound kept at 50 (%u)",
               l ? l->val : 0u);
         reset_at();
         seq_play(1);
         host_run(60, watch_at, 0);
-        CHECK(voice[0].nlk == 1u && voice[0].lk[0][0] == P_V1 && voice[0].lk[0][1] == 100u, "the hit of step 1 carries its lock");
+        CHECK(voice[0].nlk == 1u && voice[0].lk[0][0] == P_V1 && voice[0].lk[0][1] == 70u, "the hit of step 1 carries its lock");
         host_run(500, watch_at, 0);
         CHECK(hits[0] >= 2u && voice[0].nlk == 0u, "step 5: no lock (%u hits)", hits[0]);
         seq_play(0);
@@ -1419,6 +1421,45 @@ int main(int argc, char **argv)
             CHECK(ui.used[8] && !proj_load(8, SW_ALL) && snd[4].p[0] == 24u && snd[4].level == 70u && snd[4].och == 3u &&
                   snd[4].atk == 0u && snd[4].rel == 60u && pat[2].s[5][6] == 44u, "LXP7 slot 9: read, the envelope as before");
         }
+    }
+    host_boot(39);
+    {                                            /* the metronome audible; the reverb's pre-delay; new sounds: no sends */
+        double e = 0, w0 = 0, w1 = 0;
+        uint32_t k, j, t;
+        memset(pat, 0, sizeof pat);
+        for (k = 0; k < NPAT; k++) for (t = 0; t < NTRK; t++) pat[k].len[t] = 16;
+        song.click = CLICK_ON;
+        seq_play(1);
+        for (k = 0; k < 500u; k++) { host_run(2, 0, 0); for (j = 0; j < CTL; j++) e += out_l[j] * out_l[j]; }
+        seq_play(0);
+        host_run(100, 0, 0);
+        CHECK(e > 5.0, "the metronome: audible (%.1f)", e);
+        song.click = CLICK_OFF;
+        for (t = 0; t < NTRK; t++)
+            CHECK(!snd[t].dly && !snd[t].rev && !snd[t].drv && snd[t].p[1] == 50u && snd[t].pan == (t == 3u ? -23 : t == 4u ? 23 : 0),
+                  "sound %u: no sends, decay 50, pan %d", t + 1u, snd[t].pan);
+        sound_preset(4, 7);
+        CHECK(!snd[4].rev && snd[4].pan == 23, "a rolled open hat: no sends, pan R23");
+        for (k = 0; k < 2u; k++) {               /* the clap into the reverb: its tail 60..80 ms later with a pre-delay */
+            double *w = k ? &w1 : &w0;
+            sound_init(2);
+            snd[2].rev = 127;
+            song.rev_pre = (uint8_t)(k ? 127 : 0);
+            host_run(1500, 0, 0);
+            ev_push(EV_HIT, 2, 127);
+            host_run(25, 0, 0);
+            snd[2].level = 0;
+            for (j = 0; j < 40u; j++) { uint32_t q; host_run(1, 0, 0); for (q = 0; q < CTL; q++) *w += out_l[q] * out_l[q]; }
+            snd[2].level = 100;
+        }
+        CHECK(w1 < w0 * 0.5, "PRE-DELAY 180 ms: the early reverb later (%.3f %.3f)", w0, w1);
+        host_tap(B_FX); host_tap(B_FX); host_tap(B_FX); host_tap(B_FX); host_tap(B_FX);
+        CHECK(ui.page == PG_FXR && knob_id(3) == P_RPRE, "REVERB: KNOB 4 PRE-DELAY");
+        song.rev_pre = 64;
+        proj_save(1, SW_ALL);
+        song.rev_pre = 0;
+        proj_load(1, SW_ALL);
+        CHECK(song.rev_pre == 64u, "the pre-delay saved with the kit");
     }
     host_boot(33);
     host_tap(B_SEQ);
