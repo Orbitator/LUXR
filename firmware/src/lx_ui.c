@@ -54,21 +54,21 @@ static const uint16_t TRK_COL[NTRK] = {RGB(255, 96, 110), RGB(255, 170, 40), RGB
 #define C_REC RGB(255, 72, 60)
 
 enum { PG_KIT, PG_SEQ, PG_LIVE, PG_VOICE, PG_VOICE2, PG_SAMPLE, PG_SAMPLE2, PG_SND, PG_LFO1, PG_LFO2, PG_FXS, PG_FXD, PG_FXDL, PG_FXDL2, PG_FXR,
-       PG_PAT, PG_NR, PG_MIX, PG_SAVE, PG_REC, PG_INFO, PG_MIDI, PG_SONG, PG_MFX, PG_N };
+       PG_PAT, PG_NR, PG_MIX, PG_SAVE, PG_REC, PG_INFO, PG_MIDI, PG_SONG, PG_MFX, PG_NEW, PG_N };
 static const char *const PG_NAME[PG_N] = {"LUXR KIT", "SEQUENCER", "LIVE PADS", "SYNTH 1-4", "SYNTH 5-8", "SAMPLE LAYER", "SAMPLE 2",
                                           "SOUND MIX", "LFO 1", "LFO 2", "FX SENDS", "DRIVE", "DELAY", "DELAY 2", "REVERB",
                                           "PATTERNS", "NOTE REPEAT", "MIXER", "STORE", "QUANTIZE", "SYSTEM", "MIDI", "SONG",
-                                          "MASTER"};
+                                          "MASTER", "NEW PATCH"};
 static const uint8_t PAGE_BTN[PG_N] = {B_HOME, B_SEQ, B_SEQ, B_EDIT, B_EDIT, B_EDIT, B_EDIT, B_EDIT, B_LFO, B_LFO, B_FX, B_FX, B_FX, B_FX,
-                                       B_FX, B_SCL, B_ARP, B_GLO, B_SAVE, B_REC, B_HOME, B_HOME, B_SCL, B_FX};
+                                       B_FX, B_SCL, B_ARP, B_GLO, B_SAVE, B_REC, B_HOME, B_HOME, B_SCL, B_FX, B_SAVE};
 static const uint8_t PAGE_KC[PG_N] = {KC_HOME, KC_SEQ, KC_SEQ, KC_EDIT, KC_EDIT, KC_EDIT, KC_EDIT, KC_EDIT, KC_LFO, KC_LFO, KC_FX, KC_FX, KC_FX,
-                                      KC_FX, KC_FX, KC_SCL, KC_ARP, KC_GLO, KC_SAVE, KC_REC, KC_HOME, KC_HOME, KC_SCL, KC_FX};
+                                      KC_FX, KC_FX, KC_SCL, KC_ARP, KC_GLO, KC_SAVE, KC_REC, KC_HOME, KC_HOME, KC_SCL, KC_FX, KC_SAVE};
 /* a button's pages, in the order its taps show them (a button not listed: none, or its own logic) */
 typedef struct { uint8_t btn, n, pg[6]; } group_t;
 static const group_t GROUPS[] = {
     {B_SEQ, 2, {PG_SEQ, PG_LIVE}}, {B_EDIT, 5, {PG_VOICE, PG_VOICE2, PG_SAMPLE, PG_SAMPLE2, PG_SND}},
     {B_ENV, 1, {PG_SAMPLE}}, {B_LFO, 2, {PG_LFO1, PG_LFO2}}, {B_FX, 6, {PG_FXS, PG_FXD, PG_FXDL, PG_FXDL2, PG_FXR, PG_MFX}},
-    {B_SCL, 2, {PG_PAT, PG_SONG}}, {B_SAVE, 1, {PG_SAVE}},
+    {B_SCL, 2, {PG_PAT, PG_SONG}}, {B_SAVE, 2, {PG_SAVE, PG_NEW}},
 };
 
 /* ----------------------------------------------------------- parameters --- */
@@ -88,6 +88,7 @@ enum {
     /* (LXP7; the CC map stores these numbers: new ones only ever at the end) */
     P_SPEED, P_EMICRO, P_MFLT, P_MRES, P_CLKSRC, P_CLKOUT, P_OCH, P_ONOTE, P_LEARN,
     P_SROW, P_SPAT, P_SREP, P_SMODE, P_SLEN, P_SEND,
+    P_NLEN, P_NSPD, P_NBPM, P_NGO, P_NKIT,
     P_COUNT
 };
 enum { FM_NUM, FM_PCT, FM_BIP, FM_NAME, FM_STEPS, FM_PAN, FM_X100, FM_BPM, FM_SMP, FM_PAT, FM_LOAD, FM_TONE, FM_PROB,
@@ -113,6 +114,7 @@ static const char *const N_SPEED[] = {"1/8X", "1/4X", "1/2X", "3/4X", "1X", "3/2
 static const char *const N_CLKSRC[] = {"INT", "EXT"};
 static const char *const N_LEARN[] = {"OFF", "ON", "CLEAR"};
 static const char *const N_SEND[] = {"LOOP", "STOP"};
+static const char *const N_NKIT[] = {"FACTORY", "KEEP"};
 static const char *N_THEME[UI_NPALETTES];
 #define NSLOT 14u
 static const pdesc_t PD[P_COUNT] = {
@@ -203,6 +205,11 @@ static const pdesc_t PD[P_COUNT] = {
     [P_SMODE] = {"SONG", FM_NAME, 0, 1, N_OFFON},
     [P_SLEN] = {"ROWS", FM_NUM, 1, NSONG, 0},
     [P_SEND] = {"AT END", FM_NAME, 0, 1, N_SEND},
+    [P_NLEN] = {"LENGTH", FM_STEPS, 1, NSTEP, 0},
+    [P_NSPD] = {"SPEED", FM_NAME, SPD_MIN, SPD_MAX, N_SPEED},
+    [P_NBPM] = {"TEMPO", FM_BPM, 60, 200, 0},
+    [P_NGO] = {"CREATE", FM_LOAD, 0, 2, 0},
+    [P_NKIT] = {"KIT", FM_NAME, 0, 1, N_NKIT},
 };
 /* the four cards of each page: row A, row B (SHIFT) */
 static const uint8_t PAGE_P[PG_N][8] = {
@@ -229,6 +236,7 @@ static const uint8_t PAGE_P[PG_N][8] = {
     [PG_MIDI] = {P_CLKSRC, P_CLKOUT, P_OCH, P_ONOTE, P_MIDICH, P_LEARN, 0, 0},
     [PG_SONG] = {P_SROW, P_SPAT, P_SREP, P_SMODE, P_SLEN, P_SEND, 0, 0},
     [PG_MFX] = {P_MFLT, P_MRES, 0, 0, 0, 0, 0, 0},
+    [PG_NEW] = {P_NLEN, P_NSPD, P_NBPM, P_NGO, P_NKIT, 0, 0, 0},
 };
 
 static struct {
@@ -243,6 +251,8 @@ static struct {
     uint8_t lockmode;                            /* LM_*: the white keys are steps on every page (P-LOCK, NUDGE) */
     uint8_t learn, lpid, ltrk;                   /* CC LEARN: 1 on (a knob turned arms it), 2 armed: the next CC maps */
     uint8_t scur;                                /* SONG: the row shown */
+    uint8_t nlen, nbpm, nkit;                    /* NEW PATCH: its length, tempo, kit (factory / kept) */
+    int8_t nspd;                                 /* .. its tracks' speed */
     uint8_t restoring, rs_slot, rs_done;         /* patches coming in over USB (the update page): the loading screen */
     uint32_t rs_off, rs_t;
     char msg[28];
@@ -1138,6 +1148,51 @@ static void plen_scale(int up)                    /* SEQ + SHIFT, KNOB 1: every 
     ui_say(cut ? "64 STEPS MAX" : up ? (ui.copy ? "x2, NOTES COPIED" : "x2, NEW BARS EMPTY") : "HALF LENGTH");
 }
 
+/* the kit at power-on: the factory sounds, the global FX as they come */
+static void kit_factory(void)
+{
+    uint32_t i;
+    for (i = 0; i < NTRK; i++)
+        sound_init(i);
+    song.tune = 0;
+    song.ddec = 64;
+    song.drv_mode = DM_SOFT; song.drv_amt = 40; song.drv_tone = 90; song.drv_lvl = 100;
+    song.dly_div = 1; song.dly_div2 = 2; song.dly_mode = DL_MONO; song.dly_fb = 50; song.dly_tone = 60; song.dly_lvl = 110;
+    song.rev_size = 70; song.rev_damp = 30; song.rev_lvl = 110;
+}
+/* NEW PATCH: stopped, 16 empty patterns of len steps at speed spd, the tempo, no song; the factory kit or (keep) the
+ * one there. Nothing is saved: SAVE puts it in a slot. */
+static void patch_new(uint32_t len, int32_t spd, uint32_t bpm, uint32_t keep)
+{
+    uint32_t i, t;
+    undo_take();
+    seq_play(0);
+    for (i = 0; i < NPAT; i++) {
+        memset(&pat[i], 0, sizeof pat[i]);
+        for (t = 0; t < NTRK; t++) {
+            pat[i].len[t] = (uint8_t)clamp((int32_t)len, 1, NSTEP);
+            pat[i].spd[t] = (int8_t)clamp(spd, SPD_MIN, SPD_MAX);
+        }
+    }
+    memset(plk, 0, sizeof plk);
+    memset(srows, 0, sizeof srows);
+    srows[0].rep = 1;
+    song.slen = 1;
+    song.smode = 0;
+    song.srow = song.srep = 0;
+    song.bpm = (uint8_t)clamp((int32_t)bpm, 60, 200);
+    song.swing = 0;
+    song.chain = 1;
+    song.pat = song.chain0 = 0;
+    song.pat_next = 0xFF;
+    song.mute = song.solo = 0;
+    if (!keep)
+        kit_factory();
+    ui.bar = 0;
+    ui.rot = 0;
+    memset(ui.eu, 0, sizeof ui.eu);
+}
+
 /* ----------------------------------------------------- the parameters --- */
 static lfo_t *lfo_of(uint32_t id) { return &TS->lfo[id >= P_L2DEST]; }
 static pdesc_t pdesc_of(uint32_t id)
@@ -1251,6 +1306,11 @@ static int32_t pget(uint32_t id)
     case P_SMODE: return song.smode;
     case P_SLEN: return song.slen ? song.slen : 1;
     case P_SEND: return song.send;
+    case P_NLEN: return ui.nlen ? ui.nlen : 16;
+    case P_NSPD: return ui.nspd;
+    case P_NBPM: return ui.nbpm ? ui.nbpm : 120;
+    case P_NGO: return 1;
+    case P_NKIT: return ui.nkit;
     }
     if (id >= P_V0 && id <= P_V7)
         return s->p[id - P_V0];
@@ -1290,9 +1350,23 @@ static void pset(uint32_t id, int32_t v)
         ui_say(m);
         return;
     }
-    if (id == P_LOAD) {                          /* STORE, KNOB 4: a turn loads the slot (what KNOB 3 says) */
-        if (v != pget(id))
-            proj_load(ui.slot, ui.lwhat);
+    if (id == P_LOAD) {                          /* STORE, KNOB 4: a turn loads the slot (what KNOB 3 says); an empty slot: a new,
+                                                  * empty patch (nothing of the one before keeps playing) */
+        if (v != pget(id)) {
+            if (ui.used[ui.slot % NSLOT]) {
+                proj_load(ui.slot, ui.lwhat);
+            } else {
+                patch_new(16, 0, song.bpm, 0);
+                ui_say("EMPTY: NEW PATCH");
+            }
+        }
+        return;
+    }
+    if (id == P_NGO) {                           /* NEW PATCH, KNOB 4: a turn makes it */
+        if (v != pget(id)) {
+            patch_new(pget(P_NLEN), ui.nspd, pget(P_NBPM), ui.nkit);
+            ui_say(ui.nkit ? "NEW PATCH, KIT KEPT" : "NEW PATCH");
+        }
         return;
     }
     if (id == P_PLEN) {                          /* (a turn doubles or halves, whatever its size) */
@@ -1428,6 +1502,10 @@ static void pset(uint32_t id, int32_t v)
         break;
     }
     case P_SEND: song.send = (uint8_t)v; break;
+    case P_NLEN: ui.nlen = (uint8_t)v; break;
+    case P_NSPD: ui.nspd = (int8_t)v; break;
+    case P_NBPM: ui.nbpm = (uint8_t)v; break;
+    case P_NKIT: ui.nkit = (uint8_t)v; break;
     default:
         if (id >= P_V0 && id <= P_V7)
             s->p[id - P_V0] = (uint8_t)v;
@@ -1512,7 +1590,7 @@ static void pformat(uint32_t id, char *val, const char **unit)
         else { str_cpy(val, v < 0 ? "LP " : "HP ", 16); fmt_u(val + 3, (uint32_t)(v < 0 ? -v : v)); }
         break;
     case FM_PAT: if (v) { val[0] = 'P'; fmt_u(val + 1, (uint32_t)v); } else str_cpy(val, "-", 16); break;
-    case FM_LOAD: str_cpy(val, ui.used[(uint32_t)(v - 1) % NSLOT] ? "TURN" : "EMPTY", 16); break;
+    case FM_LOAD: str_cpy(val, id == P_NGO || ui.used[(uint32_t)(v - 1) % NSLOT] ? "TURN" : "EMPTY", 16); break;
     case FM_PCT: fmt_u(val, (uint32_t)v); *unit = "%"; break;
     case FM_BIP: fmt_s(val, v, 1); break;
     case FM_PAN:
@@ -1775,9 +1853,7 @@ static void white_key(uint32_t w, int down)
         *s = 100u;
         PAT->x[t][idx] = PAT->r[t][idx] = 0;
         lock_clear(plk[song.pat % NPAT], t, idx, 1);
-        ui.wkeep |= 1u << w;
-        if (!song.playing)
-            ev_push(EV_HIT, t, (uint32_t)*s);
+        ui.wkeep |= 1u << w;                     /* (set silently: the step sounds when the pattern plays) */
     }
 }
 static void oct_key(int up)
@@ -1838,6 +1914,7 @@ static int cc_ok(uint32_t id)                    /* a parameter a controller may
     case P_PLEN: case P_COPY: case P_SACC: case P_PCOPY: case P_PPASTE: case P_SLOT: case P_SWHAT: case P_LWHAT:
     case P_LOAD: case P_QGRID: case P_QROUND: case P_EVEL: case P_EPROB: case P_EPAN: case P_ESUB: case P_EMICRO:
     case P_CLKSRC: case P_CLKOUT: case P_LEARN: case P_SROW: case P_SLEN: case P_SEND: case P_SPAT: case P_SREP:
+    case P_NLEN: case P_NSPD: case P_NBPM: case P_NGO: case P_NKIT:
         return 0;
     }
     return 1;
@@ -2665,6 +2742,27 @@ static void g_song(void)                         /* SONG: its rows (pattern, rep
     }
     g_label(12, 108, song.smode ? (song.send ? "SONG ON: STOPS AT THE END" : "SONG ON: LOOPS") : "SONG OFF: PATTERNS AND CHAIN", song.smode ? T_THEME : T_DIM);
 }
+static void g_new(void)                          /* NEW PATCH: what a turn of KNOB 4 makes */
+{
+    char b[48], v[16];
+    const char *u;
+    pformat(P_NLEN, v, &u);
+    str_cpy(b, "16 EMPTY PATTERNS, EACH ", sizeof b);
+    str_cat(b, v, sizeof b);
+    str_cat(b, u[0] ? " " : "", sizeof b);
+    str_cat(b, u, sizeof b);
+    g_label(12, 10, b, T_TEXT);
+    str_cpy(b, "EVERY TRACK AT ", sizeof b);
+    str_cat(b, N_SPEED[SPD_I(ui.nspd)], sizeof b);
+    str_cat(b, ", ", sizeof b);
+    fmt_u(b + str_len(b), (uint32_t)pget(P_NBPM));
+    str_cat(b, " BPM", sizeof b);
+    g_label(12, 26, b, T_TEXT);
+    g_label(12, 42, ui.nkit ? "THE KIT PLAYING NOW STAYS" : "THE FACTORY KIT (SOUNDS, FX)", T_TEXT);
+    g_label(12, 66, "KNOB 4 MAKES IT, PLAYBACK STOPS", T_ACCENT);
+    g_label(12, 84, "NOT SAVED YET: STORE PAGE, OCT+", T_MID);
+    g_label(12, 104, "SHIFT + F#3: UNDO", T_DIM);
+}
 static void g_mfx(void)                          /* MASTER: the filter's curve */
 {
     int32_t i, v = song.mflt, prev = 0;
@@ -2775,6 +2873,8 @@ static uint32_t graph_sig(void)
     }
     if (ui.page == PG_MFX)
         return h + (uint32_t)(song.mflt + 64) * 3u + song.mres * 257u;
+    if (ui.page == PG_NEW)
+        return h + ui.nlen * 3u + (uint32_t)(ui.nspd + 8) * 101u + ui.nbpm * 1009u + ui.nkit * 7u;
     if (ui.page == PG_SAVE) {
         for (i = 0; i < NSLOT; i++)
             h = h * 3u + ui.used[i];
@@ -2812,6 +2912,7 @@ static void draw_graph(int force)
     case PG_MIDI: g_midi(); break;
     case PG_SONG: g_song(); break;
     case PG_MFX: g_mfx(); break;
+    case PG_NEW: g_new(); break;
     default: g_grid(); break;
     }
     cv_blit(0, Y_GRAPH);
@@ -3068,27 +3169,15 @@ static void ui_init(void)
     song.ddec = 64;
     song.chain = 1;
     song.pat_next = 0xFF;
-    song.drv_mode = DM_SOFT;
-    song.drv_amt = 40;
-    song.drv_tone = 90;
-    song.drv_lvl = 100;
-    song.dly_div = 1;
-    song.dly_div2 = 2;
-    song.dly_mode = DL_MONO;
-    song.dly_fb = 50;
-    song.dly_tone = 60;
-    song.dly_lvl = 110;
-    song.rev_size = 70;
-    song.rev_damp = 30;
-    song.rev_lvl = 110;
     song.qgrid = Q_16;
     song.click = CLICK_REC;
     ui.copy = 1;
     ui.lvel = 100;
     song.slen = 1;
     song.mres = 30;
-    for (i = 0; i < NTRK; i++)
-        sound_init(i);
+    ui.nlen = 16;
+    ui.nbpm = 120;
+    kit_factory();
     for (i = 0; i < NPAT; i++) {
         uint32_t t;
         memset(&pat[i], 0, sizeof pat[i]);

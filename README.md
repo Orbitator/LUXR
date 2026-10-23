@@ -84,12 +84,13 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | ARP | NOTE REPEAT | Rate, Velocity, Vel-Modus (fest, steigend, fallend, zufällig), Latch | Humanize |
 | GLO (tippen) | MIXER, Seite 1 | Lautstärke der vier Sounds der Bank | Pan der vier Sounds |
 | GLO (nochmal tippen) | MIXER, Seite 2: PAN | Pan der vier Sounds der Bank (L64 … C … R63) | Lautstärke |
-| SAVE | STORE | Platz 1–8, **was gespeichert wird** (KIT+PAT, nur KIT, nur PATTERN – OCT+ speichert), **was geladen wird** (KIT+PAT, nur KIT, nur PATTERN), **LOAD** (ein Dreh lädt den Platz) | |
+| SAVE | STORE | Platz 1–14, **was gespeichert wird** (KIT+PAT, nur KIT, nur PATTERN – OCT+ speichert), **was geladen wird** (KIT+PAT, nur KIT, nur PATTERN), **LOAD** (ein Dreh lädt den Platz; ein leerer Platz gibt ein neues, leeres Patch) | |
+| SAVE (2.) | **NEW PATCH** | Länge (1–64 Steps), Speed (1/8X … 2X), Tempo, **CREATE** (ein Dreh legt das neue Patch an: 16 leere Patterns, Wiedergabe gestoppt, noch nicht gespeichert) | Kit: FACTORY (Werkssounds und FX) oder KEEP (das aktuelle bleibt) |
 | REC (halten) | **QUANTIZE** | Raster (1/16, 1/8, 1/4), Richtung (zum nächsten Rasterpunkt / zum vorherigen), Metronom (aus, bei Aufnahme, an) | |
 
 **Weiße Tasten (16).** Auf der **SEQUENCER-Seite** sind sie die 16 Steps des angezeigten Takts der gewählten Spur
-(LED = Step an, die laufende Position blinkt invertiert). Kurz tippen: ein leerer Step wird gesetzt (und klingt an, wenn
-das Gerät steht), ein gesetzter beim Loslassen gelöscht. **Lang halten (ab 350 ms) oder halten und einen Knopf drehen:
+(LED = Step an, die laufende Position blinkt invertiert). Kurz tippen: ein leerer Step wird gesetzt (still, er klingt erst
+beim Abspielen), ein gesetzter beim Loslassen gelöscht. **Lang halten (ab 350 ms) oder halten und einen Knopf drehen:
 STEP EDIT** – KNOB 1 Velocity; KNOB 2 Probability (6 … 100 %: wie oft der Step spielt) und weiter rechts die
 **Bedingungen 1:2, 2:2, 1:4 … 4:4, 1:8 … 8:8** (A:B = der Step spielt im A-ten von je B Durchläufen der Spur, ab PLAY
 gezählt: 1:2 im 1., 3., 5. …, 2:2 im 2., 4. …), dann **FILL** (spielt nur, solange F#5 gehalten wird) und **!FILL**

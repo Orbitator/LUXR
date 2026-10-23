@@ -463,7 +463,7 @@ int main(int argc, char **argv)
     host_run(40, 0, 0);
     CHECK(ui.patch == 4u && pat[3].s[4][9] == 55u && snd[2].level == 99u, "SHIFT + PRESETS: patterns only (%u %u %u)",
           ui.patch, pat[3].s[4][9], snd[2].level);
-    host_tap(B_SAVE);
+    if (ui.page != PG_SAVE) host_tap(B_SAVE);    /* (SAVE again would show NEW PATCH) */
     host_turn(EN_K1, -2);                        /* slot 3 again, the patterns only: its kit stays */
     host_turn(EN_K2, 1);
     pat[3].s[4][9] = 66;
@@ -472,7 +472,7 @@ int main(int argc, char **argv)
     proj_load(2, SW_ALL);
     CHECK(snd[2].level == 33u && pat[3].s[4][9] == 66u, "SAVE PATTERN kept the slot's kit (%u %u)", snd[2].level, pat[3].s[4][9]);
     /* STORE, KNOB 3: what is loaded, KNOB 4: a turn loads the slot */
-    host_tap(B_SAVE);
+    if (ui.page != PG_SAVE) host_tap(B_SAVE);
     snd[2].level = 5;
     pat[3].s[4][9] = 1;
     host_turn(EN_K3, 1);                         /* LOADS: KIT */
@@ -1272,6 +1272,41 @@ int main(int argc, char **argv)
         CHECK(snd[2].p[0] == 32u && snd[2].level == 66u && snd[2].och == 0u && snd[2].onote == 39u && song.dly_mode == DL_STEREO &&
               song.dly_div2 == 4u && pat[6].s[4][9] == 88u && X_COND(pat[6].x[4][9]) == 20u && R_SUB(pat[6].r[4][9]) == 4u &&
               song.bpm == 97u, "LXP6: kit, step, condition, substeps, tempo as they were");
+    }
+    host_boot(34);
+    {                                            /* a step set on SEQ is silent; LOAD on an empty slot: a new empty patch;
+                                                  * SAVE twice: NEW PATCH (length, speed, tempo, kit) */
+        uint32_t t, n = 0, k;
+        song.sel = 1;
+        reset_count();
+        host_key(key_white(2));
+        host_run(300, watch, 0);
+        CHECK(pat[0].s[1][2] && hits[1] == 0u, "SEQ: a step set without a sound (%u)", hits[1]);
+        host_tap(B_SAVE);
+        CHECK(ui.page == PG_SAVE, "SAVE: STORE");
+        host_turn(EN_K1, 6);                     /* slot 7, empty */
+        snd[0].p[0] = 3;
+        host_turn(EN_K4, 1);
+        for (t = 0; t < NTRK; t++) for (k = 0; k < NSTEP; k++) n += pat[0].s[t][k] != 0u;
+        CHECK(!ui.used[6] && n == 0u && !song.playing && snd[0].p[0] == LX_FACTORY[0][0], "LOAD an empty slot: an empty patch (%u steps), %s",
+              n, ui.msg);
+        host_tap(B_SAVE);
+        CHECK(ui.page == PG_NEW, "SAVE again: NEW PATCH");
+        host_turn(EN_K1, 16);                    /* 32 steps */
+        host_turn(EN_K2, -1);                    /* 3/4X */
+        host_turn(EN_K3, 20);                    /* 140 BPM */
+        h_pressed |= 1u << B_GLO; h_held |= 1u << B_GLO;
+        host_run(300, 0, 0);
+        host_turn(EN_K1, 1);                     /* KIT: KEEP */
+        h_held &= ~(1u << B_GLO);
+        host_run(40, 0, 0);
+        snd[0].p[0] = 9;
+        pat[3].s[2][2] = 50;
+        snprintf(path, sizeof path, "%s/lx_new.ppm", dir);
+        host_ppm(path);
+        host_turn(EN_K4, 1);
+        CHECK(pat[3].s[2][2] == 0u && pat[5].len[4] == 32u && pat[5].spd[4] == -1 && song.bpm == 140u && snd[0].p[0] == 9u,
+              "NEW PATCH: empty, 32 steps, 3/4X, 140 BPM, the kit kept (%u %d %u)", pat[5].len[4], pat[5].spd[4], song.bpm);
     }
     host_boot(33);
     host_tap(B_SEQ);
