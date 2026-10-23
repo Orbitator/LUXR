@@ -54,7 +54,7 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 |---|---|---|
 | **SELECT** | Sound 1–8 wählen | Pattern wählen |
 | **ALGORITHM** | würfelt einen neuen Sound für den gewählten (immer mit Transienten-Sample) und spielt ihn an | **das nächste / vorige Sample des Sample-Layers** (alle 44 der Reihe nach, der Synth-Layer bleibt; das Display zeigt den Namen); **auf der SEQ-Seite:** rechts ein Zufalls-Pattern für die Spur, links die Spur verdoppeln |
-| **PRESETS** | die gespeicherten Patches (Kit + Patterns) durchblättern, jeder wird sofort geladen | nur die Patterns des Patches |
+| **PRESETS** | die gespeicherten Patches durchblättern, jeder wird sofort geladen – so, wie KNOB 3 (LOADS) auf der STORE-Seite steht (Standard: Kit + Patterns) | |
 | **KNOB 1–4** | die vier Karten der Seite (Reihe A) | Reihe B |
 | **PLAY** | Start / Stop | von vorn |
 | **REC** | tippen: Aufnahme scharf / aus · **halten: QUANTIZE** | ERASE scharf (gehaltene Pads löschen ihre Steps) |
@@ -146,7 +146,7 @@ quantisiert geschrieben; mit ERASE (SHIFT + REC) löscht ein gehaltenes Pad die 
 Drive/Delay/Reverb) und seine 16 Patterns (jede Spur bis 64 Steps, eigene Länge und SPEED, Velocity/Probability/Pan/
 Substeps/NUDGE je Step, bis 128 Parameter-Locks je Pattern; Tempo, Swing, Chain, Mute/Solo, der Song).
 **14 Plätze**, also bis zu 14 Kits und 224 Patterns. **Beim Einschalten wird Patch 1 geladen** (Kit und Patterns), falls belegt. SAVE speichert beides oder nur Kit bzw. nur Patterns (der andere
-Teil bleibt, wie er auf dem Platz war); PRESETS lädt sie (mit SHIFT: nur die Patterns), ebenso KNOB 4 auf der STORE-Seite.
+Teil bleibt, wie er auf dem Platz war); PRESETS lädt sie, ebenso KNOB 4 auf der STORE-Seite – beide nach der Auswahl von KNOB 3 (LOADS).
 
 **Updates behalten die Patches.** Ein Firmware-Update schreibt nur das Programm, nicht den Speicher. Ältere
 Speicherformate von LUXR (seit v0.1) liest die Firmware weiter: beim ersten Start nach dem Update zieht sie die bisherigen

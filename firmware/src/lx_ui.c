@@ -2,7 +2,7 @@
  * LUXR: the panel and the screen (after Felucca's conventions and ONE CLICK's layout). The full map: README.md.
  *
  *   KNOBS   SELECT the sound 1..8 (SHIFT: the pattern) · ALGORITHM a new sound for the selected one, rolled (SHIFT:
- *           the sample layer's samples in turn, the synth layer kept) · PRESETS the stored patches, kit and patterns (SHIFT: their patterns only) · KNOB 1..4 the page's
+ *           the sample layer's samples in turn, the synth layer kept) · PRESETS the stored patches (what STORE's KNOB 3 says: kit + patterns, kit, patterns) · KNOB 1..4 the page's
  *           four cards, SHIFT the page's second row · MASTER volume
  *   SHIFT   GLO held (from 250 ms, or at once when another control is used while it is down). GLO tapped: the MIXER,
  *           tapped again its page 2 (PAN) and back.
@@ -2473,8 +2473,8 @@ static void ui_input(void)
         if (ui.shift) pset(P_PAT, pget(P_PAT) + e[EN_SELECT]);
         else sel_track((int32_t)song.sel + e[EN_SELECT]);
     }
-    if (e[EN_PRESET])                            /* PRESETS: the stored patches (SHIFT: their patterns only) */
-        patch_turn(e[EN_PRESET], ui.shift ? SW_PAT : SW_ALL);
+    if (e[EN_PRESET])                            /* PRESETS: the stored patches, loaded as STORE's KNOB 3 says (KIT+PAT) */
+        patch_turn(e[EN_PRESET], ui.lwhat);
     for (k = 0; k < 4u; k++) {
         uint32_t id = knob_id(k);
         int32_t d = e[EN_K1 + k];
@@ -2908,8 +2908,8 @@ static void g_store(void)
     }
     g_label(12, 96, ui.swhat == SW_KIT ? "OCT+ SAVES THE KIT" : ui.swhat == SW_PAT ? "OCT+ SAVES THE PATTERNS" :
             "OCT+ SAVES KIT + PATTERNS", T_MID);
-    g_label(12, 109, ui.lwhat == SW_KIT ? "K4 LOADS THE KIT" : ui.lwhat == SW_PAT ? "K4 LOADS THE PATTERNS" :
-            "K4 LOADS KIT + PATTERNS", T_MID);
+    g_label(12, 109, ui.lwhat == SW_KIT ? "K4 + PRESETS LOAD THE KIT" : ui.lwhat == SW_PAT ? "K4 + PRESETS LOAD PATTERNS" :
+            "K4 + PRESETS LOAD KIT + PAT", T_MID);
 }
 static void g_live(void)                         /* LIVE: the eight pads (lit as they are hit), their accented row */
 {

@@ -496,13 +496,11 @@ int main(int argc, char **argv)
     }
     snd[2].level = 99;
     pat[3].s[4][9] = 0;
-    h_pressed |= 1u << B_GLO; h_held |= 1u << B_GLO;   /* SHIFT + PRESETS: the patterns only */
-    host_run(300, 0, 0);
+    ui.lwhat = SW_PAT;                           /* STORE, KNOB 3 on PATTERN: PRESETS loads the patterns only */
     host_turn(EN_PRESET, 1);                     /* patch 5's patterns (55), the kit as it is (99) */
-    h_held &= ~(1u << B_GLO);
-    host_run(40, 0, 0);
-    CHECK(ui.patch == 4u && pat[3].s[4][9] == 55u && snd[2].level == 99u, "SHIFT + PRESETS: patterns only (%u %u %u)",
+    CHECK(ui.patch == 4u && pat[3].s[4][9] == 55u && snd[2].level == 99u, "PRESETS, LOADS PATTERN: patterns only (%u %u %u)",
           ui.patch, pat[3].s[4][9], snd[2].level);
+    ui.lwhat = SW_ALL;
     if (ui.page != PG_SAVE) host_tap(B_SAVE);    /* (SAVE again would show NEW PATCH) */
     host_turn(EN_K1, -2);                        /* slot 3 again, the patterns only: its kit stays */
     host_turn(EN_K2, 1);
