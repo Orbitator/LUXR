@@ -1625,7 +1625,11 @@ int main(int argc, char **argv)
         }
         seq_play(0);
         CHECK(en[1] < en[0] * 0.4, "COMPRESSOR LIMIT at -20 dB: the level down (%.0f %%)", 100.0 * en[1] / en[0]);
-        CHECK(pk[2] < pk[0] && pk[2] <= 0.5f * 0.77f, "LIMITER: the peaks held under the soft clip (%.3f -> %.3f)", pk[0], pk[2]);
+        CHECK(pk[2] <= 31650.0f / 65536.0f + 0.0005f, "LIMITER: the peaks held at -0.3 dB of the top, no soft clip (%.4f)", pk[2]);
+        CHECK(clip_f != 0u, "a sound over 0 dB: flagged for the mixer (%02X)", clip_f);
+        go_page(PG_MIX);
+        ui_draw(1);
+        CHECK(!clip_f && clip_t[0], "the mixer took the flags: the red dot");
         song.cthr = 9; song.crat = 3; song.catk = 40; song.crel = 70; song.cmak = 5; song.clim = 1; song.lceil = -4; song.lrel = 90;
         proj_save(2, SW_ALL);
         song.cthr = song.crat = song.catk = song.crel = song.cmak = song.clim = song.lrel = 0;

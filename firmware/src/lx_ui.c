@@ -234,7 +234,7 @@ static const pdesc_t PD[P_COUNT] = {
     [P_CREL] = {"RELEASE", FM_CREL, 0, 127, 0},
     [P_CMAK] = {"MAKEUP", FM_DBP, 0, 24, 0},
     [P_CLIM] = {"LIMITER", FM_NAME, 0, 1, N_OFFON},
-    [P_LCEIL] = {"CEILING", FM_DBS, -12, 6, 0},
+    [P_LCEIL] = {"CEILING", FM_DBS, -12, 0, 0},
     [P_LREL] = {"RELEASE", FM_LREL, 0, 127, 0},
 };
 /* the four cards of each page: row A, row B (SHIFT) */
@@ -1146,7 +1146,7 @@ static void kit_put(const kit_rec_t *k)
     song.rev_pre = k->rev_pre & 127u;
     song.cthr = (uint8_t)(k->cthr <= 40u ? k->cthr : 0u); song.crat = k->crat & 7u; song.catk = k->catk & 127u;
     song.crel = k->crel & 127u; song.cmak = (uint8_t)(k->cmak <= 24u ? k->cmak : 0u); song.clim = k->clim & 1u;
-    song.lceil = (int8_t)clamp(k->lceil, -12, 6);
+    song.lceil = (int8_t)clamp(k->lceil, -12, 0);
     song.lrel = (uint8_t)(k->lrel || k->clim ? k->lrel & 127u : 40u);   /* (a kit before the limiter's page: its default) */
 }
 static int pat_take(proj_t *r)                   /* the patterns, their locks, the song into r's blob (0 = it fits) */
@@ -3048,9 +3048,14 @@ static void g_sample(void)                       /* SAMPLE LAYER: the transient'
     str_cat(b, mach ? "  CLASSIC MACHINE" : s->smp >= TR_OWN0 ? "  OWN TRANSIENT" : "  LXR TRANSIENT", sizeof b);
     g_label(10, 104, b, T_MID);
 }
+static uint32_t clip_t[NTRK];                    /* when sound t went over 0 dB last (the mixer's red dot) */
 static void g_mixer(void)                        /* MIXER: the bank's four strips, each under its card */
 {
-    uint32_t c, t;
+    uint32_t c, t, cf = clip_f;
+    clip_f &= (uint8_t)~cf;
+    for (t = 0; t < NTRK; t++)
+        if ((cf >> t) & 1u)
+            clip_t[t] = fm1_ms | 1u;
     for (c = 0; c < 4u; c++) {
         const sound_t *s;
         int32_t x, h, pk, on;
@@ -3059,7 +3064,7 @@ static void g_mixer(void)                        /* MIXER: the bank's four strip
         s = &snd[t];
         x = CARD_X(c);
         h = s->level * 76 / 127;
-        pk = clamp(peak[t] * 76 / 20000, 0, 76);
+        pk = clamp(peak[t] * 76 / 32768, 0, 76);
         on = trk_audible(t);
         col = on ? TRK_COL[t] : T_DIM;
         cv_rrect(x + 1, 3, CARD_W - 2, 114, 4, T_RAISE, T_SURF);
@@ -3074,6 +3079,8 @@ static void g_mixer(void)                        /* MIXER: the bank's four strip
         } else {
             cv_rect(x + 28 + s->pan * 20 / 64, 92, 2, 5, T_MID);
         }
+        if (fm1_ms - clip_t[t] < 2000u && clip_t[t] && (fm1_ms / 160u) & 1u)   /* over 0 dB: a red dot, blinking 2 s */
+            cv_rrect(x + 41, 6, 7, 7, 3, C_REC, T_RAISE);
         cv_text_in(x, 100, CARD_W, &AF_S, TRK_SHORT[t], on ? T_TEXT : T_DIM, T_RAISE);
         if ((song.mute >> t) & 1u) cv_text_fit(x + 6, 100, &AF_S, "M", C_REC, T_RAISE, 10);
         if ((song.solo >> t) & 1u) cv_text_fit(x + 44, 100, &AF_S, "S", T_ACCENT, T_RAISE, 10);
@@ -3302,7 +3309,7 @@ static void g_comp(void)                         /* COMPRESSOR: its curve (-48 .
                                                   * reduction: the compressor's, the limiter's */
 {
     int32_t x, prev = -1, thr = -(int32_t)song.cthr, cr = CRATIO[song.crat & 7u], mk = song.cmak;
-    int32_t lv = cmp_env ? (log2q8(cmp_env) - log2q8(65536u)) * 6 / 256 : -60;
+    int32_t lv = cmp_env ? (log2q8(cmp_env) - log2q8(32768u)) * 6 / 256 : -60;
     char b[16];
     cv_rect(10, 6, 97, 97, T_RAISE);
     for (x = 0; x <= 96; x += 24) {              /* (12 dB a line) */

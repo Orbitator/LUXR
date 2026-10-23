@@ -619,8 +619,8 @@ static void mfilter_block(int32_t *L, int32_t *R, uint32_t n)
 
 /* ------------------------------------------------------ the compressor --- */
 /* the master's compressor (GLO page 3): peak detection of both sides together, a block's gain from the envelope in
- * log2 (Q8: 1/256 octave = 0.0235 dB), ramped over the block; then the volume; then the limiter (at 0.85 into the soft clip, a
- * block known before it plays: no overshoot) */
+ * log2 (Q8: 1/256 octave = 0.0235 dB), ramped over the block; then the volume; then the limiter (a block known
+ * before it plays: no overshoot; on, it replaces the output's soft clip) */
 static const uint8_t L2T[256] = {
     0, 1, 3, 4, 6, 7, 9, 10, 11, 13, 14, 16, 17, 18, 20, 21,
     22, 24, 25, 26, 28, 29, 30, 32, 33, 34, 36, 37, 38, 40, 41, 42,
@@ -692,8 +692,8 @@ static void comp_block(int32_t *L, int32_t *R, uint32_t n)   /* before the volum
         if (pk > cmp_env) cmp_env += (uint32_t)(((uint64_t)(pk - cmp_env) * k) >> 16);
         else cmp_env -= (uint32_t)(((uint64_t)(cmp_env - pk) * k) >> 16);
     }
-    /* the threshold (0 .. -40 dB) against 0 dB: 65536 here, the output's soft clip full at the volume's default */
-    over = cmp_env ? log2q8(cmp_env) - (log2q8(65536u) - (int32_t)song.cthr * 256 / 6) : -1;   /* (6 dB an octave) */
+    /* the threshold (0 .. -40 dB) against 0 dB: 32768 here, the output's top at the volume's default */
+    over = cmp_env ? log2q8(cmp_env) - (log2q8(32768u) - (int32_t)song.cthr * 256 / 6) : -1;   /* (6 dB an octave) */
     red = over > 0 ? over * CRATIO[song.crat & 7u] / 255 : 0;
     cmp_gr = (uint8_t)clamp(red * 6 * 4 / 256, 0, 255);
     g1 = exp2q15(-red + (int32_t)song.cmak * 256 / 6);
@@ -710,7 +710,7 @@ static int32_t lim_dl[2u * CTL];                 /* the limiter's look-ahead: th
 static uint32_t lim_pk;                          /* (its peak) */
 static void lim_block(int32_t *o, uint32_t n)    /* the output (stereo, interleaved, before the soft clip): played a block
                                                   * late, the gain ramped over each block to what the block after needs
-                                                  * (no steps, no overshoot); CEILING -12 .. +6 dB of 1.0 into the soft clip */
+                                                  * (no steps, no overshoot); CEILING -12 .. 0 dB of the output's top */
 {
     uint32_t i, pk = 0, top, ceil_, need, g0 = lim_g;
     for (i = 0; i < 2u * n; i++) {
@@ -727,8 +727,7 @@ static void lim_block(int32_t *o, uint32_t n)    /* the output (stereo, interlea
         lim_gr = 0;
         return;
     }
-    ceil_ = exp2q15(clamp(song.lceil, -12, 6) * 256 / 6);
-    if (ceil_ > 65535u) ceil_ = 65535u;
+    ceil_ = (exp2q15(clamp(song.lceil, -12, 0) * 256 / 6) * 31650u) >> 15;   /* (0 dB: -0.3 dB under the output's top) */
     need = top > ceil_ ? (ceil_ << 15) / top : 32768u;
     if (need < lim_g)
         lim_g = need;
@@ -748,6 +747,7 @@ static void lim_block(int32_t *o, uint32_t n)    /* the output (stereo, interlea
 /* ------------------------------------------------------------------ mix --- */
 static void seq_block(uint32_t n);               /* lx_seq.c: the steps of this block */
 static int32_t peak[NTRK];                       /* the mixer's meters (Q15, decaying in the UI) */
+static volatile uint8_t clip_f;                  /* bit t: sound t over 0 dB since the UI looked (the mixer's warning) */
 static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the master into out: stereo, Q15 */
 {
     int32_t tb[CTL], L[CTL], R[CTL], dsl[CTL], dsr[CTL], rs[CTL], dv[CTL];
@@ -783,8 +783,11 @@ static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the 
             if (x > pk) pk = x;
             else if (-x > pk) pk = -x;
         }
+        pk = ((((pk * (pl > pr ? pl : pr)) >> 7) >> 2) * (int32_t)m) >> 9;   /* (as it reaches the output: its pan, the volume) */
         if (pk > peak[t])
             peak[t] = pk;
+        if (pk >= 32768)                         /* (0 dB: the sound alone at the output's top) */
+            clip_f |= (uint8_t)(1u << t);
     }
     fx_block(L, R, dsl, dsr, rs, n);
     drive_block(L, R, dv, n);
@@ -814,6 +817,10 @@ static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the 
         out[2u * i + 1u] = ((R[i] >> 2) * (int32_t)m) >> 9;
     }
     lim_block(out, n);
-    for (i = 0; i < 2u * n; i++)
-        out[i] = sat(out[i]) >> 1;
+    if (song.clim)                               /* LIMITER: the peaks held under the top already: straight out, no soft clip */
+        for (i = 0; i < 2u * n; i++)
+            out[i] = clamp(out[i], -32767, 32767) >> 1;
+    else
+        for (i = 0; i < 2u * n; i++)
+            out[i] = sat(out[i]) >> 1;
 }
