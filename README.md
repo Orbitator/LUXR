@@ -123,7 +123,7 @@ ganze Pattern. Alles Gelöschte holt A#4 (UNDO) zurück.
 
 | Taste | normal | mit SHIFT |
 |---|---|---|
-| F#3 | **SNAPSHOT 1** halten: der gespeicherte Sound-Zustand (Kit, alle Sounds, FX, Master-Filter) klingt, solange gehalten; loslassen: zurück zum Zustand davor | Snapshot 1 speichern (der aktuelle Zustand) |
+| F#3 | **SNAPSHOT 1** halten: der gespeicherte Sound-Zustand (Kit, alle Sounds, FX, Master-Filter, Mute und Solo) klingt, solange gehalten; loslassen: der Sound des Patches, wie er geladen bzw. zuletzt gespeichert wurde | Snapshot 1 speichern (der aktuelle Zustand) |
 | G#3 | **SNAPSHOT 2** (wie F#3) | Snapshot 2 speichern |
 | A#3 | Mute des Sounds | alle wieder an |
 | C#4 | Solo des Sounds | Solo aus |

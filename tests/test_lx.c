@@ -330,23 +330,31 @@ int main(int argc, char **argv)
     {                                            /* SNAPSHOT 1: SHIFT keeps the sound; held: back to it; let go: as before */
         uint8_t lv0 = snd[5].level;
         int8_t mf0 = song.mflt;
-        snd[5].level = 40;
+        snd[5].level = 70;                       /* the patch saved: its sound 70, the filter off, nothing muted */
+        song.mflt = 0;
+        song.mute = song.solo = 0;
+        proj_save(13, SW_ALL);
+        snd[5].level = 40;                       /* changed, kept as snapshot 1 */
         song.mflt = -30;
+        song.mute = 0x05;
         shift_key(key_blk(BK_SNAP1));
         CHECK(snap_ok == 1u, "SHIFT + F#3: snapshot 1 kept");
         snd[5].level = 90;
-        song.mflt = 0;
+        song.mflt = 10;
+        song.mute = 0x80;
         h_keys |= key_blk(BK_SNAP1);
         host_run(100, 0, 0);
-        CHECK(snap_on == 1u && snd[5].level == 40u && song.mflt == -30, "F#3 held: snapshot 1 plays (%u %d)", snd[5].level, song.mflt);
+        CHECK(snap_on == 1u && snd[5].level == 40u && song.mflt == -30 && song.mute == 0x05, "F#3 held: snapshot 1 plays (%u %d %02X)",
+              snd[5].level, song.mflt, song.mute);
         h_keys &= ~key_blk(BK_SNAP1);
         host_run(40, 0, 0);
-        CHECK(!snap_on && snd[5].level == 90u && song.mflt == 0, "let go: the sound as before (%u %d)", snd[5].level, song.mflt);
+        CHECK(!snap_on && snd[5].level == 70u && song.mflt == 0 && !song.mute, "let go: the patch's sound and mutes as saved (%u %d %02X)",
+              snd[5].level, song.mflt, song.mute);
         host_key(key_blk(BK_SNAP2));
-        CHECK(!snap_on && snd[5].level == 90u, "G#3: snapshot 2 empty, nothing changes");
+        CHECK(!snap_on && snd[5].level == 70u, "G#3: snapshot 2 empty, nothing changes");
         proj_save(13, SW_ALL);
         snap_ok = 0;
-        CHECK(!proj_load(13, SW_ALL) && snap_ok == 1u && snaps[0].k.s[5].level == 40u && snaps[0].mflt == -30,
+        CHECK(!proj_load(13, SW_ALL) && snap_ok == 1u && snaps[0].k.s[5].level == 40u && snaps[0].mflt == -30 && snaps[0].mute == 0x05,
               "the snapshot kept with the patch");
         memset(h_store + ST_PROJ(13), 0xFF, SLOT_SZ);   /* (the store as it was for the tests after) */
         ui.used[13] = 0;

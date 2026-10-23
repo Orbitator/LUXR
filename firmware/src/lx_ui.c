@@ -475,9 +475,12 @@ typedef struct {                                 /* the kit: LXP8's (the same by
 } kit_rec_t;
 /* SNAPSHOTS (F#3, G#3): two sound states of the patch, the kit and the master filter; SHIFT + key keeps one, the key
  * held plays it, let go the sound as it was. In the blob after the song ('S', which ones, each as it is). */
-typedef struct { kit_rec_t k; int8_t mflt; uint8_t mres; } ksnap_t;
+typedef struct { kit_rec_t k; int8_t mflt; uint8_t mres; uint8_t mute, solo; } ksnap_t;   /* ('S' before: without mute, solo) */
+#define KSNAP_S ((uint32_t)__builtin_offsetof(ksnap_t, mute))
 static ksnap_t snaps[2] __attribute__((section(".pool")));
 static ksnap_t snap_bak __attribute__((section(".pool")));
+static ksnap_t snap_base __attribute__((section(".pool")));   /* the patch's sound as loaded / saved: a snapshot let go */
+static uint8_t base_ok;
 static uint8_t snap_ok, snap_on;                 /* bit k: snapshot k kept; the one held + 1 (0: none) */
 typedef char kit9_fits[sizeof(kit_rec_t) == sizeof(kit8_t) + 16u ? 1 : -1];
 #define PBLOB (SLOT_SZ - 16u - (uint32_t)sizeof(kit_rec_t))
@@ -795,16 +798,19 @@ static int dec_blob_raw(const uint8_t *b, uint32_t n, int apply)
     o += 2u * m;
     if (apply)
         snap_ok = snap_on = 0;
-    if (o < n && b[o] == 'S') {                  /* the snapshots */
+    if (o < n && (b[o] == 'S' || b[o] == 'T')) {   /* the snapshots ('T': with mute and solo) */
+        uint32_t sz = b[o] == 'T' ? (uint32_t)sizeof(ksnap_t) : KSNAP_S;
         NEED(2u);
         cnt = b[o + 1u] & 3u;
         o += 2u;
         for (k = 0; k < 2u; k++)
             if ((cnt >> k) & 1u) {
-                NEED(sizeof(ksnap_t));
-                if (apply)
-                    memcpy(&snaps[k], b + o, sizeof(ksnap_t));
-                o += sizeof(ksnap_t);
+                NEED(sz);
+                if (apply) {
+                    memset(&snaps[k], 0, sizeof(ksnap_t));
+                    memcpy(&snaps[k], b + o, sz);
+                }
+                o += sz;
             }
         if (apply)
             snap_ok = (uint8_t)cnt;
@@ -1182,7 +1188,7 @@ static int pat_take(proj_t *r)                   /* the patterns, their locks, t
         enc_pattern(&pat[i], plk[i]);
     enc_tail(&g, song.smode, song.slen ? song.slen : 1u, song.send, srows);
     if (snap_ok) {                               /* (the snapshots: firmware before ignores what follows the song) */
-        bw_put('S');
+        bw_put('T');
         bw_put(snap_ok);
         for (i = 0; i < 2u; i++)
             if ((snap_ok >> i) & 1u) {
@@ -1215,6 +1221,12 @@ static void proj_save(uint32_t slot, uint32_t what)   /* SW_ALL, or the kit / th
     ui.used[slot % NSLOT] = 1;
     ui.slot = ui.patch = (uint8_t)slot;
     ui.loaded = (uint8_t)(slot + 1u);
+    snap_base.k = r->k;                          /* (the sound saved: what a snapshot let go returns to) */
+    snap_base.mflt = snap_on ? snap_bak.mflt : song.mflt;
+    snap_base.mres = snap_on ? snap_bak.mres : song.mres;
+    snap_base.mute = snap_on ? snap_bak.mute : song.mute;
+    snap_base.solo = snap_on ? snap_bak.solo : song.solo;
+    base_ok = 1;
     settings_save();
     {
         char m[28];
@@ -1231,10 +1243,17 @@ static int proj_load(uint32_t slot, uint32_t what)   /* SW_ALL: kit and patterns
         return -1;
     }
     undo_take();
-    if (what != SW_PAT)
+    if (what != SW_PAT) {
         kit_put(&proj_buf.k);
+        snap_base.k = proj_buf.k;                /* (the sound loaded: what a snapshot let go returns to) */
+        snap_base.mflt = song.mflt;
+        snap_base.mres = song.mres;
+        base_ok = 1;
+    }
     if (what != SW_KIT)
         dec_blob(&proj_buf, 1);
+    snap_base.mute = song.mute;                  /* (its mutes as loaded) */
+    snap_base.solo = song.solo;
     ui.patch = (uint8_t)slot;
     ui.loaded = (uint8_t)(slot + 1u);
     str_cpy(m, what == SW_PAT ? "PATTERNS " : what == SW_KIT ? "KIT " : "PATCH ", sizeof m);
@@ -1494,6 +1513,12 @@ static void patch_new(uint32_t len, int32_t spd, uint32_t bpm, uint32_t keep)
     if (!keep)
         kit_factory();
     ui.loaded = 0;
+    kit_take(&snap_base.k);                      /* (the new patch's sound: what a snapshot let go returns to) */
+    snap_base.mflt = song.mflt;
+    snap_base.mres = song.mres;
+    snap_base.mute = snap_base.solo = 0;
+    base_ok = 1;
+    snap_ok = snap_on = 0;
     ui.bar = 0;
     ui.rot = 0;
     memset(ui.eu, 0, sizeof ui.eu);
@@ -2097,6 +2122,8 @@ static void black_key(uint32_t b)
             kit_take(&snaps[k].k);
             snaps[k].mflt = song.mflt;
             snaps[k].mres = song.mres;
+            snaps[k].mute = song.mute;
+            snaps[k].solo = song.solo;
             snap_ok |= (uint8_t)(1u << k);
             str_cat(m, " KEPT", sizeof m);
         } else if (!((snap_ok >> k) & 1u)) {
@@ -2105,9 +2132,13 @@ static void black_key(uint32_t b)
             kit_take(&snap_bak.k);
             snap_bak.mflt = song.mflt;
             snap_bak.mres = song.mres;
+            snap_bak.mute = song.mute;
+            snap_bak.solo = song.solo;
             kit_put(&snaps[k].k);
             song.mflt = snaps[k].mflt;
             song.mres = snaps[k].mres;
+            song.mute = snaps[k].mute;
+            song.solo = snaps[k].solo;
             snap_on = (uint8_t)(k + 1u);
         }
         ui_say(m);
@@ -2729,10 +2760,14 @@ static void ui_input(void)
                 ui.rm_t = 0;
                 black_key(BK_N);
             }
-            else if (snap_on == w + 1u && w <= BK_SNAP2) {   /* SNAPSHOT let go: the sound as it was */
-                kit_put(&snap_bak.k);
-                song.mflt = snap_bak.mflt;
-                song.mres = snap_bak.mres;
+            else if (snap_on == w + 1u && w <= BK_SNAP2) {   /* SNAPSHOT let go: the patch's sound as loaded or saved
+                                                               * (no patch: the sound before the key) */
+                const ksnap_t *o = base_ok ? &snap_base : &snap_bak;
+                kit_put(&o->k);
+                song.mflt = o->mflt;
+                song.mres = o->mres;
+                song.mute = o->mute;
+                song.solo = o->solo;
                 snap_on = 0;
             }
         } else {
