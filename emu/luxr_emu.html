@@ -59,6 +59,14 @@ h1 small { font-size: .5em; letter-spacing: 2px; color: var(--muted); padding-bo
 .dot.on { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
 
 /* ------------------------------------------------------------------ the device */
+.under { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; max-width: 1100px; width: 100%; margin: -6px auto 0; }
+.under .hint { flex: 1 1 320px; min-width: 0; }
+.lock { display: inline-flex; align-items: center; gap: 8px; font: 600 14px var(--f-body); padding: 9px 16px; min-height: 42px; border-radius: 999px;
+        border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+.lock .lk-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+.lock[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--card); }
+.lock[aria-pressed="true"] .lk-dot { background: #ffe2a8; box-shadow: 0 0 6px #ffe2a8; }
+.lock:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .stage { container-type: inline-size; width: 100%; max-width: 1100px; margin: 0 auto; }
 .fm1 { --u: calc(100cqw / 920); position: relative; width: 100%; aspect-ratio: 920 / 550; max-width: 100%;
        background: linear-gradient(180deg, #f3f2ed, var(--body-c) 40%, #e4e2db); border-radius: calc(34 * var(--u));
@@ -166,6 +174,11 @@ a { color: var(--accent); }
     <div class="bezel"><canvas id="lcd" width="240" height="240" aria-label="Display"></canvas>
       <button class="poweron" id="power"><b>POWER ON</b><span>click to start the sound</span></button></div>
   </div></div>
+  <div class="under">
+    <button class="lock" id="lock" aria-pressed="false"><span class="lk-dot" aria-hidden="true"></span>SHIFT lock</button>
+    <span class="hint">For the mouse: SHIFT lock keeps GLO held, so you can click a key or turn a knob with SHIFT
+    (SHIFT + F#3 keeps snapshot 1). Click again to let go. Right-clicking GLO does the same; on a touch screen hold GLO with one finger.</span>
+  </div>
 
   <section class="bench">
     <div class="card">
@@ -192,7 +205,7 @@ a { color: var(--accent); }
         <div><kbd>1</kbd>–<kbd>0</kbd> <kbd>ß</kbd><span>black keys F#3–F#5</span></div>
         <div><kbd>Space</kbd><span>PLAY / STOP</span></div>
         <div><kbd>Enter</kbd><span>REC</span></div>
-        <div><kbd>Shift</kbd><span>SHIFT (GLO held)</span></div>
+        <div><kbd>Shift</kbd><span>SHIFT (GLO held), or SHIFT lock</span></div>
         <div><kbd>←</kbd> <kbd>→</kbd><span>OCT− / OCT+</span></div>
         <div><kbd>↑</kbd> <kbd>↓</kbd><span>SELECT</span></div>
       </div>
@@ -343,7 +356,13 @@ const place = (el, x, y) => { el.style.left = U(x); el.style.top = U(y); return 
 function silk(text, x, y) { const s = document.createElement("span"); s.className = "silkl"; s.textContent = text; fm1.append(place(s, x, y)); }
 
 const btnEls = [];
-function setHeld(b, on) { held = on ? held | (1 << b) : held & ~(1 << b); btnEls[b]?.classList.toggle("down", on); send({ type: "btn", held }); }
+let shiftLock = false;
+const heldNow = () => held | (shiftLock ? 1 << B.GLO : 0);
+function setHeld(b, on) { held = on ? held | (1 << b) : held & ~(1 << b); btnEls[b]?.classList.toggle("down", !!(heldNow() & (1 << b))); send({ type: "btn", held: heldNow() }); }
+function setLock(on) {
+  shiftLock = on; $("lock").setAttribute("aria-pressed", String(on));
+  btnEls[B.GLO]?.classList.toggle("down", !!(heldNow() & (1 << B.GLO))); send({ type: "btn", held: heldNow() });
+}
 function tap(b, ms = 70) { setHeld(b, true); setTimeout(() => setHeld(b, false), ms); }
 function pad(b, label, x, y, cls) {
   const el = document.createElement("button"); el.className = "pad " + cls; el.innerHTML = label;
@@ -351,7 +370,7 @@ function pad(b, label, x, y, cls) {
   el.addEventListener("pointerdown", (e) => { e.preventDefault(); el.setPointerCapture?.(e.pointerId); setHeld(b, true); });
   const up = () => { if (held & (1 << b)) setHeld(b, false); };
   el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
-  el.addEventListener("contextmenu", (e) => e.preventDefault());
+  el.addEventListener("contextmenu", (e) => { e.preventDefault(); if (b === B.GLO) setLock(!shiftLock); });
   el.addEventListener("keydown", (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); e.stopPropagation(); setHeld(b, true); } });
   el.addEventListener("keyup", (e) => { if (e.key === " " || e.key === "Enter") { e.stopPropagation(); up(); } });
   btnEls[b] = el; fm1.append(place(el, x, y)); return el;
@@ -437,7 +456,8 @@ document.addEventListener("keyup", (e) => {
   const b = { Space: B.PLAY, Enter: B.REC, ArrowLeft: B.OCTDN, ArrowRight: B.OCTUP }[e.code];
   if (b !== undefined && held & (1 << b)) setHeld(b, false);
 });
-window.addEventListener("blur", () => { held = 0; kbKeys = 0; btnEls.forEach((el) => el?.classList.remove("down")); send({ type: "btn", held }); setKeys(); });
+window.addEventListener("blur", () => { held = 0; kbKeys = 0; btnEls.forEach((el, b) => el?.classList.toggle("down", !!(heldNow() & (1 << b)))); send({ type: "btn", held: heldNow() }); setKeys(); });
+$("lock").onclick = () => setLock(!shiftLock);
 
 /* -------------------------------------------------------------- patches --- */
 let used = [];

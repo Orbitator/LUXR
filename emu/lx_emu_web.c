@@ -211,3 +211,4 @@ EXPORT uint32_t emu_bpm(void) { return song.bpm; }
 EXPORT uint32_t emu_page(void) { return ui.page; }
 EXPORT void emu_save(uint32_t slot) { if (slot < NSLOT) proj_save(slot, SW_ALL); }   /* (the tests) */
 EXPORT void emu_set_bpm(uint32_t b) { song.bpm = (uint16_t)b; }                       /* (the tests) */
+EXPORT char *emu_msg(void) { return ui.msg; }                                     /* (the tests) */
