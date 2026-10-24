@@ -633,6 +633,30 @@ int main(int argc, char **argv)
     CHECK(ui.page == PG_SAMPLE, "EDIT round: SAMPLE");
     host_turn(EN_K4, -127);
     CHECK(!snd[song.sel].syn, "SAMPLE K4: the synth level");
+    {                                            /* EDIT held: SOUND DEFAULTS; a rolled sound follows them; kept */
+        sound_t keep = snd[4];
+        uint32_t pg0 = ui.page;
+        host_hold(B_EDIT, 900, 0);
+        CHECK(ui.page == PG_GEN && !ui.genpg, "EDIT held: SOUND DEFAULTS, the synth layer (%u)", ui.page);
+        host_turn(EN_K1, -30);                   /* volume 70 */
+        host_turn(EN_K4, -10);                   /* decay 40 */
+        host_tap(B_OCTUP);
+        CHECK(ui.genpg == 1u, "OCT+: the sample layer");
+        host_turn(EN_K1, -78);                   /* sample level 50 (from RND 128) */
+        host_turn(EN_K4, 2);                     /* the machines' samples */
+        CHECK(gdef.lvl == 70u && gdef.dec == 40u && gdef.slvl == 50u && gdef.src == 2u, "the defaults set (%u %u %u %u)",
+              gdef.lvl, gdef.dec, gdef.slvl, gdef.src);
+        sound_preset(4, 23);
+        CHECK(snd[4].level == 70u && snd[4].p[1] == 40u && snd[4].slvl == 50u && snd[4].smp >= TR_MACH0 && snd[4].spitch == 43u,
+              "a rolled sound: volume 70, decay 40, sample level 50, a machine sample, pitch 75 %%");
+        go_page(pg0);                            /* (left: saved in the settings) */
+        gdef.lvl = 1;
+        store_scan();
+        CHECK(gdef.lvl == 70u && gdef.src == 2u, "the defaults kept in the settings (%u)", gdef.lvl);
+        gdef.lvl = 100; gdef.dec = 50; gdef.slvl = 128; gdef.src = 0;
+        settings_save();
+        snd[4] = keep;
+    }
     {
         sound_t keep = snd[3];
         sound_preset(3, 17);

@@ -54,15 +54,15 @@ static const uint16_t TRK_COL[NTRK] = {RGB(255, 96, 110), RGB(255, 170, 40), RGB
 #define C_REC RGB(255, 72, 60)
 
 enum { PG_KIT, PG_SEQ, PG_LIVE, PG_VOICE, PG_VOICE2, PG_SAMPLE, PG_SAMPLE2, PG_SND, PG_LFO1, PG_LFO2, PG_FXS, PG_FXD, PG_FXDL, PG_FXDL2, PG_FXR,
-       PG_PAT, PG_NR, PG_MIX, PG_SAVE, PG_REC, PG_INFO, PG_MIDI, PG_SONG, PG_MFX, PG_NEW, PG_ENV, PG_LEARN, PG_TRK, PG_COMP, PG_LIM, PG_OUT, PG_N };
+       PG_PAT, PG_NR, PG_MIX, PG_SAVE, PG_REC, PG_INFO, PG_MIDI, PG_SONG, PG_MFX, PG_NEW, PG_ENV, PG_LEARN, PG_TRK, PG_COMP, PG_LIM, PG_OUT, PG_GEN, PG_N };
 static const char *const PG_NAME[PG_N] = {"LUXR KIT", "SEQUENCER", "LIVE PADS", "SYNTH 1-4", "SYNTH 5-8", "SAMPLE LAYER", "SAMPLE 2",
                                           "SOUND MIX", "LFO 1", "LFO 2", "FX SENDS", "DRIVE", "DELAY", "DELAY 2", "REVERB",
                                           "PATTERNS", "NOTE REPEAT", "MIXER", "STORE", "QUANTIZE", "SYSTEM", "MIDI", "SONG",
-                                          "MASTER", "NEW PATCH", "ENVELOPE", "CC LEARN", "TRACKS", "COMPRESSOR", "LIMITER", "OUTPUT"};
+                                          "MASTER", "NEW PATCH", "ENVELOPE", "CC LEARN", "TRACKS", "COMPRESSOR", "LIMITER", "OUTPUT", "DEFAULTS"};
 static const uint8_t PAGE_BTN[PG_N] = {B_HOME, B_SEQ, B_SEQ, B_EDIT, B_EDIT, B_EDIT, B_EDIT, B_EDIT, B_LFO, B_LFO, B_FX, B_FX, B_FX, B_FX,
-                                       B_FX, B_SCL, B_ARP, B_GLO, B_SAVE, B_REC, B_HOME, B_HOME, B_SCL, B_FX, B_SAVE, B_ENV, B_HOME, B_SEQ, B_GLO, B_GLO, B_GLO};
+                                       B_FX, B_SCL, B_ARP, B_GLO, B_SAVE, B_REC, B_HOME, B_HOME, B_SCL, B_FX, B_SAVE, B_ENV, B_HOME, B_SEQ, B_GLO, B_GLO, B_GLO, B_EDIT};
 static const uint8_t PAGE_KC[PG_N] = {KC_HOME, KC_SEQ, KC_SEQ, KC_EDIT, KC_EDIT, KC_EDIT, KC_EDIT, KC_EDIT, KC_LFO, KC_LFO, KC_FX, KC_FX, KC_FX,
-                                      KC_FX, KC_FX, KC_SCL, KC_ARP, KC_GLO, KC_SAVE, KC_REC, KC_HOME, KC_HOME, KC_SCL, KC_FX, KC_SAVE, KC_ENV, KC_HOME, KC_SEQ, KC_GLO, KC_GLO, KC_GLO};
+                                      KC_FX, KC_FX, KC_SCL, KC_ARP, KC_GLO, KC_SAVE, KC_REC, KC_HOME, KC_HOME, KC_SCL, KC_FX, KC_SAVE, KC_ENV, KC_HOME, KC_SEQ, KC_GLO, KC_GLO, KC_GLO, KC_EDIT};
 /* a button's pages, in the order its taps show them (a button not listed: none, or its own logic) */
 typedef struct { uint8_t btn, n, pg[6]; } group_t;
 static const group_t GROUPS[] = {
@@ -94,10 +94,11 @@ enum {
     P_CTHR, P_CRAT, P_CATK, P_CREL, P_CMAK, P_CLIM,
     P_LCEIL, P_LREL,
     P_PCLIP, P_ALVL, P_ATGT, P_OGAIN,
+    P_GLVL, P_GSYN, P_GPOFS, P_GDEC, P_GSLVL, P_GSPIT, P_GSDEC, P_GSRC,
     P_COUNT
 };
 enum { FM_NUM, FM_PCT, FM_BIP, FM_NAME, FM_STEPS, FM_PAN, FM_X100, FM_BPM, FM_SMP, FM_PAT, FM_LOAD, FM_TONE, FM_PROB,
-       FM_SPAN, FM_SUB, FM_MICRO, FM_FILT, FM_NOTE, FM_CH, FM_ATK, FM_TIME, FM_GATE, FM_PRE, FM_DBN, FM_DBP, FM_CATK, FM_CREL, FM_DBS, FM_LREL, FM_PCLIP };
+       FM_SPAN, FM_SUB, FM_MICRO, FM_FILT, FM_NOTE, FM_CH, FM_ATK, FM_TIME, FM_GATE, FM_PRE, FM_DBN, FM_DBP, FM_CATK, FM_CREL, FM_DBS, FM_LREL, FM_PCLIP, FM_RND, FM_RNDX };
 typedef struct { const char *label; uint8_t fmt; int16_t min, max; const char *const *names; } pdesc_t;
 static const char *const N_OFFON[] = {"OFF", "ON"};
 static const char *const N_LDEST[] = {"OFF", "PITCH", "FILTER", "DECAY", "LEVEL", "PAN", "SAMPLE"};
@@ -120,6 +121,7 @@ static const char *const N_CLKSRC[] = {"INT", "EXT"};
 static const char *const N_LEARN[] = {"OFF", "ON", "CLEAR"};
 static const char *const N_SEND[] = {"LOOP", "STOP"};
 static const char *const N_NKIT[] = {"FACTORY", "KEEP"};
+static const char *const N_GSRC[] = {"ANY", "OWN", "MACHINE", "LXR"};
 static const char *const N_OGAIN[] = {"0 DB", "+3 DB", "+6 DB"};
 static const char *const N_RATIO[] = {"1:1", "1.5:1", "2:1", "3:1", "4:1", "6:1", "10:1", "LIMIT"};
 static const char *N_THEME[UI_NPALETTES];
@@ -242,6 +244,14 @@ static const pdesc_t PD[P_COUNT] = {
     [P_ALVL] = {"AUTO", FM_NAME, 0, 1, N_OFFON},
     [P_ATGT] = {"TARGET", FM_DBS, -12, 0, 0},
     [P_OGAIN] = {"OUTPUT", FM_NAME, 0, 2, N_OGAIN},
+    [P_GLVL] = {"VOLUME", FM_NUM, 0, 127, 0},
+    [P_GSYN] = {"SYNTH", FM_NUM, 0, 127, 0},
+    [P_GPOFS] = {"PITCH", FM_BIP, -64, 63, 0},
+    [P_GDEC] = {"DECAY", FM_RND, 0, 128, 0},
+    [P_GSLVL] = {"LEVEL", FM_RND, 0, 128, 0},
+    [P_GSPIT] = {"PITCH", FM_RNDX, 0, 128, 0},
+    [P_GSDEC] = {"DECAY", FM_RND, 0, 128, 0},
+    [P_GSRC] = {"SAMPLE", FM_NAME, 0, 3, N_GSRC},
 };
 /* the four cards of each page: row A, row B (SHIFT) */
 static const uint8_t PAGE_P[PG_N][8] = {
@@ -275,6 +285,7 @@ static const uint8_t PAGE_P[PG_N][8] = {
     [PG_COMP] = {P_CTHR, P_CRAT, P_CATK, P_CREL, 0, 0, 0, 0},
     [PG_LIM] = {P_CMAK, P_CLIM, P_LCEIL, P_LREL, 0, 0, 0, 0},
     [PG_OUT] = {P_PCLIP, P_ALVL, P_ATGT, P_OGAIN, 0, 0, 0, 0},
+    [PG_GEN] = {P_GLVL, P_GSYN, P_GPOFS, P_GDEC, P_GSLVL, P_GSPIT, P_GSDEC, P_GSRC},
 };
 
 static struct {
@@ -282,6 +293,9 @@ static struct {
         loaded;                                  /* the patch loaded (or saved) last: its slot + 1, 0: none */
     uint8_t glo_used, arp_from, rec_long, copy, lvel, eu[NTRK];
     uint8_t mixpan;                              /* the MIXER's page 2: KNOB 1..4 the pans */
+    uint8_t genpg;                               /* SOUND DEFAULTS: 0 the synth layer, 1 the sample layer (OCT) */
+    uint8_t edit_long;
+    uint32_t edit_t0;
     uint16_t wheld, wkeep, sedit;                /* SEQ: white keys held, kept when let go, held long (STEP EDIT) */
     uint32_t wdown[16];
     int8_t rot;
@@ -410,6 +424,8 @@ typedef struct {
     uint8_t theme, midi_ch, click, slot, qgrid, qround, layout, pad;
     uint8_t clk_src, clk_out, ogain, pad2;       /* (LXT3; OUTPUT: 0 before) */
     ccmap_t map[NMAP];
+    uint8_t gd_mark;                             /* 0x5D: the SOUND DEFAULTS are there (erased before: 0xFF) */
+    gdef_t gd;
 } set_rec_t;
 static ccmap_t ccmap[NMAP];
 static uint32_t cc_count(void)                   /* the entries in use (kept together from the start) */
@@ -532,6 +548,8 @@ static void settings_save(void)
     st.qgrid = song.qgrid; st.qround = song.qround; st.layout = LAYOUT;
     st.clk_src = song.clk_src; st.clk_out = song.clk_out; st.ogain = song.ogain;
     memcpy(st.map, ccmap, sizeof st.map);
+    st.gd_mark = 0x5D;
+    st.gd = gdef;
     store_write(ST_SET, &st, sizeof st);
 }
 static int proj_convert(const uint8_t *raw, uint32_t n);
@@ -1137,6 +1155,15 @@ static void store_scan(void)
             song.clk_src = st.clk_src < CK_N ? st.clk_src : CK_INT;
             song.clk_out = st.clk_out & 1u;
             song.ogain = (uint8_t)(st.ogain <= 2u ? st.ogain : 0u);
+            if (st.gd_mark == 0x5D) {            /* (the SOUND DEFAULTS, in range) */
+                gdef = st.gd;
+                gdef.lvl &= 127u; gdef.syn &= 127u; gdef.pofs = (int8_t)clamp(gdef.pofs, -64, 63);
+                if (gdef.dec > 128u) gdef.dec = 128u;
+                if (gdef.slvl > 128u) gdef.slvl = 128u;
+                if (gdef.spitch > 128u) gdef.spitch = 128u;
+                if (gdef.sdec > 128u) gdef.sdec = 128u;
+                gdef.src &= 3u;
+            }
             for (i = 0; i < NMAP; i++) {
                 ccmap[i] = st.map[i];
                 if (ccmap[i].pid >= P_COUNT || ccmap[i].ch > 15u || ccmap[i].cc > 127u)
@@ -1663,6 +1690,14 @@ static int32_t pget(uint32_t id)
     case P_ALVL: return song.alvl;
     case P_ATGT: return song.atgt;
     case P_OGAIN: return song.ogain;
+    case P_GLVL: return gdef.lvl;
+    case P_GSYN: return gdef.syn;
+    case P_GPOFS: return gdef.pofs;
+    case P_GDEC: return gdef.dec;
+    case P_GSLVL: return gdef.slvl;
+    case P_GSPIT: return gdef.spitch;
+    case P_GSDEC: return gdef.sdec;
+    case P_GSRC: return gdef.src;
     case P_EATK: return s->atk;
     case P_EREL: return s->rel;
     case P_EGATE: return s->gate;
@@ -1806,6 +1841,14 @@ static void pset(uint32_t id, int32_t v)
     case P_ALVL: song.alvl = (uint8_t)v; break;
     case P_ATGT: song.atgt = (int8_t)v; break;
     case P_OGAIN: song.ogain = (uint8_t)v; settings_save(); break;
+    case P_GLVL: gdef.lvl = (uint8_t)v; break;
+    case P_GSYN: gdef.syn = (uint8_t)v; break;
+    case P_GPOFS: gdef.pofs = (int8_t)v; break;
+    case P_GDEC: gdef.dec = (uint8_t)v; break;
+    case P_GSLVL: gdef.slvl = (uint8_t)v; break;
+    case P_GSPIT: gdef.spitch = (uint8_t)v; break;
+    case P_GSDEC: gdef.sdec = (uint8_t)v; break;
+    case P_GSRC: gdef.src = (uint8_t)v; break;
     case P_TSEL: song.sel = (uint8_t)v; if (ui.bar >= nbars(song.sel)) ui.bar = 0; ui.rot = 0; break;
     case P_TMUTE: song.mute = (uint8_t)((song.mute & ~(1u << t)) | ((uint32_t)v << t)); break;
     case P_TSOLO: song.solo = (uint8_t)((song.solo & ~(1u << t)) | ((uint32_t)v << t)); break;
@@ -2032,6 +2075,8 @@ static void pformat(uint32_t id, char *val, const char **unit)
     case FM_DBS: if (v > 0) { val[0] = '+'; fmt_u(val + 1, (uint32_t)v); } else if (v < 0) { val[0] = '-'; fmt_u(val + 1, (uint32_t)-v); }
                  else str_cpy(val, "0", 16);
                  *unit = "DB"; break;
+    case FM_RND: if (v > 127) str_cpy(val, "RND", 16); else fmt_u(val, (uint32_t)v); break;
+    case FM_RNDX: if (v > 127) str_cpy(val, "RND", 16); else { fmt_u(val, (uint32_t)(25 + v * 150 / 127)); *unit = "%"; } break;
     case FM_PCLIP: if (v) { val[0] = '-'; fmt_u(val + 1, (uint32_t)v); *unit = "DB"; } else str_cpy(val, "OFF", 16); break;
     case FM_LREL: fmt_u(val, (100u + (uint32_t)v * (uint32_t)v * 9900u / 16129u) / 10u); *unit = "MS"; break;
     case FM_CREL: fmt_u(val, (200u + (uint32_t)v * (uint32_t)v * 9800u / 16129u) / 10u); *unit = "MS"; break;
@@ -2096,7 +2141,7 @@ static uint32_t knob_id(uint32_t c)              /* (the MIXER: page 2 the pans,
         return NUDGE_P[c & 3u];
     if (ui.page == PG_SEQ && ui.sedit)           /* STEP EDIT: the steps held */
         return STEP_P[c & 3u];
-    uint32_t b = ui.page == PG_MIX ? (ui.mixpan ^ ui.shift) & 1u : ui.shift;
+    uint32_t b = ui.page == PG_MIX ? (ui.mixpan ^ ui.shift) & 1u : ui.page == PG_GEN ? (ui.genpg ^ ui.shift) & 1u : ui.shift;
     return PAGE_P[ui.page % PG_N][(c & 3u) + (b ? 4u : 0u)];
 }
 
@@ -2131,6 +2176,8 @@ static void go_page(uint32_t pg)
     }
     if (pg != ui.page)
         ui.back = ui.page;
+    if (ui.page == PG_GEN && pg != PG_GEN)       /* (SOUND DEFAULTS left: kept in the settings, once) */
+        settings_save();
     if (pg == PG_SONG && ui.page != PG_SONG)
         ui.sfresh = 1;
     ui.page = (uint8_t)pg;
@@ -2472,6 +2519,10 @@ static void oct_key(int up)
         proj_save(ui.slot, ui.swhat);
         return;
     }
+    if (ui.page == PG_GEN) {                     /* SOUND DEFAULTS: OCT- the synth layer, OCT+ the sample layer */
+        ui.genpg = (uint8_t)(up ? 1u : 0u);
+        return;
+    }
     if (ui.page == PG_MIX) {                     /* MIXER: OCT- sounds 1-4, OCT+ 5-8 (SELECT: the pages) */
         ui.bank = (uint8_t)(up ? 1u : 0u);
         return;
@@ -2524,6 +2575,7 @@ static int cc_ok(uint32_t id)                    /* a parameter a controller may
     case P_CLKSRC: case P_CLKOUT: case P_LEARN: case P_SROW: case P_SLEN: case P_SEND: case P_SPAT: case P_SREP:
     case P_NLEN: case P_NSPD: case P_NBPM: case P_NGO: case P_NKIT: case P_LSEL: case P_LDEL:
     case P_TSEL: case P_TCLR: case P_TALL: case P_PCLR:
+    case P_GLVL: case P_GSYN: case P_GPOFS: case P_GDEC: case P_GSLVL: case P_GSPIT: case P_GSDEC: case P_GSRC:
         return 0;
     }
     return 1;
@@ -2763,6 +2815,15 @@ static void ui_input(void)
         for (i = 0; i < g->n && g->pg[i] != ui.page; i++)
             ;
         go_page(g->pg[i < g->n ? (i + 1u) % g->n : 0u]);
+    }
+    if (p & (1u << B_EDIT)) {                    /* EDIT held: SOUND DEFAULTS (how a rolled sound comes out) */
+        ui.edit_t0 = fm1_ms;
+        ui.edit_long = 0;
+    }
+    if ((held >> B_EDIT) & 1u && !ui.edit_long && fm1_ms - ui.edit_t0 >= HOLD_MS) {
+        ui.edit_long = 1;
+        ui.genpg = 0;
+        go_page(PG_GEN);
     }
     if (p & (1u << B_HOME)) {                    /* HOME: tapped the KIT, held SYSTEM (the version, the memory, about) */
         ui.home_t0 = fm1_ms;
@@ -3526,6 +3587,15 @@ static void g_comp(void)                         /* COMPRESSOR: its curve (-48 .
         }
     }
 }
+static void g_gen(void)                          /* SOUND DEFAULTS: what they do */
+{
+    g_label(12, 10, "HOW A ROLLED SOUND COMES OUT", T_TEXT);
+    g_label(12, 28, "ALGORITHM, SHIFT + D#4", T_MID);
+    g_label(12, 52, ui.genpg ? "SAMPLE LAYER: LEVEL, PITCH," : "SYNTH LAYER: VOLUME, LEVEL,", T_MID);
+    g_label(12, 66, ui.genpg ? "DECAY, WHICH SAMPLES" : "PITCH (+/-), DECAY", T_MID);
+    g_label(12, 90, "RND: LEFT TO CHANCE", T_DIM);
+    g_label(12, 104, "OCT-/+: SYNTH / SAMPLE", T_DIM);
+}
 static void g_out(void)                          /* OUTPUT: AUTO LEVEL, each sound's turn down now (0 .. 12 dB) */
 {
     uint32_t t;
@@ -3865,6 +3935,7 @@ static void draw_graph(int force)
     case PG_TRK: g_tracks(); break;
     case PG_COMP: case PG_LIM: g_comp(); break;
     case PG_OUT: g_out(); break;
+    case PG_GEN: g_gen(); break;
     default: g_grid(); break;
     }
     cv_blit(0, Y_GRAPH);
@@ -3885,15 +3956,18 @@ static void draw_foot(int force)
     static const khint_t H_TRK[3] = {{KC_K1, "TRACK"}, {KC_K4, "CLEAR"}, {KC_GLO, "ROW B"}};
     static const khint_t H_COMP[3] = {{KC_K14, "COMP"}, {KC_SELECT, "PAGE"}, {KC_GLO, "LIMITER"}};
     static const khint_t H_LIM[3] = {{KC_K14, "LIMIT"}, {KC_SELECT, "PAGE"}, {KC_GLO, "OUTPUT"}};
+    static const khint_t H_GEN[3] = {{KC_K14, "SET"}, {KC_OCTPM, "LAYER"}, {KC_ALGO, "ROLL"}};
     static const khint_t H_OUT[3] = {{KC_K14, "OUTPUT"}, {KC_SELECT, "PAGE"}, {KC_GLO, "MIXER"}};
     char b[32];
     uint32_t sig;
     const khint_t *h = ui.shift ? H_SHIFT : ui.lockmode == LM_LOCK && ui.page != PG_SEQ && ui.page != PG_NR ? H_LOCK :
                        ui.lockmode == LM_NUDGE && ui.page != PG_NR ? H_NUDGE : ui.page == PG_SEQ ? H_SEQ : ui.page == PG_MIX ? (ui.mixpan ? H_MIXPAN : H_MIX) :
                        ui.page == PG_NR ? H_NR : ui.page == PG_SAVE ? H_SAVE : ui.page == PG_LIVE ? H_LIVE :
-                       ui.page == PG_REC ? H_REC : ui.page == PG_TRK ? H_TRK : ui.page == PG_COMP ? H_COMP : ui.page == PG_LIM ? H_LIM : ui.page == PG_OUT ? H_OUT : H_PAGE;
+                       ui.page == PG_REC ? H_REC : ui.page == PG_TRK ? H_TRK : ui.page == PG_COMP ? H_COMP : ui.page == PG_LIM ? H_LIM : ui.page == PG_OUT ? H_OUT : ui.page == PG_GEN ? H_GEN : H_PAGE;
     uint32_t gi, gn = 0, gk = 0;
     str_cpy(b, PG_NAME[ui.page % PG_N], sizeof b);
+    if (ui.page == PG_GEN)
+        str_cat(b, ui.genpg ? " SAMPLE" : " SYNTH", sizeof b);
     if (ui.page == PG_MIX)
         str_cat(b, ui.mixpan ? (ui.bank ? " 5-8 PAN" : " 1-4 PAN") : ui.bank ? " 5-8" : " 1-4", sizeof b);
     if (ui.page == PG_SEQ && ui.acc_mode)
@@ -3915,6 +3989,10 @@ static void draw_foot(int force)
             for (gk = 0; gk < gn && GROUPS[gi].pg[gk] != ui.page; gk++)
                 ;
         }
+    if (ui.page == PG_GEN) {
+        gn = 2;
+        gk = ui.genpg;
+    }
     if (ui.page == PG_MIX || ui.page == PG_COMP || ui.page == PG_LIM || ui.page == PG_OUT) {
         gn = 5;
         gk = ui.page == PG_OUT ? 4u : ui.page == PG_LIM ? 3u : ui.page == PG_COMP ? 2u : ui.mixpan;

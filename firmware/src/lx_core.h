@@ -161,6 +161,15 @@ static lock_t plk[NPAT][NLOCK] __attribute__((section(".pool")));   /* each patt
 static srow_t srows[NSONG];
 static sound_t snd[NTRK];
 static song_t song;
+/* SOUND DEFAULTS (EDIT held): how a rolled sound comes out; 128 = left to chance (as before). The settings keep them. */
+typedef struct {
+    uint8_t lvl, syn;            /* the sound's volume, its synth layer's level */
+    int8_t pofs;                 /* the synth's pitch: added to the rolled one */
+    uint8_t dec;                 /* the synth's decay (128: rolled) */
+    uint8_t slvl, spitch, sdec;  /* the sample layer: level, pitch, decay (128: rolled) */
+    uint8_t src;                 /* its sample: 0 any, 1 the sound's own, 2 the machines', 3 the LXR's */
+} gdef_t;
+static gdef_t gdef = {100, 127, 0, 50, 128, 43, 127, 0};
 static voice_t voice[NTRK];
 
 static inline int32_t clamp(int32_t v, int32_t lo, int32_t hi) { return v < lo ? lo : v > hi ? hi : v; }

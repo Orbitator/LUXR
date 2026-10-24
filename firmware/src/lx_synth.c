@@ -405,26 +405,31 @@ static void sound_preset(uint32_t t, uint32_t k)   /* track t's sound k: 0 the f
     }
     if (k && TRK_KIND[t] == K_DRUM && t != 6u && (xrand(&x) & 3u) == 0u)
         s->p[4] = 26;                            /* a triangle drum now and then */
-    if (k)
-        s->p[1] = 50;                            /* (a rolled sound: DECAY 50, as the factory's) */
+    if (k) {                                     /* (SOUND DEFAULTS: the pitch moved, the decay set) */
+        s->p[0] = (uint8_t)clamp((int32_t)s->p[0] + gdef.pofs, 0, 127);
+        if (gdef.dec <= 127u)
+            s->p[1] = gdef.dec;
+    }
     /* the sample layer always plays: one of the sound's own sixteen, of its sixteen after the classic machines, or a
      * fitting LXR one */
     if (!k) {
         s->smp = TR_FACTORY[t][0];
     } else {
-        uint32_t r = xrand(&x) % 10u;
+        uint32_t r = gdef.src == 1u ? 0u : gdef.src == 2u ? 5u : gdef.src == 3u ? 9u : xrand(&x) % 10u;
         s->smp = (uint8_t)(r < 4u ? TR_OWN0 + xrand(&x) % 16u : r < 8u ? TR_MACH0 + xrand(&x) % 16u
                                   : TR_SMP0 + TR_LXR_FIT[t][xrand(&x) % 3u]);
     }
     s->sstart = 0;
     s->stone = 0;
     s->sbend = k && xrand(&x) % 5u == 0u ? (int8_t)((int32_t)(xrand(&x) % 81u) - 40) : 0;
-    s->slvl = k ? (uint8_t)(60u + xrand(&x) % 68u) : TR_FACTORY[t][1];
-    s->spitch = k ? 43u : 64u;                   /* (rolled: the sample at 75 %, the factory's at 100 %) */
-    s->sdec = k && xrand(&x) % 3u == 0u ? (uint8_t)(50u + xrand(&x) % 70u) : 127;
+    s->slvl = k ? (gdef.slvl <= 127u ? gdef.slvl : (uint8_t)(60u + xrand(&x) % 68u)) : TR_FACTORY[t][1];
+    s->spitch = k ? (gdef.spitch <= 127u ? gdef.spitch : (uint8_t)(40u + xrand(&x) % 50u)) : 64u;
+    s->sdec = k ? (gdef.sdec <= 127u ? gdef.sdec : xrand(&x) % 3u == 0u ? (uint8_t)(50u + xrand(&x) % 70u) : 127u) : 127u;
     s->preset = (uint8_t)k;
     if (k) {                                     /* (a rolled sound: no sends, the hats panned apart, the rest centred) */
         s->dly = s->rev = s->drv = 0;
+        s->level = gdef.lvl;
+        s->syn = gdef.syn;
         s->pan = (int8_t)(TRK_KIND[t % NTRK] == K_HATC ? -23 : TRK_KIND[t % NTRK] == K_HATO ? 23 : 0);
     }
 }
