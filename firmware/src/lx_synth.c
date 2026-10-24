@@ -670,14 +670,27 @@ static uint32_t exp2q15(int32_t l)               /* 2^(l / 256) in Q15 (l: -16 .
     return o >= 0 ? f << (o > 8 ? 8 : o) : (o < -24 ? 0u : f >> -o);
 }
 static int64_t clamp64(int64_t v, int64_t lo, int64_t hi) { return v < lo ? lo : v > hi ? hi : v; }
+static void comp_gain(int32_t *L, int32_t *R, uint32_t n);
 static uint32_t cmp_env, cmp_g = 32768u, lim_g = 32768u;   /* the envelope (|x|), the gains (Q15) */
 static uint8_t cmp_gr, lim_gr;                   /* their reduction now, in dB x 4 (the screen) */
 static uint32_t cmp_k(uint32_t ms10)             /* a block's one-pole step (Q16) for a time constant in 1/10 ms */
 {
-    uint32_t blocks10 = ms10 * 441u / (CTL * 100u) + 1u;   /* (10 x blocks: 1378 blocks a second) */
-    return 655360u / (blocks10 + 10u);
+    uint32_t blocks = ms10 * 441u / (CTL * 100u);   /* (1378 blocks a second; was taken for ten times that: 10x fast) */
+    return 65536u / (blocks + 1u);
 }
 static void comp_block(int32_t *L, int32_t *R, uint32_t n)   /* before the volume */
+{
+    if (song.pclip) {                            /* PRE-CLIP: the peaks into a soft clip, -n dB of 0 dB (the compressor
+                                                  * then hears the body, not the clicks) */
+        uint32_t s = exp2q15((int32_t)song.pclip * 256 / 6), inv = (1u << 30) / s, i;
+        for (i = 0; i < n; i++) {
+            L[i] = (int32_t)(((int64_t)sat((int32_t)clamp64(((int64_t)L[i] * s) >> 15, -65535, 65535)) * inv) >> 15);
+            R[i] = (int32_t)(((int64_t)sat((int32_t)clamp64(((int64_t)R[i] * s) >> 15, -65535, 65535)) * inv) >> 15);
+        }
+    }
+    comp_gain(L, R, n);
+}
+static void comp_gain(int32_t *L, int32_t *R, uint32_t n)
 {
     uint32_t i, pk = 0, g0 = cmp_g, g1;
     int32_t over, red;
@@ -747,6 +760,7 @@ static void lim_block(int32_t *o, uint32_t n)    /* the output (stereo, interlea
 /* ------------------------------------------------------------------ mix --- */
 static void seq_block(uint32_t n);               /* lx_seq.c: the steps of this block */
 static int32_t peak[NTRK];                       /* the mixer's meters (Q15, decaying in the UI) */
+static int32_t al_g[NTRK] = {32768, 32768, 32768, 32768, 32768, 32768, 32768, 32768};   /* AUTO LEVEL's gains (Q15) */
 static volatile uint8_t clip_f;                  /* bit t: sound t over 0 dB since the UI looked (the mixer's warning) */
 static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the master into out: stereo, Q15 */
 {
@@ -772,6 +786,25 @@ static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the 
         pan = clamp((voice[t].span == PAN_SOUND ? s->pan : voice[t].span) + lfo_amt(t, LD_PAN, 64), -64, 64);
         pl = 64 - pan;
         pr = 64 + pan;
+        if (song.alvl) {                         /* AUTO LEVEL: down at once where this block would pass the target at the
+                                                  * output, back up over ~1.5 s (a fader moved for you) */
+            int32_t tp = 0, est, tgt = (int32_t)exp2q15(clamp(song.atgt, -12, 0) * 256 / 6), need;
+            for (i = 0; i < n; i++) {
+                int32_t a = tb[i] < 0 ? -tb[i] : tb[i];
+                if (a > tp) tp = a;
+            }
+            est = ((((((tp >> 2) * g >> 4) * (pl > pr ? pl : pr)) >> 7) >> 2) * (int32_t)m) >> 9;
+            need = est > tgt ? (int32_t)(((uint32_t)tgt << 15) / (uint32_t)est) : 32768;
+            if (need < al_g[t])
+                al_g[t] = need;
+            else
+                al_g[t] += (int32_t)(((uint32_t)(32768 - al_g[t]) * cmp_k(15000u)) >> 16);
+            if (al_g[t] > need)
+                al_g[t] = need;
+            g = g * al_g[t] >> 15;
+        } else {
+            al_g[t] = 32768;
+        }
         for (i = 0; i < n; i++) {
             int32_t x = (tb[i] >> 2) * g >> 4;
             L[i] += (x * pl) >> 7;
@@ -817,10 +850,9 @@ static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the 
         out[2u * i + 1u] = ((R[i] >> 2) * (int32_t)m) >> 9;
     }
     lim_block(out, n);
-    if (song.clim)                               /* LIMITER: the peaks held under the top already: straight out, no soft clip */
-        for (i = 0; i < 2u * n; i++)
-            out[i] = clamp(out[i], -32767, 32767) >> 1;
-    else
-        for (i = 0; i < 2u * n; i++)
-            out[i] = sat(out[i]) >> 1;
+    for (i = 0; i < 2u * n; i++) {               /* LIMITER on: the peaks held under the top already, straight out; off: the
+                                                  * soft clip. OUTPUT 0 / +3 / +6 dB (0: half, as Felucca) */
+        int32_t v = song.clim ? clamp(out[i], -32767, 32767) : sat(out[i]);
+        out[i] = song.ogain >= 2u ? v : song.ogain ? (v * 181) >> 8 : v >> 1;
+    }
 }

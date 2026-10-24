@@ -308,6 +308,8 @@ int main(int argc, char **argv)
     host_tap(B_GLO);
     CHECK(ui.page == PG_LIM, "GLO again: the limiter");
     host_tap(B_GLO);
+    CHECK(ui.page == PG_OUT, "GLO again: OUTPUT");
+    host_tap(B_GLO);
     CHECK(ui.page == PG_MIX && !ui.mixpan, "GLO again: back to the levels");
     host_turn(EN_K1, -10);
     CHECK(snd[0].level == 100u, "page 1 K1: kick level %u", snd[0].level);
@@ -1680,6 +1682,8 @@ int main(int argc, char **argv)
         host_tap(B_GLO);
         CHECK(ui.page == PG_LIM, "GLO four times: LIMITER (%u)", ui.page);
         host_tap(B_GLO);
+        CHECK(ui.page == PG_OUT, "GLO five times: OUTPUT (%u)", ui.page);
+        host_tap(B_GLO);
         CHECK(ui.page == PG_MIX && !ui.mixpan, "GLO again: the mixer");
         CHECK(!song.crat && !song.clim && song.cthr == 12u, "the factory: compressor 1:1, no limiter");
         kit_factory();
@@ -1709,6 +1713,44 @@ int main(int argc, char **argv)
         go_page(PG_MIX);
         ui_draw(1);
         CHECK(!clip_f && clip_t[0], "the mixer took the flags: the red dot");
+        {                                        /* AUTO LEVEL: no sound past the target at the output; PRE-CLIP; OUTPUT */
+            int32_t mx[NTRK] = {0}, k2, t2;
+            float p0 = 0, p1 = 0, q0 = 0, q1 = 0;
+            uint32_t j;
+            song.crat = 0; song.clim = 0; song.cmak = 0;
+            song.alvl = 1; song.atgt = -6;
+            seq_play(0); host_run(200, 0, 0); seq_play(1);
+            memset(peak, 0, sizeof peak);
+            for (k2 = 0; k2 < 300; k2++) {
+                run_samples(CTL, 0);
+                for (t2 = 0; t2 < NTRK; t2++) { if (peak[t2] > mx[t2]) mx[t2] = peak[t2]; peak[t2] = 0; }
+            }
+            for (t2 = 0; t2 < NTRK; t2++)
+                CHECK(mx[t2] <= 16500, "AUTO LEVEL -6 dB: %s at most -6 dB at the output (%d)", TRK_SHORT[t2], mx[t2]);
+            song.alvl = 0;
+            for (k2 = 0; k2 < 2; k2++) {         /* PRE-CLIP 6 dB: the peaks of the mix down */
+                song.pclip = k2 ? 6 : 0;
+                seq_play(0); host_run(200, 0, 0); seq_play(1);
+                for (t2 = 0; t2 < 1500; t2++) {
+                    run_samples(CTL, 0);
+                    for (j = 0; j < CTL; j++) { float a = fabsf(out_l[j]); if (k2) { if (a > p1) p1 = a; } else if (a > p0) p0 = a; }
+                }
+            }
+            CHECK(p1 < p0, "PRE-CLIP: the peaks lower (%.3f -> %.3f)", p0, p1);
+            song.pclip = 0;
+            song.clim = 1;                       /* OUTPUT +6 dB: twice as high at the output */
+            for (k2 = 0; k2 < 2; k2++) {
+                song.ogain = (uint8_t)(k2 ? 2 : 0);
+                seq_play(0); host_run(200, 0, 0); seq_play(1);
+                for (t2 = 0; t2 < 1500; t2++) {
+                    run_samples(CTL, 0);
+                    for (j = 0; j < CTL; j++) { float a = fabsf(out_l[j]); if (k2) { if (a > q1) q1 = a; } else if (a > q0) q0 = a; }
+                }
+            }
+            CHECK(q1 > q0 * 1.9f && q1 <= 0.97f, "OUTPUT +6 dB: twice the level (%.3f -> %.3f)", q0, q1);
+            song.ogain = 0; song.clim = 0;
+            seq_play(0);
+        }
         song.cthr = 9; song.crat = 3; song.catk = 40; song.crel = 70; song.cmak = 5; song.clim = 1; song.lceil = -4; song.lrel = 90;
         proj_save(2, SW_ALL);
         song.cthr = song.crat = song.catk = song.crel = song.cmak = song.clim = song.lrel = 0;
