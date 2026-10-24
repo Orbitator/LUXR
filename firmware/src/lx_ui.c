@@ -2465,8 +2465,8 @@ static void oct_key(int up)
         proj_save(ui.slot, ui.swhat);
         return;
     }
-    if (ui.page == PG_MIX) {                     /* MIXER: OCT- the levels, OCT+ the pans (SELECT: the bank) */
-        ui.mixpan = (uint8_t)(up ? 1u : 0u);
+    if (ui.page == PG_MIX) {                     /* MIXER: OCT- sounds 1-4, OCT+ 5-8 (SELECT: the pages) */
+        ui.bank = (uint8_t)(up ? 1u : 0u);
         return;
     }
     if (ui.page == PG_SEQ) {
@@ -2841,8 +2841,12 @@ static void ui_input(void)
             ui_say("NEW SOUND");
         }
     }
-    if (e[EN_SELECT] && ui.page == PG_MIX && !ui.shift) {   /* MIXER: SELECT sounds 1-4 / 5-8 */
-        ui.bank = (uint8_t)(e[EN_SELECT] > 0 ? 1u : 0u);
+    if (e[EN_SELECT] && !ui.shift && (ui.page == PG_MIX || ui.page == PG_COMP || ui.page == PG_LIM || ui.page == PG_OUT)) {
+        /* GLO's pages: SELECT turns through them (levels, pans, compressor, limiter, output), as GLO tapped */
+        int32_t k = ui.page == PG_OUT ? 4 : ui.page == PG_LIM ? 3 : ui.page == PG_COMP ? 2 : (int32_t)ui.mixpan;
+        k = ((k + e[EN_SELECT]) % 5 + 5) % 5;
+        if (k < 2) { go_page(PG_MIX); ui.mixpan = (uint8_t)k; }
+        else go_page(k == 2 ? PG_COMP : k == 3 ? PG_LIM : PG_OUT);
     } else if (e[EN_SELECT] && ui.page == PG_SAVE && !ui.shift) {   /* STORE: SELECT the row of nine (1-9 .. 28-36), the column kept */
         char m[28];
         uint32_t row = (uint32_t)(((int32_t)(ui.slot / 9u) + e[EN_SELECT] % 4 + 4) % 4);
@@ -2951,7 +2955,7 @@ static void ui_leds(void)
                  (b == B_REC && song.rec && (!song.erase || blink)) ||
                  (b == B_OCTDN && (ui.page == PG_SEQ || ui.lockmode) && ui.bar > 0u) ||
                  (b == B_OCTUP && (ui.page == PG_SEQ || ui.lockmode) && ui.bar + 1u < nbars(t)) ||
-                 (b == B_OCTDN && ui.page == PG_MIX && !ui.mixpan) || (b == B_OCTUP && ui.page == PG_MIX && ui.mixpan);
+                 (b == B_OCTDN && ui.page == PG_MIX && !ui.bank) || (b == B_OCTUP && ui.page == PG_MIX && ui.bank);
         io_led_button(b, on);
     }
     for (k = 0; k < 27u; k++) {
@@ -3861,8 +3865,8 @@ static void draw_graph(int force)
 static void draw_foot(int force)
 {
     static const khint_t H_SEQ[3] = {{KC_KEYS, "STEPS"}, {KC_OCTPM, "BAR"}, {KC_GLO, "SHIFT"}};
-    static const khint_t H_MIX[3] = {{KC_K14, "LEVEL"}, {KC_SELECT, "1-4/5-8"}, {KC_OCTUP, "PAN"}};
-    static const khint_t H_MIXPAN[3] = {{KC_K14, "PAN"}, {KC_SELECT, "1-4/5-8"}, {KC_OCTDN, "LEVEL"}};
+    static const khint_t H_MIX[3] = {{KC_K14, "LEVEL"}, {KC_OCTPM, "1-4/5-8"}, {KC_SELECT, "PAGE"}};
+    static const khint_t H_MIXPAN[3] = {{KC_K14, "PAN"}, {KC_OCTPM, "1-4/5-8"}, {KC_SELECT, "PAGE"}};
     static const khint_t H_NR[3] = {{KC_KEYS, "PADS"}, {KC_K1, "RATE"}, {KC_ARP, "OFF"}};
     static const khint_t H_SAVE[3] = {{KC_OCTUP, "SAVE"}, {KC_K4, "LOAD"}, {KC_OCTDN, "BACK"}};
     static const khint_t H_PAGE[3] = {{KC_SELECT, "SOUND"}, {KC_ALGO, "NEW"}, {KC_PRESETS, "SLOT"}};
@@ -3872,9 +3876,9 @@ static void draw_foot(int force)
     static const khint_t H_LOCK[3] = {{KC_KEYS, "STEP"}, {KC_K14, "LOCK"}, {KC_OCTPM, "BAR"}};
     static const khint_t H_NUDGE[3] = {{KC_KEYS, "STEP"}, {KC_K1, "NUDGE"}, {KC_OCTPM, "BAR"}};
     static const khint_t H_TRK[3] = {{KC_K1, "TRACK"}, {KC_K4, "CLEAR"}, {KC_GLO, "ROW B"}};
-    static const khint_t H_COMP[3] = {{KC_K14, "COMP"}, {KC_PLAY, "PLAY"}, {KC_GLO, "LIMITER"}};
-    static const khint_t H_LIM[3] = {{KC_K14, "LIMIT"}, {KC_PLAY, "PLAY"}, {KC_GLO, "OUTPUT"}};
-    static const khint_t H_OUT[3] = {{KC_K14, "OUTPUT"}, {KC_PLAY, "PLAY"}, {KC_GLO, "MIXER"}};
+    static const khint_t H_COMP[3] = {{KC_K14, "COMP"}, {KC_SELECT, "PAGE"}, {KC_GLO, "LIMITER"}};
+    static const khint_t H_LIM[3] = {{KC_K14, "LIMIT"}, {KC_SELECT, "PAGE"}, {KC_GLO, "OUTPUT"}};
+    static const khint_t H_OUT[3] = {{KC_K14, "OUTPUT"}, {KC_SELECT, "PAGE"}, {KC_GLO, "MIXER"}};
     char b[32];
     uint32_t sig;
     const khint_t *h = ui.shift ? H_SHIFT : ui.lockmode == LM_LOCK && ui.page != PG_SEQ && ui.page != PG_NR ? H_LOCK :

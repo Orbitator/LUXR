@@ -48,7 +48,7 @@ Rechteck, S&H), Rate im Tempo (1/16 … 8 Takte, ab dem Takt, in dem PLAY starte
 
 **GLO lange halten (ab 250 ms) = SHIFT.** Wird GLO zusammen mit einem anderen Bedienelement gedrückt, gilt SHIFT
 sofort. GLO kurz tippen öffnet den MIXER, nochmal tippen schaltet auf dessen Seite 2 (PAN), ein drittes Mal auf den
-COMPRESSOR, dann LIMITER und OUTPUT, dann wieder zum MIXER. Im Mixer: SELECT Sounds 1–4 / 5–8, OCT−/+ Lautstärke / Pan.
+COMPRESSOR, dann LIMITER und OUTPUT, dann wieder zum MIXER. SELECT dreht alternativ durch diese fünf Seiten. Im Mixer: OCT−/+ Sounds 1–4 / 5–8.
 Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts).
 
 | Bedienelement | normal | mit SHIFT |
@@ -89,7 +89,7 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | SCL | PATTERNS | Pattern (spielend: wechselt am Pattern-Ende), Chain (spielt N Patterns nacheinander), **Copy** (ein Dreh kopiert das angezeigte Pattern), **Paste** (ein Dreh fügt es ins angezeigte Pattern ein). **Weiße Tasten:** Taste k = Pattern k; eine Taste halten und eine zweite drücken = Chain vom kleineren bis zum größeren (2 + 5: 2-3-4-5) | |
 | SCL (2.) | **SONG** | Zeile (1–32), ihr Pattern, ihre Wiederholungen (1–16), Song an / aus. **Weiße Tasten:** nacheinander gedrückt ergeben sie die Zeilen des Songs (die erste Taste nach dem Öffnen der Seite beginnt einen neuen Song, SONG geht an) | Anzahl Zeilen, am Ende: LOOP / STOP |
 | ARP | NOTE REPEAT | Rate, Velocity, Vel-Modus (fest, steigend, fallend, zufällig), Latch | Humanize |
-| GLO (tippen) | MIXER, Seite 1 (SELECT: Sounds 1–4 / 5–8, OCT−/+: Lautstärke / Pan) | Lautstärke der vier Sounds der Bank; Meter = Pegel am Ausgang (mit Pan und Master-Lautstärke), oben = 0 dB; darüber blinkt 2 s ein roter Punkt | Pan der vier Sounds |
+| GLO (tippen) | MIXER, Seite 1 (OCT−/+: Sounds 1–4 / 5–8; SELECT: die GLO-Seiten) | Lautstärke der vier Sounds der Bank; Meter = Pegel am Ausgang (mit Pan und Master-Lautstärke), oben = 0 dB; darüber blinkt 2 s ein roter Punkt | Pan der vier Sounds |
 | GLO (nochmal tippen) | MIXER, Seite 2: PAN | Pan der vier Sounds der Bank (L64 … C … R63) | Lautstärke |
 | GLO (dritte Seite) | **COMPRESSOR** | THRESH (0 … −40 dB), RATIO (1:1 … 10:1, LIMIT), ATTACK (0,5–50 ms), RELEASE (20–1000 ms) | |
 | GLO (vierte Seite) | **LIMITER** | MAKEUP (0 … +24 dB), LIMITER an/aus, CEILING (−12 … 0 dB unter dem Ausgangsmaximum), RELEASE (10–1000 ms) | |
