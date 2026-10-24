@@ -76,7 +76,6 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | EDIT | SYNTH 1-4 | Synth-Parameter 1–4 | Parameter 5–8 |
 | EDIT (2.) | SYNTH 5-8 | Synth-Parameter 5–8 (z. B. Tone, Snap, Click, Drive) | Parameter 1–4 |
 | EDIT (3.) | SAMPLE LAYER | Sample, Level, Pitch, Synth-Pegel | |
-| EDIT (halten) | **SOUND DEFAULTS** – wie gewürfelte Sounds (ALGORITHM, SHIFT + D#4) ausfallen; OCT−/+: Synth- / Sample-Layer | Synth: Volume, Synth-Pegel, Pitch (±, auf den gewürfelten), Decay (oder RND) · Sample: Level, Pitch, Decay (je oder RND), welche Samples (alle, eigene, Maschinen, LXR); global gespeichert | |
 | ENV | **ENVELOPE** | Attack (OFF … 252 ms), Decay (der Decay des Synth-Layers), Release, Gate (OFF oder ¼ … 16 Steps: danach übernimmt das Release den Decay) – alles lockbar | |
 | EDIT (4.) | SAMPLE 2 | Start, Tone, Bend, Decay | |
 | EDIT (5.) | SOUND MIX | Volume, Pan, Delay-Send, Reverb-Send | Drive-Send |
