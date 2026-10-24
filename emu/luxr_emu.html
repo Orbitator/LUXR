@@ -8,7 +8,7 @@
    the page around it follows the theme. */
 :root {
   --page: #e6e8ec; --ink: #1d2230; --muted: #5a6274; --line: #cdd2db; --card: #f5f6f8; --accent: #4c6a97;
-  --ok: #2e8b57; --err: #c23b4a;
+  --ok: #2e8b57; --err: #c23b4a; --pp-heart: #d1344b;
   --body-c: #ecebe5; --body-edge: #d9d7cf; --silk: #4a4d55; --tray: #56709a; --pad: #6582ad; --pad-hi: #7593bd;
   --pad-ink: #eef2f8; --slot: #3d4350; --glow: #ffe2a8; --knob: #17181b;
   --f-silk: "Share Tech Mono", ui-monospace, Menlo, Consolas, monospace;
@@ -28,8 +28,32 @@ body { background: var(--page); color: var(--ink); font: 16px/1.5 var(--f-body);
         display: grid; gap: 22px; }
 header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 10px 24px; }
 h1 { margin: 0; font: 400 clamp(26px, 4.4vw, 38px)/1 var(--f-silk); letter-spacing: 2px; text-wrap: balance; }
-h1 small { font-size: .5em; letter-spacing: 1px; color: var(--muted); margin-left: .4em; }
+h1 { display: flex; flex-wrap: wrap; align-items: end; gap: 6px 14px; }
+h1 small { font-size: .5em; letter-spacing: 2px; color: var(--muted); padding-bottom: .15em; }
+.head { min-width: 0; }
+.logo { position: relative; display: block; width: clamp(170px, 26vw, 260px); aspect-ratio: 560 / 136; max-width: 100%; }
+.logo .lt { position: absolute; inset: 0; background: var(--ink); -webkit-mask: url("@LOGO_L@") center / contain no-repeat; mask: url("@LOGO_L@") center / contain no-repeat; }
+.logo .mk { position: absolute; inset: 0; width: 100%; height: 100%; }
+.links { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 10px; }
+.lnk { font: 600 15px var(--f-body); color: var(--accent); text-decoration: none; border-bottom: 1px solid currentColor; }
+.lnk:hover { color: var(--ink); }
+.lnk:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .lede { margin: 8px 0 0; color: var(--muted); max-width: 68ch; }
+.side { display: grid; gap: 10px; justify-items: end; max-width: 340px; }
+.tip { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; padding: 12px 14px;
+       background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+.tip p { margin: 0; font-size: 14px; line-height: 1.35; color: var(--muted); }
+.tip p b { display: block; color: var(--ink); font-weight: 600; }
+.beat { width: 40px; height: 16px; fill: none; stroke: var(--pp-heart); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
+        stroke-dasharray: 90; animation: beat 2.4s ease-in-out infinite; }
+@keyframes beat { 0% { stroke-dashoffset: 90; } 45%, 70% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -90; } }
+.pp { grid-column: 1 / -1; display: inline-flex; justify-content: center; align-items: center; gap: 8px; min-height: 42px; padding: 0 18px;
+      border-radius: 999px; background: #ffc439; color: #111; font: 700 14px var(--f-body); text-decoration: none;
+      box-shadow: 0 2px 0 #d9a21c; transition: transform .1s, box-shadow .1s; }
+.pp:hover { transform: translateY(-1px); box-shadow: 0 3px 0 #d9a21c; }
+.pp:hover .hrt { transform: scale(1.25); }
+.pp:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hrt { color: #d1344b; display: inline-block; transition: transform .15s; }
 .status { font: 13px var(--f-silk); color: var(--muted); display: flex; gap: 8px; align-items: center; }
 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
 .dot.on { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
@@ -112,17 +136,30 @@ kbd { font: 12px var(--f-silk); border: 1px solid var(--line); border-bottom-wid
 a { color: var(--accent); }
 @media (max-width: 900px) { .bench { grid-template-columns: 1fr; } .ref { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 560px) { .ref, .keys-help { grid-template-columns: 1fr; } .grid36 { gap: 3px; font-size: 11px; } }
-@media (prefers-reduced-motion: reduce) { .pad, .key .slot { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .pad, .key .slot, .pp, .hrt { transition: none; } .beat { animation: none; stroke-dasharray: none; } }
+@media (max-width: 700px) { .side { max-width: none; width: 100%; justify-items: stretch; } }
 </style>
 
 <div class="wrap">
   <header>
-    <div>
-      <h1>LUXR <small>FM-1 EMULATOR</small></h1>
+    <div class="head">
+      <h1><span class="logo" role="img" aria-label="LUXR"><span class="lt"></span><img class="mk" src="@LOGO_M@" alt=""></span><small>FM-1 EMULATOR</small></h1>
       <p class="lede">The LUXR firmware running in your browser: the same C code as on the M-VAVE FM-1 (sound engine, sequencer,
       screens, patch store), compiled to WebAssembly. Play it with the mouse, touch, your computer keyboard or a MIDI keyboard.</p>
+      <div class="links">
+        <a class="lnk" href="https://holodeck-audiotools.com/LUXR" target="_blank" rel="noopener">Read the manual →</a>
+        <a class="lnk" href="https://orbitator.github.io/LUXR/" target="_blank" rel="noopener">Install LUXR on your FM-1 →</a>
+      </div>
     </div>
-    <div class="status"><span class="dot" id="dot"></span><span id="stat">off</span></div>
+    <div class="side">
+      <aside class="tip" aria-labelledby="tipT">
+        <svg class="beat" viewBox="0 0 64 24" aria-hidden="true"><path d="M0 12h14l4-8 6 16 5-12 3 4h32"/></svg>
+        <p id="tipT"><b>Having fun with LUXR?</b> Support me and my projects – thank you so much!</p>
+        <a class="pp" href="https://www.paypal.com/donate?business=holodeckmusicproject%40gmail.com&amp;item_name=Support+LUXR+and+Holodeck+projects&amp;currency_code=EUR"
+           target="_blank" rel="noopener"><span class="hrt" aria-hidden="true">♥</span> Donate with PayPal</a>
+      </aside>
+      <div class="status"><span class="dot" id="dot"></span><span id="stat">off</span></div>
+    </div>
   </header>
 
   <div class="stage"><div class="fm1" id="fm1" aria-label="FM-1 panel">
@@ -183,7 +220,7 @@ a { color: var(--accent); }
           <dt>HOME</dt><dd>KIT, MIDI, CC LEARN. Hold: SYSTEM.</dd>
         </dl>
       </div>
-      <p class="hint">The full manual: <a href="https://holodeck-audiotools.com/LUXR" target="_blank" rel="noopener">holodeck-audiotools.com/LUXR</a>.
+      <p class="hint">Every screen explained in the <a href="https://holodeck-audiotools.com/LUXR" target="_blank" rel="noopener">LUXR manual</a>.
       Not emulated: firmware updates, USB audio and the battery.</p>
     </div>
   </section>
