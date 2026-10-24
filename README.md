@@ -48,7 +48,7 @@ Rechteck, S&H), Rate im Tempo (1/16 … 8 Takte, ab dem Takt, in dem PLAY starte
 
 **GLO lange halten (ab 250 ms) = SHIFT.** Wird GLO zusammen mit einem anderen Bedienelement gedrückt, gilt SHIFT
 sofort. GLO kurz tippen öffnet den MIXER, nochmal tippen schaltet auf dessen Seite 2 (PAN), ein drittes Mal auf den
-COMPRESSOR, dann wieder zum MIXER.
+COMPRESSOR, dann LIMITER und OUTPUT, dann wieder zum MIXER. Im Mixer: SELECT Sounds 1–4 / 5–8, OCT−/+ Lautstärke / Pan.
 Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts).
 
 | Bedienelement | normal | mit SHIFT |
@@ -91,7 +91,9 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | ARP | NOTE REPEAT | Rate, Velocity, Vel-Modus (fest, steigend, fallend, zufällig), Latch | Humanize |
 | GLO (tippen) | MIXER, Seite 1 (SELECT: Sounds 1–4 / 5–8, OCT−/+: Lautstärke / Pan) | Lautstärke der vier Sounds der Bank; Meter = Pegel am Ausgang (mit Pan und Master-Lautstärke), oben = 0 dB; darüber blinkt 2 s ein roter Punkt | Pan der vier Sounds |
 | GLO (nochmal tippen) | MIXER, Seite 2: PAN | Pan der vier Sounds der Bank (L64 … C … R63) | Lautstärke |
-| GLO (dritte Seite) | **COMPRESSOR** | THRESH (0 … −40 dB), RATIO (1:1 … 10:1, LIMIT), ATTACK (0,5–50 ms), RELEASE (20–1000 ms) | MAKEUP (0 … +24 dB), LIMITER an/aus |
+| GLO (dritte Seite) | **COMPRESSOR** | THRESH (0 … −40 dB), RATIO (1:1 … 10:1, LIMIT), ATTACK (0,5–50 ms), RELEASE (20–1000 ms) | |
+| GLO (vierte Seite) | **LIMITER** | MAKEUP (0 … +24 dB), LIMITER an/aus, CEILING (−12 … 0 dB unter dem Ausgangsmaximum), RELEASE (10–1000 ms) | |
+| GLO (fünfte Seite) | **OUTPUT** | PRE-CLIP (aus, −1 … −6 dB), AUTO (Auto Level an/aus), TARGET (−12 … 0 dB), OUTPUT (0 / +3 / +6 dB, global) | |
 | SAVE | STORE | **SELECT wählt die Reihe (1–9, 10–18, 19–27, 28–36; heller hinterlegt), die weißen Tasten 1–9 deren Plätze: ein belegter wird sofort geladen (wie KNOB 3 sagt), ein leerer nur gewählt. OCT+ speichert sofort (auch auf NEW PATCH).** Platz 1–36, **was gespeichert wird** (KIT+PAT, nur KIT, nur PATTERN – OCT+ speichert), **was geladen wird** (KIT+PAT, nur KIT, nur PATTERN), **LOAD** (ein Dreh lädt den Platz; ein leerer Platz gibt ein neues, leeres Patch) | |
 | SAVE (2.) | **NEW PATCH** | Länge (1–64 Steps), Speed (1/8X … 2X), Tempo, **CREATE** (ein Dreh legt das neue Patch an: 16 leere Patterns, Wiedergabe gestoppt, noch nicht gespeichert) | Kit: FACTORY (Werkssounds und FX) oder KEEP (das aktuelle bleibt) |
 | REC (halten) | **QUANTIZE** | Raster (1/16, 1/8, 1/4), Richtung (zum nächsten Rasterpunkt / zum vorherigen), Metronom (aus, bei Aufnahme, an) | |
@@ -206,11 +208,20 @@ Clap, 42 CH, 46 OH, 45 Tom, 37 Rim, 49 Cymbal); gespeichert mit dem Kit. Gesende
 Pads und des Note Repeat (nicht die von MIDI IN), mit Velocity (Accent +20) und einer Länge von einem halben Sechzehntel.
 Stumme Spuren senden nicht.
 
-**Master-Kompressor und Limiter (GLO dreimal).** Der Kompressor sitzt hinter dem Master-Filter und vor der Lautstärke,
+**Master-Kompressor und Limiter (GLO dreimal bzw. viermal).** Der Kompressor sitzt hinter dem Master-Filter und vor der Lautstärke,
 beide Seiten gemeinsam (das Panorama bleibt). 0 dB entspricht dem vollen Ausgang bei Standard-Lautstärke. Die Grafik zeigt
 die Kennlinie, den aktuellen Pegel darauf (roter Punkt) und die Absenkung von Kompressor und Limiter. Der LIMITER sitzt ganz
-am Ende und hält die Spitzen unter dem Soft-Clip des Ausgangs (er kennt jeden Block, bevor er klingt: kein Überschwingen).
-Beides wird mit dem Kit gespeichert; ab Werk ist der Kompressor 1:1 (aus) und der Limiter aus – der Klang bleibt wie bisher.
+am Ende und hält die Spitzen unter CEILING (0 dB = Ausgangsmaximum −0,3 dB), mit 0,7 ms Look-ahead und weich geblendeter
+Verstärkung; eingeschaltet ersetzt er den Soft-Clip des Ausgangs (sauber statt Sättigung). Reihenfolge: Pre-Clip →
+Kompressor → Makeup → Lautstärke → Limiter. Beides wird mit dem Kit gespeichert; ab Werk ist der Kompressor 1:1 (aus) und
+der Limiter aus – der Klang bleibt wie bisher.
+
+**Auto Level, Pre-Clip, Output (GLO fünfmal).** AUTO regelt jeden Sound selbsttätig herunter, sobald er am Ausgang über
+TARGET käme – sofort, und über etwa 1,5 s wieder hoch, wie ein Fader, der für dich nachgeführt wird; die Grafik zeigt je
+Sound, um wie viel dB gerade. PRE-CLIP kappt die Spitzen vor dem Kompressor weich (Kick-/Snare-Klicks), damit er auf den
+Körper reagiert statt zu pumpen. OUTPUT hebt den Ausgang um 3 oder 6 dB an (ab Werk 0 dB = die bisherige Reserve); ob der
+Kopfhörer- und Line-Ausgang des FM-1 das sauber verkraftet, bitte am Gerät prüfen. AUTO, TARGET und PRE-CLIP gehören zum
+Kit, OUTPUT ist global.
 
 **Tonal spielen (MIDI IN).** Hat ein Sound als einziger einen bestimmten MIDI-Kanal (HOME 2., MIDI CH), spielen Noten auf
 diesem Kanal genau diesen Sound tonal: C3 (Note 60) ist seine eigene Tonhöhe, jede Taste ein Halbton, drei Oktaven nach
