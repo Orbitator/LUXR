@@ -1,0 +1,547 @@
+<title>LUXR Emulator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Semi+Condensed:wght@500;700&family=Barlow:wght@400;600&display=swap">
+<style>
+/* Layout: the FM-1 drawn to scale from its top view (a 920 x 550 body; every part placed in body units), the
+   bench of patches / MIDI / help below it. The device keeps its own cream-and-slate colours in both themes;
+   the page around it follows the theme. */
+:root {
+  --page: #e6e8ec; --ink: #1d2230; --muted: #5a6274; --line: #cdd2db; --card: #f5f6f8; --accent: #4c6a97;
+  --ok: #2e8b57; --err: #c23b4a;
+  --body-c: #ecebe5; --body-edge: #d9d7cf; --silk: #4a4d55; --tray: #56709a; --pad: #6582ad; --pad-hi: #7593bd;
+  --pad-ink: #eef2f8; --slot: #3d4350; --glow: #ffe2a8; --knob: #17181b;
+  --f-silk: "Share Tech Mono", ui-monospace, Menlo, Consolas, monospace;
+  --f-pad: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #11141a; --ink: #e5e8ee; --muted: #97a0b1; --line: #262b35; --card: #181c23; --accent: #8fb0e0; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --page: #11141a; --ink: #e5e8ee; --muted: #97a0b1; --line: #262b35; --card: #181c23; --accent: #8fb0e0; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--page); color: var(--ink); font: 16px/1.5 var(--f-body); margin: 0; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 22px 48px;
+        padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+        display: grid; gap: 22px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 10px 24px; }
+h1 { margin: 0; font: 400 clamp(26px, 4.4vw, 38px)/1 var(--f-silk); letter-spacing: 2px; text-wrap: balance; }
+h1 small { font-size: .5em; letter-spacing: 1px; color: var(--muted); margin-left: .4em; }
+.lede { margin: 8px 0 0; color: var(--muted); max-width: 68ch; }
+.status { font: 13px var(--f-silk); color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+.dot.on { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+
+/* ------------------------------------------------------------------ the device */
+.stage { container-type: inline-size; width: 100%; max-width: 1100px; margin: 0 auto; }
+.fm1 { --u: calc(100cqw / 920); position: relative; width: 100%; aspect-ratio: 920 / 550; max-width: 100%;
+       background: linear-gradient(180deg, #f3f2ed, var(--body-c) 40%, #e4e2db); border-radius: calc(34 * var(--u));
+       box-shadow: 0 calc(26 * var(--u)) calc(50 * var(--u)) calc(-22 * var(--u)) #0007, inset 0 calc(-3 * var(--u)) 0 var(--body-edge), inset 0 1px 0 #fff;
+       user-select: none; -webkit-user-select: none; touch-action: pan-y; color: var(--silk); }
+.fm1 .at { position: absolute; }
+.silkl { position: absolute; transform: translateX(-50%); font: calc(13 * var(--u))/1 var(--f-silk); letter-spacing: calc(1 * var(--u)); white-space: nowrap; }
+.knob { position: absolute; width: calc(42 * var(--u)); height: calc(42 * var(--u)); margin: calc(-21 * var(--u)) 0 0 calc(-21 * var(--u));
+        border-radius: 50%; cursor: ns-resize; touch-action: none;
+        background: repeating-conic-gradient(from 0deg, #2b2d31 0 6deg, #0c0d0f 6deg 12deg);
+        box-shadow: 0 calc(5 * var(--u)) calc(8 * var(--u)) #0006, 0 0 0 calc(2 * var(--u)) #00000014; }
+.knob::before { content: ""; position: absolute; inset: 18%; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #34363b, var(--knob) 70%); }
+.knob::after { content: ""; position: absolute; left: 50%; top: 22%; width: calc(3 * var(--u)); height: calc(9 * var(--u)); margin-left: calc(-1.5 * var(--u));
+               background: #d8d8d4; border-radius: 1px; transform-origin: 50% calc(12 * var(--u)); transform: rotate(var(--a, 0deg)); }
+.knob.pot::after { background: #f1f1ee; width: calc(5 * var(--u)); margin-left: calc(-2.5 * var(--u)); }
+.knob:focus-visible, .pad:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tray { position: absolute; background: linear-gradient(180deg, #4d668e, var(--tray)); border-radius: calc(12 * var(--u));
+        box-shadow: inset 0 calc(2 * var(--u)) calc(4 * var(--u)) #0004, 0 1px 0 #fff8; }
+.pad { position: absolute; border: 0; padding: 0; cursor: pointer; color: var(--pad-ink); font: 700 calc(12.5 * var(--u))/1.05 var(--f-pad); letter-spacing: calc(.4 * var(--u));
+       background: linear-gradient(180deg, var(--pad-hi), var(--pad) 55%, #5a76a0); border-radius: calc(9 * var(--u));
+       box-shadow: 0 calc(3 * var(--u)) 0 #3e557a, 0 calc(4 * var(--u)) calc(6 * var(--u)) #0004, inset 0 1px 0 #ffffff40;
+       transition: box-shadow .06s, transform .06s, color .1s, text-shadow .1s; touch-action: none; }
+.pad.down { transform: translateY(calc(2 * var(--u))); box-shadow: 0 calc(1 * var(--u)) 0 #3e557a, inset 0 1px 0 #ffffff30; }
+.pad.lit { color: #fffaf0; text-shadow: 0 0 calc(6 * var(--u)) var(--glow), 0 0 calc(12 * var(--u)) var(--glow); }
+.pad.sq { width: calc(46 * var(--u)); height: calc(42 * var(--u)); margin: calc(-21 * var(--u)) 0 0 calc(-23 * var(--u)); }
+.pad.oct { width: calc(62 * var(--u)); height: calc(33 * var(--u)); }
+.pad .ul { display: block; border-top: calc(1.5 * var(--u)) solid currentColor; width: 70%; margin: calc(1 * var(--u)) auto 0; padding-top: calc(1 * var(--u)); }
+.key { position: absolute; border-radius: calc(21 * var(--u)); }
+.key.b { width: calc(42 * var(--u)); height: calc(90 * var(--u)); margin-left: calc(-21 * var(--u)); top: calc(327 * var(--u)); }
+.key.w { width: calc(45 * var(--u)); height: calc(88 * var(--u)); margin-left: calc(-22.5 * var(--u)); top: calc(419 * var(--u)); }
+.key .slot { position: absolute; left: 50%; width: calc(5 * var(--u)); margin-left: calc(-2.5 * var(--u)); border-radius: calc(3 * var(--u));
+             background: var(--slot); transition: background .08s, box-shadow .08s; }
+.key.b .slot { top: calc(20 * var(--u)); height: calc(26 * var(--u)); }
+.key.w .slot { top: calc(19 * var(--u)); height: calc(46 * var(--u)); }
+.key.lit .slot { background: var(--glow); box-shadow: 0 0 calc(8 * var(--u)) var(--glow), 0 0 calc(3 * var(--u)) #fff; }
+.key .kl { position: absolute; left: 0; right: 0; top: calc(56 * var(--u)); text-align: center; font: 700 calc(10.5 * var(--u))/1 var(--f-pad); color: #e3e9f3; }
+.gdot { position: absolute; width: calc(5 * var(--u)); height: calc(5 * var(--u)); margin: calc(-2.5 * var(--u)) 0 0 calc(-2.5 * var(--u)); border-radius: 50%; background: #1d2433; }
+.bezel { position: absolute; left: calc(238 * var(--u)); top: calc(40 * var(--u)); width: calc(216 * var(--u)); height: calc(218 * var(--u));
+         background: #0b0b0c; border-radius: calc(20 * var(--u)); box-shadow: inset 0 0 0 calc(2 * var(--u)) #2a2a2c, 0 1px 0 #fff; }
+canvas#lcd { position: absolute; left: calc(28 * var(--u)); top: calc(29 * var(--u)); width: calc(160 * var(--u)); height: calc(160 * var(--u));
+             image-rendering: pixelated; background: #0d0d10; border-radius: calc(2 * var(--u)); }
+.poweron { position: absolute; inset: calc(29 * var(--u)) calc(28 * var(--u)); border: 0; border-radius: calc(2 * var(--u)); cursor: pointer;
+           background: #000a; color: #f2f2f2; font: calc(14 * var(--u))/1.3 var(--f-silk); letter-spacing: calc(1 * var(--u)); display: grid; place-content: center; gap: calc(6 * var(--u)); }
+.poweron b { font-weight: 400; font-size: calc(22 * var(--u)); }
+.poweron:focus-visible { outline: 2px solid var(--glow); }
+
+/* ------------------------------------------------------------------ the bench */
+.bench { display: grid; grid-template-columns: 1.15fr 1fr; gap: 18px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; min-width: 0; display: grid; gap: 12px; align-content: start; }
+.card.wide { grid-column: 1 / -1; }
+.card h2 { margin: 0; font: 400 14px var(--f-silk); letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { font: 600 14px var(--f-body); padding: 9px 14px; border-radius: 9px; border: 1px solid var(--line); background: var(--page); color: var(--ink); cursor: pointer; min-height: 42px; }
+.btn.go { background: var(--accent); border-color: transparent; color: var(--card); }
+.btn.warn { color: var(--err); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.msg { margin: 0; font-size: 14px; color: var(--muted); min-height: 1.5em; }
+.msg.ok { color: var(--ok); } .msg.err { color: var(--err); }
+.hint { margin: 0; color: var(--muted); font-size: 14px; max-width: 70ch; }
+.grid36 { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 5px; font: 13px var(--f-silk); font-variant-numeric: tabular-nums; }
+.grid36 button { aspect-ratio: 1.3; min-width: 0; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit; cursor: default; padding: 0; }
+.grid36 button.used { background: var(--accent); border-color: transparent; color: var(--card); cursor: pointer; }
+.grid36 button.cur { outline: 2px solid var(--err); outline-offset: 1px; }
+.confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; border: 1px solid var(--err); border-radius: 10px; font-size: 14px; }
+select { font: 14px var(--f-body); padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--page); color: var(--ink); max-width: 100%; }
+.keys-help { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 22px; font-size: 14px; }
+.keys-help div { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
+.keys-help span { color: var(--muted); }
+kbd { font: 12px var(--f-silk); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; background: var(--page); white-space: nowrap; }
+.ref { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 24px; font-size: 14px; }
+.ref dl { margin: 0; display: grid; gap: 3px; align-content: start; }
+.ref dt { font: 700 14px var(--f-pad); letter-spacing: .5px; color: var(--ink); margin-top: 6px; }
+.ref dd { margin: 0; color: var(--muted); }
+a { color: var(--accent); }
+@media (max-width: 900px) { .bench { grid-template-columns: 1fr; } .ref { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .ref, .keys-help { grid-template-columns: 1fr; } .grid36 { gap: 3px; font-size: 11px; } }
+@media (prefers-reduced-motion: reduce) { .pad, .key .slot { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>LUXR <small>FM-1 EMULATOR</small></h1>
+      <p class="lede">The LUXR firmware running in your browser: the same C code as on the M-VAVE FM-1 (sound engine, sequencer,
+      screens, patch store), compiled to WebAssembly. Play it with the mouse, touch, your computer keyboard or a MIDI keyboard.</p>
+    </div>
+    <div class="status"><span class="dot" id="dot"></span><span id="stat">off</span></div>
+  </header>
+
+  <div class="stage"><div class="fm1" id="fm1" aria-label="FM-1 panel">
+    <div class="bezel"><canvas id="lcd" width="240" height="240" aria-label="Display"></canvas>
+      <button class="poweron" id="power"><b>POWER ON</b><span>click to start the sound</span></button></div>
+  </div></div>
+
+  <section class="bench">
+    <div class="card">
+      <h2>Patches</h2>
+      <div class="grid36" id="slots" aria-label="Patch slots 1 to 36"></div>
+      <div class="row">
+        <button class="btn go" id="imp">Import backup (.luxr)</button>
+        <button class="btn" id="exp">Export backup</button>
+        <button class="btn warn" id="wipe">Erase all patches</button>
+        <input type="file" id="file" accept=".luxr,application/octet-stream" hidden>
+      </div>
+      <div class="confirm" id="ask" hidden><span id="askText"></span><button class="btn warn" id="askYes">Replace</button><button class="btn" id="askNo">Cancel</button></div>
+      <p class="msg" id="pmsg"></p>
+      <p class="hint">Import the <code>.luxr</code> file the LUXR update page saves with “Download backup”. Each patch goes to its own slot
+      and is converted like a restore on the device. Click a blue slot to load it. Patches stay in this browser; “Export backup”
+      writes a file the update page can restore to a real FM-1.</p>
+    </div>
+    <div class="card">
+      <h2>Computer keyboard &amp; MIDI</h2>
+      <div class="keys-help">
+        <div><kbd>A</kbd>–<kbd>K</kbd><span>pads 1–8 (F3–C4)</span></div>
+        <div><kbd>Z</kbd>–<kbd>,</kbd><span>pads D4–G5</span></div>
+        <div><kbd>1</kbd>–<kbd>0</kbd> <kbd>ß</kbd><span>black keys F#3–F#5</span></div>
+        <div><kbd>Space</kbd><span>PLAY / STOP</span></div>
+        <div><kbd>Enter</kbd><span>REC</span></div>
+        <div><kbd>Shift</kbd><span>SHIFT (GLO held)</span></div>
+        <div><kbd>←</kbd> <kbd>→</kbd><span>OCT− / OCT+</span></div>
+        <div><kbd>↑</kbd> <kbd>↓</kbd><span>SELECT</span></div>
+      </div>
+      <p class="hint">Knobs: drag up or down, or use the mouse wheel. MASTER is the volume. On a phone, turn it sideways.</p>
+      <div class="row"><label for="midiIn">MIDI in</label><select id="midiIn"><option value="">none</option></select>
+        <label for="midiOut">MIDI out</label><select id="midiOut"><option value="">none</option></select></div>
+      <p class="hint" id="midiInfo">MIDI works in Chrome and Edge once the emulator is on. Notes on a sound's MIDI channel play it, alone on its channel it plays tonally (C3 = original pitch).</p>
+    </div>
+    <div class="card wide">
+      <h2>Controls</h2>
+      <div class="ref">
+        <dl>
+          <dt>GLO</dt><dd>Tap: MIXER, COMPRESSOR, LIMITER, OUTPUT pages. Hold: SHIFT for the second row of every page.</dd>
+          <dt>SELECT · ALGORITHM · PRESETS</dt><dd>Sound 1–8 · roll a new sound (SHIFT: next sample) · pick a patch slot (SHIFT: load).</dd>
+          <dt>KNOB 1–4</dt><dd>The four cards on the screen.</dd>
+        </dl>
+        <dl>
+          <dt>SEQ</dt><dd>White keys are the 16 steps; hold a step for STEP EDIT. Tap again: LIVE PADS, TRACKS.</dd>
+          <dt>EDIT · ENV · LFO · FX</dt><dd>Synth layer, sample layer, sound mix · envelope · two LFOs · sends, drive, delay, reverb, master filter.</dd>
+          <dt>SEL (SCL) · ARP</dt><dd>Patterns and song mode · note repeat.</dd>
+        </dl>
+        <dl>
+          <dt>SAVE</dt><dd>The STORE grid of 36 patches; OCT+ saves. Tap again: NEW PATCH.</dd>
+          <dt>Black keys</dt><dd>F#3/G#3 snapshots, A#3 mute, C#4 solo, D#4 random mute, F#4/G#4 copy/paste, A#4 undo, C#5 p-lock, D#5 nudge, F#5 fill.</dd>
+          <dt>HOME</dt><dd>KIT, MIDI, CC LEARN. Hold: SYSTEM.</dd>
+        </dl>
+      </div>
+      <p class="hint">The full manual: <a href="https://holodeck-audiotools.com/LUXR" target="_blank" rel="noopener">holodeck-audiotools.com/LUXR</a>.
+      Not emulated: firmware updates, USB audio and the battery.</p>
+    </div>
+  </section>
+</div>
+
+<script>
+"use strict";
+const WASM_B64 = "@WASM@";
+const $ = (id) => document.getElementById(id);
+const wasmBytes = Uint8Array.from(atob(WASM_B64), (c) => c.charCodeAt(0));
+const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, ARP: 8, SEQ: 9, PLAY: 10, REC: 11, OCTDN: 12, OCTUP: 13 };
+const STORE_KEY = "luxr-fm1-store";
+
+/* ------------------------------------------------------------ the store --- */
+function storeLoad() { try { const s = localStorage.getItem(STORE_KEY); return s ? Uint8Array.from(atob(s), (c) => c.charCodeAt(0)) : null; } catch { return null; } }
+function storeSave(d) { try { let s = ""; for (let i = 0; i < d.length; i += 8192) s += String.fromCharCode(...d.subarray(i, i + 8192)); localStorage.setItem(STORE_KEY, btoa(s)); } catch {} }
+let store = storeLoad();                          // the patch flash as this browser keeps it (null: factory)
+
+/* the backup protocol on a local instance (as the update page talks to the device) */
+const pack7 = (b) => { const o = []; for (let i = 0; i < b.length; i += 7) { const c = Array.from(b.slice(i, i + 7)); let h = 0; c.forEach((x, k) => h |= ((x >> 7) & 1) << k); o.push(h, ...c.map((x) => x & 127)); } return o; };
+const unpack7 = (d) => { const o = []; for (let i = 0; i < d.length;) { const hi = d[i++]; for (let k = 0; k < 7 && i < d.length; k++) o.push(d[i++] | (((hi >> k) & 1) << 7)); } return o; };
+const lx4 = (v) => [v & 255, (v >> 8) & 255, (v >> 16) & 255, (v >>> 24) & 255];
+const rd4 = (b, i) => (b[i] | b[i + 1] << 8 | b[i + 2] << 16 | b[i + 3] << 24) >>> 0;
+async function offline() {                        // an instance on the stored image, no sound
+  const { instance } = await WebAssembly.instantiate(wasmBytes, {});
+  const ex = instance.exports;
+  if (store) new Uint8Array(ex.memory.buffer, ex.emu_store(), ex.emu_store_len()).set(store.subarray(0, ex.emu_store_len()));
+  ex.emu_master(760); ex.emu_init(7);
+  return ex;
+}
+function ask(ex, cmd, data) {
+  const f = [0x7D, 0x4F, 0x43, cmd, ...pack7(data)];
+  new Uint8Array(ex.memory.buffer, ex.emu_in_buf(), f.length).set(f);
+  ex.emu_sysex(f.length);
+  const n = ex.emu_out_take();
+  return n ? unpack7(new Uint8Array(ex.memory.buffer, ex.emu_out_buf(), n).slice(5, -1)) : [];
+}
+function info(ex) {
+  const r = ask(ex, 0x40, []), z = r.indexOf(0, 4), n = r[z + 1], size = rd4(r, z + 2), used = [];
+  for (let s = 0; s < n; s++) if ((r[z + 6 + (s >> 3)] >> (s & 7)) & 1) used.push(s);
+  return { n, size, used };
+}
+function parseBackup(u8) {
+  if (u8.length < 9 || String.fromCharCode(...u8.slice(0, 8)) !== "LUXRBK01") throw new Error("This is not a LUXR backup file (.luxr).");
+  const slots = []; let o = 9;
+  for (let k = 0; k < u8[8]; k++) {
+    if (o + 5 > u8.length) throw new Error("The backup file is cut short.");
+    const s = u8[o], len = rd4(u8, o + 1);
+    slots.push({ s, bytes: u8.slice(o + 5, o + 5 + len) }); o += 5 + len;
+  }
+  return slots;
+}
+
+/* -------------------------------------------------------------- worklet --- */
+const WORKLET = `
+class Luxr extends AudioWorkletProcessor {
+  constructor() { super(); this.ex = null; this.q = []; this.t = 0; this.nextOk = 0; this.last = 0; this.sg = 0; this.port.onmessage = (e) => this.msg(e.data); }
+  boot(store, seed) {
+    const ex = this.ex;
+    if (store) new Uint8Array(ex.memory.buffer, ex.emu_store(), ex.emu_store_len()).set(store.subarray(0, ex.emu_store_len()));
+    ex.emu_init(seed); this.sg = ex.emu_store_gen();
+  }
+  async msg(m) {
+    if (m.type === "load") {
+      const { instance } = await WebAssembly.instantiate(m.wasm, {});
+      this.ex = instance.exports; this.ex.emu_master(m.master); this.boot(m.store, m.seed);
+      this.port.postMessage({ type: "ready" });
+    } else if (!this.ex) return;
+    else if (m.type === "btn" || m.type === "keys") this.q.push(m);
+    else if (m.type === "enc") this.ex.emu_enc(m.role, m.n);
+    else if (m.type === "master") this.ex.emu_master(m.v);
+    else if (m.type === "midi") this.ex.emu_midi(m.st, m.d1, m.d2);
+    else if (m.type === "load_slot") this.ex.emu_load(m.slot);
+    else if (m.type === "store") { this.boot(m.store, m.seed); this.port.postMessage({ type: "rebooted" }); }
+  }
+  process(_, outputs) {
+    const o = outputs[0], L = o[0], R = o[1] || o[0], ex = this.ex;
+    if (!ex) return true;
+    while (this.q.length && this.t >= this.nextOk) {          /* each change seen by a UI frame (>= 20 ms) */
+      const m = this.q.shift();
+      if (m.type === "btn") ex.emu_buttons(m.held); else ex.emu_keys(m.keys);
+      this.nextOk = this.t + 882;
+    }
+    ex.emu_render(L.length);
+    L.set(new Float32Array(ex.memory.buffer, ex.emu_out_l(), L.length));
+    R.set(new Float32Array(ex.memory.buffer, ex.emu_out_r(), L.length));
+    this.t += L.length;
+    const mo = ex.emu_mout_take();
+    if (mo) this.port.postMessage({ type: "mout", p: new Uint32Array(ex.memory.buffer, ex.emu_mout(), mo).slice() });
+    if (this.t - this.last >= 1470) {
+      this.last = this.t;
+      const m = { type: "frame", btn: new Uint8Array(ex.memory.buffer, ex.emu_leds_btn(), 14).slice(),
+                  key: new Uint8Array(ex.memory.buffer, ex.emu_leds_key(), 27).slice(), playing: ex.emu_playing(), bpm: ex.emu_bpm() };
+      if (ex.emu_dirty()) m.screen = new Uint16Array(ex.memory.buffer, ex.emu_screen(), 57600).slice();
+      if (ex.emu_store_gen() !== this.sg) { this.sg = ex.emu_store_gen(); m.store = new Uint8Array(ex.memory.buffer, ex.emu_store(), ex.emu_store_len()).slice(); }
+      this.port.postMessage(m);
+    }
+    return true;
+  }
+}
+registerProcessor("luxr", Luxr);`;
+
+/* -------------------------------------------------------------- the panel --- */
+const fm1 = $("fm1"), lcd = $("lcd"), g = lcd.getContext("2d"), img = g.createImageData(240, 240);
+function drawScreen(px) {                         // RGB565, big endian as the panel takes it
+  const d = img.data;
+  for (let i = 0; i < 57600; i++) {
+    const v = ((px[i] & 0xff) << 8) | (px[i] >> 8);
+    d[i * 4] = (v >> 11) << 3; d[i * 4 + 1] = ((v >> 5) & 63) << 2; d[i * 4 + 2] = (v & 31) << 3; d[i * 4 + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+}
+let node = null, ac = null, held = 0, keys = 0, kbKeys = 0, midiOut = null;
+const send = (m) => { if (node) node.port.postMessage(m); };
+const U = (v) => `calc(${v} * var(--u))`;
+const place = (el, x, y) => { el.style.left = U(x); el.style.top = U(y); return el; };
+function silk(text, x, y) { const s = document.createElement("span"); s.className = "silkl"; s.textContent = text; fm1.append(place(s, x, y)); }
+
+const btnEls = [];
+function setHeld(b, on) { held = on ? held | (1 << b) : held & ~(1 << b); btnEls[b]?.classList.toggle("down", on); send({ type: "btn", held }); }
+function tap(b, ms = 70) { setHeld(b, true); setTimeout(() => setHeld(b, false), ms); }
+function pad(b, label, x, y, cls) {
+  const el = document.createElement("button"); el.className = "pad " + cls; el.innerHTML = label;
+  el.setAttribute("aria-label", el.textContent);
+  el.addEventListener("pointerdown", (e) => { e.preventDefault(); el.setPointerCapture?.(e.pointerId); setHeld(b, true); });
+  const up = () => { if (held & (1 << b)) setHeld(b, false); };
+  el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+  el.addEventListener("contextmenu", (e) => e.preventDefault());
+  el.addEventListener("keydown", (e) => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); e.stopPropagation(); setHeld(b, true); } });
+  el.addEventListener("keyup", (e) => { if (e.key === " " || e.key === "Enter") { e.stopPropagation(); up(); } });
+  btnEls[b] = el; fm1.append(place(el, x, y)); return el;
+}
+const knobTurn = [];
+function knob(role, label, x, y) {               // role: EN_* (0 SELECT, 1 ALGORITHM, 2 PRESETS, 3..6 KNOB 1..4), -1 MASTER
+  const k = document.createElement("div"); k.className = "knob" + (role < 0 ? " pot" : ""); k.tabIndex = 0;
+  k.setAttribute("role", "slider"); k.setAttribute("aria-label", label);
+  let ang = role < 0 ? 90 : 0, y0 = 0, acc = 0, pot = 760;
+  const show = () => k.style.setProperty("--a", (role < 0 ? -135 + pot / 1023 * 270 : ang) + "deg");
+  const turn = (n) => {
+    if (!n) return;
+    if (role < 0) { pot = Math.max(0, Math.min(1023, pot + n * 24)); send({ type: "master", v: pot }); }
+    else { ang += n * 18; send({ type: "enc", role, n }); }
+    show();
+  };
+  k.addEventListener("pointerdown", (e) => { e.preventDefault(); k.setPointerCapture(e.pointerId); y0 = e.clientY; acc = 0; k.focus({ preventScroll: true }); });
+  k.addEventListener("pointermove", (e) => { if (!k.hasPointerCapture(e.pointerId)) return; acc += y0 - e.clientY; y0 = e.clientY; const n = Math.trunc(acc / 9); if (n) { acc -= n * 9; turn(n); } });
+  k.addEventListener("wheel", (e) => { e.preventDefault(); turn(e.deltaY < 0 ? 1 : -1); }, { passive: false });
+  k.addEventListener("keydown", (e) => { const n = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1 }[e.key]; if (n) { e.preventDefault(); e.stopPropagation(); turn(n); } });
+  show(); fm1.append(place(k, x, y)); silk(label, x, y - 45);
+  if (role >= 0) knobTurn[role] = turn;
+  if (role < 0) knob.master = () => pot;
+}
+
+/* the keys: 27 from F3, 16 white */
+const isBlack = (k) => (0x54A >> ((k + 5) % 12)) & 1, keyEls = [], pointers = new Map();
+const BLACK_X = [96, 148, 199, 302, 354, 457, 509, 560, 665, 717, 820], BLACK_PRINT = ["OP1", "OP2", "OP3", "OP4", "OP5", "OP6", "PIT", "GLO", "MONO", "POLY", ""];
+function setKeys() {
+  keys = kbKeys;
+  for (const k of pointers.values()) if (k >= 0) keys |= 1 << k;
+  keyEls.forEach((el, k) => el.classList.toggle("down", !!((keys >> k) & 1)));
+  send({ type: "keys", keys });
+}
+(function build() {
+  knob(-1, "MASTER", 73, 85); knob(0, "SELECT", 170, 85); knob(2, "PRESETS", 73, 182); knob(1, "ALGORITHM", 170, 182);
+  [516, 621, 725, 830].forEach((x, i) => knob(3 + i, "KNOB" + (i + 1), x, 85));
+  const t1 = document.createElement("div"); t1.className = "tray"; Object.assign(t1.style, { left: U(53), top: U(236), width: U(143), height: U(46) }); fm1.append(t1);
+  pad(B.OCTDN, "OCT-", 61, 243, "oct"); pad(B.OCTUP, "OCT+", 127, 243, "oct");
+  const t2 = document.createElement("div"); t2.className = "tray"; Object.assign(t2.style, { left: U(490), top: U(155), width: U(393), height: U(127) }); fm1.append(t2);
+  const R1 = [[B.FX, "FX"], [B.SCL, "SEL"], [B.ENV, "ENV"], [B.LFO, "LFO"], [B.EDIT, "EDIT"], [B.GLO, "GLO"]];
+  const R2 = [[B.HOME, "HOME"], [B.SAVE, "SAVE"], [B.ARP, "ARP"], [B.SEQ, "SEQ"], [B.PLAY, 'PLAY<span class="ul">STOP</span>'], [B.REC, "REC"]];
+  R1.forEach(([b, l], i) => pad(b, l, 531 + i * 57.6, 188, "sq"));
+  R2.forEach(([b, l], i) => pad(b, l, 531 + i * 57.6, 247, "sq"));
+  const cd = document.createElement("div"); cd.className = "gdot"; fm1.append(place(cd, 673, 217));
+  const kt = document.createElement("div"); kt.className = "tray"; kt.style.borderRadius = U(30);
+  Object.assign(kt.style, { left: U(35), top: U(315), width: U(850), height: U(198) }); fm1.append(kt);
+  [251, 405, 610, 766].forEach((x) => { const d = document.createElement("div"); d.className = "gdot"; fm1.append(place(d, x, 418)); });
+  let w = 0, bl = 0;
+  for (let k = 0; k < 27; k++) {
+    const el = document.createElement("div"), b = isBlack(k);
+    el.className = "pad key " + (b ? "b" : "w"); el.dataset.k = k;
+    el.innerHTML = `<span class="slot"></span>` + (b && BLACK_PRINT[bl] ? `<span class="kl">${BLACK_PRINT[bl]}</span>` : "");
+    el.style.left = U(b ? BLACK_X[bl++] : 70 + 51.73 * w++);
+    fm1.append(el); keyEls[k] = el;
+  }
+  const keyAt = (x, y) => { const el = document.elementFromPoint(x, y)?.closest(".key"); return el ? +el.dataset.k : -1; };
+  fm1.addEventListener("pointerdown", (e) => { const k = keyAt(e.clientX, e.clientY); if (k < 0) return; e.preventDefault(); fm1.setPointerCapture(e.pointerId); pointers.set(e.pointerId, k); setKeys(); });
+  fm1.addEventListener("pointermove", (e) => { if (!pointers.has(e.pointerId)) return; const k = keyAt(e.clientX, e.clientY); if (k !== pointers.get(e.pointerId)) { pointers.set(e.pointerId, k); setKeys(); } });
+  const end = (e) => { if (pointers.delete(e.pointerId)) setKeys(); };
+  fm1.addEventListener("pointerup", end); fm1.addEventListener("pointercancel", end);
+})();
+// key LED pads: the .key elements take the "down" look from .pad.down
+document.head.insertAdjacentHTML("beforeend", "<style>.key.down{transform:translateY(calc(2 * var(--u)));box-shadow:0 calc(1 * var(--u)) 0 #3e557a}</style>");
+
+/* the computer keyboard, by physical key (any layout) */
+const WHITE_CODES = ["KeyA", "KeyS", "KeyD", "KeyF", "KeyG", "KeyH", "KeyJ", "KeyK", "KeyZ", "KeyX", "KeyC", "KeyV", "KeyB", "KeyN", "KeyM", "Comma"];
+const BLACK_CODES = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8", "Digit9", "Digit0", "Minus"];
+const codeKey = {};
+{ let w = 0, b = 0; for (let k = 0; k < 27; k++) codeKey[isBlack(k) ? BLACK_CODES[b++] : WHITE_CODES[w++]] = k; }
+document.addEventListener("keydown", (e) => {
+  if (!node || e.target.closest("input, select, .knob") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target.closest("button") && (e.key === " " || e.key === "Enter")) return;
+  if (e.key === "Shift") { if (!e.repeat) setHeld(B.GLO, true); return; }
+  if (e.code in codeKey) { e.preventDefault(); if (!e.repeat) { kbKeys |= 1 << codeKey[e.code]; setKeys(); } return; }
+  const b = { Space: B.PLAY, Enter: B.REC, ArrowLeft: B.OCTDN, ArrowRight: B.OCTUP }[e.code];
+  if (b !== undefined) { e.preventDefault(); if (!e.repeat) setHeld(b, true); return; }
+  if (e.code === "ArrowUp" || e.code === "ArrowDown") { e.preventDefault(); knobTurn[0](e.code === "ArrowUp" ? 1 : -1); }
+});
+document.addEventListener("keyup", (e) => {
+  if (e.key === "Shift") { if (held & (1 << B.GLO)) setHeld(B.GLO, false); return; }
+  if (e.code in codeKey) { kbKeys &= ~(1 << codeKey[e.code]); setKeys(); return; }
+  const b = { Space: B.PLAY, Enter: B.REC, ArrowLeft: B.OCTDN, ArrowRight: B.OCTUP }[e.code];
+  if (b !== undefined && held & (1 << b)) setHeld(b, false);
+});
+window.addEventListener("blur", () => { held = 0; kbKeys = 0; btnEls.forEach((el) => el?.classList.remove("down")); send({ type: "btn", held }); setKeys(); });
+
+/* -------------------------------------------------------------- patches --- */
+let used = [];
+const slotEls = [];
+(function buildSlots() {
+  for (let s = 0; s < 36; s++) {
+    const b = document.createElement("button"); b.textContent = s + 1; b.id = "slot" + s;
+    b.onclick = () => { if (!used.includes(s)) return; if (!node) { pmsg("Switch the emulator on first (click the screen).", "err"); return; } b.blur(); send({ type: "load_slot", slot: s }); markCur(s); pmsg(`Patch ${s + 1} loaded.`, "ok"); };
+    $("slots").append(b); slotEls.push(b);
+  }
+})();
+function markCur(s) { slotEls.forEach((el, i) => el.classList.toggle("cur", i === s)); }
+function pmsg(t, cls = "") { const m = $("pmsg"); m.textContent = t; m.className = "msg " + cls; }
+async function refreshSlots() {
+  const ex = await offline(); used = info(ex).used;
+  slotEls.forEach((el, s) => { el.classList.toggle("used", used.includes(s)); el.title = used.includes(s) ? `Patch ${s + 1}: click to load` : `Slot ${s + 1}: empty`; });
+  return ex;
+}
+function newStore(img) {                          // the store changed outside the running device: it restarts on it
+  store = img; storeSave(img);
+  send({ type: "store", store: img, seed: (Date.now() >>> 0) | 1 });
+  refreshSlots(); markCur(0);
+}
+let pending = null;
+$("imp").onclick = () => $("file").click();
+$("file").onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f) return;
+  try {
+    pending = parseBackup(new Uint8Array(await f.arrayBuffer()));
+    if (!pending.length) throw new Error("The backup holds no patches.");
+    const nums = pending.map((x) => x.s + 1);
+    const hit = nums.filter((n) => used.includes(n - 1));
+    $("askText").textContent = `${f.name}: ${pending.length} patch${pending.length > 1 ? "es" : ""} (slots ${nums.join(", ")}).` +
+      (hit.length ? ` This replaces ${hit.length} patch${hit.length > 1 ? "es" : ""} in the emulator.` : "");
+    $("ask").hidden = false; pmsg("");
+  } catch (err) { pending = null; pmsg(err.message, "err"); }
+};
+$("askNo").onclick = () => { pending = null; $("ask").hidden = true; };
+$("askYes").onclick = async () => {
+  $("ask").hidden = true;
+  const list = pending; pending = null;
+  if (!list) return;
+  try {
+    const ex = await offline(); let ok = 0; const bad = [];
+    for (const { s, bytes } of list) {
+      if (bytes.length > ex.emu_stage_len() || s >= ex.emu_nslot()) { bad.push(s + 1); continue; }
+      new Uint8Array(ex.memory.buffer, ex.emu_stage(), bytes.length).set(bytes);
+      if (ex.emu_import(s, bytes.length)) bad.push(s + 1); else ok++;
+    }
+    newStore(new Uint8Array(ex.memory.buffer, ex.emu_store(), ex.emu_store_len()).slice());
+    pmsg(`${ok} patch${ok === 1 ? "" : "es"} imported` + (bad.length ? `, not readable: slot ${bad.join(", ")}` : "") +
+         (node ? ". The emulator restarted with patch 1." : ". Switch on to play them."), bad.length ? "err" : "ok");
+  } catch (err) { pmsg("Import failed: " + err.message, "err"); }
+};
+$("wipe").onclick = () => {
+  $("askText").textContent = "Erase all patches in the emulator? This cannot be undone (export a backup first).";
+  $("askYes").textContent = "Erase"; $("ask").hidden = false;
+  $("askYes").onclick = () => {
+    $("ask").hidden = true; $("askYes").textContent = "Replace"; $("askYes").onclick = importYes;
+    try { localStorage.removeItem(STORE_KEY); } catch {}
+    store = null; offline().then((ex) => { newStore(new Uint8Array(ex.memory.buffer, ex.emu_store(), ex.emu_store_len()).slice()); pmsg("All patches erased.", "ok"); });
+  };
+  $("askNo").onclick = () => { $("ask").hidden = true; $("askYes").textContent = "Replace"; $("askYes").onclick = importYes; $("askNo").onclick = noAsk; };
+};
+const importYes = $("askYes").onclick, noAsk = $("askNo").onclick;
+$("exp").onclick = async () => {
+  try {
+    const ex = await offline(), inf = info(ex);
+    if (!inf.used.length) { pmsg("There are no saved patches to export.", "err"); return; }
+    const parts = [..."LUXRBK01"].map((c) => c.charCodeAt(0)); parts.push(inf.used.length);
+    const chunks = [Uint8Array.from(parts)];
+    for (const s of inf.used) {
+      const b = new Uint8Array(inf.size);
+      for (let off = 0; off < inf.size; off += 256) { const r = ask(ex, 0x42, [s, ...lx4(off)]); b.set(r.slice(5, 5 + Math.min(256, inf.size - off)), off); }
+      chunks.push(Uint8Array.from([s, ...lx4(inf.size)]), b);
+    }
+    const d = new Date(), p = (x) => String(x).padStart(2, "0"), name = `luxr-emulator-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.luxr`;
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(chunks, { type: "application/octet-stream" })); a.download = name;
+    document.body.append(a); a.click(); a.remove();
+    pmsg(`${inf.used.length} patches written to ${name}. (If nothing downloads here, open the emulator in its own browser tab.)`, "ok");
+  } catch (err) { pmsg("Export failed: " + err.message, "err"); }
+};
+
+/* ----------------------------------------------------------------- MIDI --- */
+let midi = null;
+async function midiSetup() {
+  if (!navigator.requestMIDIAccess) { $("midiInfo").textContent = "This browser has no Web MIDI (use Chrome or Edge for a MIDI keyboard)."; return; }
+  try { midi = await navigator.requestMIDIAccess(); } catch { $("midiInfo").textContent = "MIDI access was not granted here. Open the emulator in its own tab to use MIDI."; return; }
+  const fill = () => {
+    for (const [id, list] of [["midiIn", midi.inputs], ["midiOut", midi.outputs]]) {
+      const sel = $(id), cur = sel.value; sel.length = 1;
+      for (const p of list.values()) sel.add(new Option(p.name, p.id));
+      sel.value = [...list.keys()].includes(cur) ? cur : (id === "midiIn" && list.size ? [...list.keys()][0] : "");
+      sel.dispatchEvent(new Event("change"));
+    }
+  };
+  midi.onstatechange = fill; fill();
+}
+let inPort = null;
+$("midiIn").onchange = () => {
+  if (inPort) inPort.onmidimessage = null;
+  inPort = midi && $("midiIn").value ? midi.inputs.get($("midiIn").value) : null;
+  if (inPort) inPort.onmidimessage = (e) => { const [st, d1 = 0, d2 = 0] = e.data; if (st < 0xF0) send({ type: "midi", st, d1, d2 }); };
+};
+$("midiOut").onchange = () => { midiOut = midi && $("midiOut").value ? midi.outputs.get($("midiOut").value) : null; };
+function onMout(p) {                               // USB-MIDI packets: CIN in the low nibble of byte 0, then 3 bytes
+  if (!midiOut) return;
+  for (const v of p) {
+    const cin = v & 15, b = [(v >> 8) & 255, (v >> 16) & 255, (v >>> 24) & 255];
+    const n = cin === 0xF || cin === 5 ? 1 : cin === 0xC || cin === 0xD || cin === 2 ? 2 : 3;
+    try { midiOut.send(b.slice(0, n)); } catch {}
+  }
+}
+
+/* --------------------------------------------- the first frame, then power --- */
+(async function preview() {
+  try {
+    const ex = await refreshSlots();
+    for (let i = 0; i < 40; i++) ex.emu_render(128);
+    drawScreen(new Uint16Array(ex.memory.buffer, ex.emu_screen(), 57600));
+  } catch (err) { $("stat").textContent = "WebAssembly is not available in this browser"; }
+})();
+$("power").onclick = async () => {
+  try {
+    ac = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" });
+    try { await ac.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" }))); }
+    catch { await ac.audioWorklet.addModule("data:text/javascript," + encodeURIComponent(WORKLET)); }
+    node = new AudioWorkletNode(ac, "luxr", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+    node.connect(ac.destination);
+    node.port.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === "ready") { $("dot").classList.add("on"); $("stat").textContent = `on · ${ac.sampleRate} Hz`; }
+      else if (m.type === "frame") {
+        if (m.screen) drawScreen(m.screen);
+        if (m.store) { store = m.store; storeSave(m.store); refreshSlots(); }
+        btnEls.forEach((el, b) => el && el.classList.toggle("lit", !!m.btn[b]));
+        keyEls.forEach((el, k) => el.classList.toggle("lit", !!m.key[k]));
+        $("stat").textContent = `on · ${m.playing ? "playing" : "stopped"} · ${m.bpm} BPM`;
+      } else if (m.type === "mout") onMout(m.p);
+    };
+    node.port.postMessage({ type: "load", wasm: wasmBytes.buffer.slice(0), seed: (Date.now() >>> 0) | 1, master: knob.master(), store });
+    $("power").remove();
+    if (ac.state !== "running") await ac.resume();
+    midiSetup();
+  } catch (err) { $("stat").textContent = "Audio is not available: " + err.message; ac = null; node = null; }
+};
+</script>
