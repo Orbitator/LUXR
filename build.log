@@ -1,0 +1,15 @@
+size: 243 main-loop functions built for size (106 not in this build; 49 reached from an interrupt kept -Os)
+/home/runner/.jieli/jieli-linux-toolchains-20260730.1/pi32v2/bin/ld: build/felucca.elf section `.ram_text' will not fit in region `XIP'
+/home/runner/.jieli/jieli-linux-toolchains-20260730.1/pi32v2/bin/ld: region `XIP' overflowed by 932 bytes
+loader: image 8208 B at 0x1c0a800, bss end 0x1c0f500
+loader: ota.bin 6907 B
+face S: InterTight[wght].ttf@400 12px h15 base12  105 glyphs x 4  data 10410 B + table 3360 B + kern 1713 B (571 pairs) = 15493 B   digit adv 7.00px
+face M: InterTight[wght].ttf@500 15px h19 base15  105 glyphs x 4  data 13083 B + table 3360 B + kern 1788 B (596 pairs) = 18241 B   digit adv 9.00px
+face L: InterTight[wght].ttf@600 28px h35 base28  41 glyphs x 2  data 5761 B + table 656 B + kern 336 B (112 pairs) = 6793 B   digit adv 18.00px
+fonts total 40527 B  -> /home/runner/work/LUXR/LUXR/build/gen/ui_fonts.h
+keycaps: 29 pills, data 4948 B + table 232 B; knob arcs 584 B = 5764 B -> /home/runner/work/LUXR/LUXR/build/gen/ui_keycaps.h
+gen_logo: 216 x 62, 4890 B
+lxr transients: 12 x 2205 B -> /home/runner/work/LUXR/LUXR/build/gen/lxr_transients.h
+own transients: 8 sounds x 16 x 2205 B -> /home/runner/work/LUXR/LUXR/build/gen/own_transients.h
+machine transients: 8 sounds x 16 x 1024 B (22.05 kHz) -> /home/runner/work/LUXR/LUXR/build/gen/machine_transients.h
+build: pi32v2/bin/ld failed
