@@ -106,9 +106,9 @@ h1 small { font-size: .5em; letter-spacing: 2px; color: var(--muted); padding-bo
 .gdot { position: absolute; width: calc(5 * var(--u)); height: calc(5 * var(--u)); margin: calc(-2.5 * var(--u)) 0 0 calc(-2.5 * var(--u)); border-radius: 50%; background: #1d2433; }
 .bezel { position: absolute; left: calc(238 * var(--u)); top: calc(40 * var(--u)); width: calc(216 * var(--u)); height: calc(218 * var(--u));
          background: #0b0b0c; border-radius: calc(20 * var(--u)); box-shadow: inset 0 0 0 calc(2 * var(--u)) #2a2a2c, 0 1px 0 #fff; }
-canvas#lcd { position: absolute; left: calc(28 * var(--u)); top: calc(29 * var(--u)); width: calc(160 * var(--u)); height: calc(160 * var(--u));
-             image-rendering: pixelated; background: #0d0d10; border-radius: calc(2 * var(--u)); }
-.poweron { position: absolute; inset: calc(29 * var(--u)) calc(28 * var(--u)); border: 0; border-radius: calc(2 * var(--u)); cursor: pointer;
+canvas#lcd { position: absolute; left: calc(9 * var(--u)); top: calc(10 * var(--u)); width: calc(198 * var(--u)); height: calc(198 * var(--u));
+             background: #0d0d10; border-radius: calc(4 * var(--u)); }
+.poweron { position: absolute; inset: calc(10 * var(--u)) calc(9 * var(--u)); border: 0; border-radius: calc(2 * var(--u)); cursor: pointer;
            background: #000a; color: #f2f2f2; font: calc(14 * var(--u))/1.3 var(--f-silk); letter-spacing: calc(1 * var(--u)); display: grid; place-content: center; gap: calc(6 * var(--u)); }
 .poweron b { font-weight: 400; font-size: calc(22 * var(--u)); }
 .poweron:focus-visible { outline: 2px solid var(--glow); }
@@ -171,7 +171,7 @@ a { color: var(--accent); }
   </header>
 
   <div class="stage"><div class="fm1" id="fm1" aria-label="FM-1 panel">
-    <div class="bezel"><canvas id="lcd" width="240" height="240" aria-label="Display"></canvas>
+    <div class="bezel"><canvas id="lcd" width="720" height="720" aria-label="Display"></canvas>
       <button class="poweron" id="power"><b>POWER ON</b><span>click to start the sound</span></button></div>
   </div></div>
   <div class="under">
@@ -330,7 +330,8 @@ class Luxr extends AudioWorkletProcessor {
       this.last = this.t;
       const m = { type: "frame", btn: new Uint8Array(ex.memory.buffer, ex.emu_leds_btn(), 14).slice(),
                   key: new Uint8Array(ex.memory.buffer, ex.emu_leds_key(), 27).slice(), playing: ex.emu_playing(), bpm: ex.emu_bpm() };
-      if (ex.emu_dirty()) m.screen = new Uint16Array(ex.memory.buffer, ex.emu_screen(), 57600).slice();
+      const r = ex.emu_hd_rows();                             /* the sharp screen: the rows that changed */
+      if (r) { const y0 = r & 65535, y1 = r >>> 16, w = ex.emu_hd_size(); m.rows = { y0, y1, px: new Uint16Array(ex.memory.buffer, ex.emu_hd() + y0 * w * 2, (y1 - y0) * w).slice() }; }
       if (ex.emu_store_gen() !== this.sg) { this.sg = ex.emu_store_gen(); m.store = new Uint8Array(ex.memory.buffer, ex.emu_store(), ex.emu_store_len()).slice(); }
       this.port.postMessage(m);
     }
@@ -340,14 +341,14 @@ class Luxr extends AudioWorkletProcessor {
 registerProcessor("luxr", Luxr);`;
 
 /* -------------------------------------------------------------- the panel --- */
-const fm1 = $("fm1"), lcd = $("lcd"), g = lcd.getContext("2d"), img = g.createImageData(240, 240);
-function drawScreen(px) {                         // RGB565, big endian as the panel takes it
-  const d = img.data;
-  for (let i = 0; i < 57600; i++) {
+const fm1 = $("fm1"), lcd = $("lcd"), g = lcd.getContext("2d"), SW = lcd.width;
+function drawRows(y0, y1, px) {                   // the sharp screen (3 x the device's), RGB565 big endian as the panel
+  const img = g.createImageData(SW, y1 - y0), d = img.data;
+  for (let i = 0; i < px.length; i++) {
     const v = ((px[i] & 0xff) << 8) | (px[i] >> 8);
-    d[i * 4] = (v >> 11) << 3; d[i * 4 + 1] = ((v >> 5) & 63) << 2; d[i * 4 + 2] = (v & 31) << 3; d[i * 4 + 3] = 255;
+    d[i * 4] = (v >> 11) << 3 | (v >> 13); d[i * 4 + 1] = ((v >> 5) & 63) << 2 | ((v >> 9) & 3); d[i * 4 + 2] = (v & 31) << 3 | ((v >> 2) & 7); d[i * 4 + 3] = 255;
   }
-  g.putImageData(img, 0, 0);
+  g.putImageData(img, 0, y0);
 }
 let node = null, ac = null, held = 0, keys = 0, kbKeys = 0, midiOut = null;
 const send = (m) => { if (node) node.port.postMessage(m); };
@@ -597,7 +598,7 @@ $("preset").onclick = async () => {
     }
     const ex = await refreshSlots();
     for (let i = 0; i < 40; i++) ex.emu_render(128);
-    drawScreen(new Uint16Array(ex.memory.buffer, ex.emu_screen(), 57600));
+    drawRows(0, SW, new Uint16Array(ex.memory.buffer, ex.emu_hd(), SW * SW));
   } catch (err) { $("stat").textContent = "WebAssembly is not available in this browser"; }
 })();
 $("power").onclick = async () => {
@@ -611,7 +612,7 @@ $("power").onclick = async () => {
       const m = e.data;
       if (m.type === "ready") { $("dot").classList.add("on"); $("stat").textContent = `on · ${ac.sampleRate} Hz`; }
       else if (m.type === "frame") {
-        if (m.screen) drawScreen(m.screen);
+        if (m.rows) drawRows(m.rows.y0, m.rows.y1, m.rows.px);
         if (m.store) { store = m.store; storeSave(m.store); refreshSlots(); }
         btnEls.forEach((el, b) => el && el.classList.toggle("lit", !!m.btn[b]));
         keyEls.forEach((el, k) => el.classList.toggle("lit", !!m.key[k]));

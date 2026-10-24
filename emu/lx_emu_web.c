@@ -4,7 +4,8 @@
  *   - time: the audio the AudioWorklet asks for drives the clock; the UI frame runs every 15 ms of it, as the
  *     device's main loop does;
  *   - the panel: buttons by their printed labels (B_*), the 7 encoders, the 27 keys, the MASTER pot, the LEDs;
- *   - the screen: 240 x 240 RGB565 in the panel's byte order, a dirty flag;
+ *   - the screen: 240 x 240 RGB565 in the panel's byte order, a dirty flag; and the same drawn sharp at HD_X x
+ *     (hd_scr, emu/hd.c through build/emu/gfx_hd.c), the rows changed for the page;
  *   - the store: the patch flash in RAM (the page keeps it in the browser); a .luxr backup is imported through
  *     the same staging and conversion the USB restore uses (proto 0x44 / 0x46);
  *   - MIDI: notes / CC in (Web MIDI or the page), MIDI OUT packets out.
@@ -18,8 +19,18 @@
 #include "libc.c"
 #define RING_PUBLISH() ((void)0)
 #include "lx_core.h"
+#include "ui_hd.h"
 static uint16_t e_screen[240 * 240];
 static uint32_t e_dirty;
+#define HW (240u * HD_X)
+static uint16_t hd_scr[HW * HW];                  /* the sharp screen (big endian, as the panel) */
+static uint32_t hd_y0 = HW, hd_y1;                /* its rows changed since the page took them */
+static void hd_dirty(uint32_t y0, uint32_t y1)
+{
+    if (y1 > HW) y1 = HW;
+    if (y0 < hd_y0) hd_y0 = y0;
+    if (y1 > hd_y1) hd_y1 = y1;
+}
 static void lcd_sync(void) {}
 static void lcd_blit(uint32_t x, uint32_t y, uint32_t w, uint32_t h, const uint16_t *px)   /* (big endian, as the panel) */
 {
@@ -36,9 +47,13 @@ static void lcd_fill(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint16_t c)
     for (j = y; j < y + h && j < 240u; j++)
         for (i = x; i < x + w && i < 240u; i++)
             e_screen[j * 240u + i] = s;
+    for (j = y * HD_X; j < (y + h) * HD_X && j < HW; j++)
+        for (i = x * HD_X; i < (x + w) * HD_X && i < HW; i++)
+            hd_scr[j * HW + i] = s;
+    hd_dirty(y * HD_X, (y + h) * HD_X);
     e_dirty = 1;
 }
-#include "gfx.c"
+#include "gfx_hd.c"
 static void midi_out_event(uint32_t pkt);
 #include "lx_synth.c"
 #include "lx_seq.c"
@@ -212,3 +227,12 @@ EXPORT uint32_t emu_page(void) { return ui.page; }
 EXPORT void emu_save(uint32_t slot) { if (slot < NSLOT) proj_save(slot, SW_ALL); }   /* (the tests) */
 EXPORT void emu_set_bpm(uint32_t b) { song.bpm = (uint16_t)b; }                       /* (the tests) */
 EXPORT char *emu_msg(void) { return ui.msg; }                                     /* (the tests) */
+EXPORT uint16_t *emu_hd(void) { return hd_scr; }
+EXPORT uint32_t emu_hd_size(void) { return HW; }
+EXPORT uint32_t emu_hd_rows(void)                 /* the rows changed: y0 | y1 << 16 (0: none); then cleared */
+{
+    uint32_t r = hd_y1 > hd_y0 ? hd_y0 | hd_y1 << 16 : 0u;
+    hd_y0 = HW;
+    hd_y1 = 0;
+    return r;
+}
