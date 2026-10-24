@@ -405,6 +405,8 @@ static void sound_preset(uint32_t t, uint32_t k)   /* track t's sound k: 0 the f
     }
     if (k && TRK_KIND[t] == K_DRUM && t != 6u && (xrand(&x) & 3u) == 0u)
         s->p[4] = 26;                            /* a triangle drum now and then */
+    if (k)
+        s->p[1] = 50;                            /* (a rolled sound: DECAY 50, as the factory's) */
     /* the sample layer always plays: one of the sound's own sixteen, of its sixteen after the classic machines, or a
      * fitting LXR one */
     if (!k) {
@@ -418,7 +420,7 @@ static void sound_preset(uint32_t t, uint32_t k)   /* track t's sound k: 0 the f
     s->stone = 0;
     s->sbend = k && xrand(&x) % 5u == 0u ? (int8_t)((int32_t)(xrand(&x) % 81u) - 40) : 0;
     s->slvl = k ? (uint8_t)(60u + xrand(&x) % 68u) : TR_FACTORY[t][1];
-    s->spitch = k ? (uint8_t)(40u + xrand(&x) % 50u) : 64;
+    s->spitch = k ? 43u : 64u;                   /* (rolled: the sample at 75 %, the factory's at 100 %) */
     s->sdec = k && xrand(&x) % 3u == 0u ? (uint8_t)(50u + xrand(&x) % 70u) : 127;
     s->preset = (uint8_t)k;
     if (k) {                                     /* (a rolled sound: no sends, the hats panned apart, the rest centred) */

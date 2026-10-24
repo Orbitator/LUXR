@@ -250,8 +250,8 @@ static const uint8_t PAGE_P[PG_N][8] = {
     [PG_LIVE] = {P_LVEL, P_QGRID, P_QROUND, P_CLICK, 0, 0, 0, 0},
     [PG_VOICE] = {P_V0, P_V1, P_V2, P_V3, P_V4, P_V5, P_V6, P_V7},
     [PG_VOICE2] = {P_V4, P_V5, P_V6, P_V7, P_V0, P_V1, P_V2, P_V3},
-    [PG_SAMPLE] = {P_SMP, P_SLVL, P_SPITCH, P_SDEC, P_SYN, 0, 0, 0},
-    [PG_SAMPLE2] = {P_SSTART, P_STONE, P_SBEND, P_SYN, 0, 0, 0, 0},
+    [PG_SAMPLE] = {P_SMP, P_SLVL, P_SPITCH, P_SYN, 0, 0, 0, 0},
+    [PG_SAMPLE2] = {P_SSTART, P_STONE, P_SBEND, P_SDEC, 0, 0, 0, 0},
     [PG_SND] = {P_LEVEL, P_PAN, P_DLY, P_REV, P_DRV, 0, 0, 0},
     [PG_LFO1] = {P_L1DEST, P_L1WAVE, P_L1RATE, P_L1DEPTH, 0, 0, 0, 0},
     [PG_LFO2] = {P_L2DEST, P_L2WAVE, P_L2RATE, P_L2DEPTH, 0, 0, 0, 0},
@@ -2310,6 +2310,13 @@ static void black_key(uint32_t b)
 static void page_key(uint32_t w, int down)
 {
     char m[28];
+    if (ui.page == PG_TRK) {                     /* TRACKS: keys 1..8 the sound (then KNOB 2 / 3: its mute / solo), silent */
+        if (down && w < NTRK) {
+            sel_track((int32_t)w);
+            ui_say(TRK_NAME[w]);
+        }
+        return;
+    }
     if (ui.page == PG_SAVE) {                    /* keys 1..9: the slots of the row SELECT shows (1-9 .. 28-36), loaded */
         if (w >= 9u)
             return;
@@ -2401,7 +2408,7 @@ static void white_key(uint32_t w, int down)
         }
         return;
     }
-    if (!ui.shift && (ui.page == PG_SAVE || ui.page == PG_NEW || ui.page == PG_PAT || ui.page == PG_SONG)) {
+    if (!ui.shift && (ui.page == PG_SAVE || ui.page == PG_NEW || ui.page == PG_PAT || ui.page == PG_SONG || ui.page == PG_TRK)) {
         page_key(w, down);                       /* (STORE: the slots; PATTERNS: patterns and chains; SONG: its rows) */
         return;
     }

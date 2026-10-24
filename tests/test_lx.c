@@ -399,6 +399,11 @@ int main(int argc, char **argv)
         if (ui.page != PG_TRK) host_tap(B_SEQ);
         CHECK(ui.page == PG_TRK, "SEQ page 3: TRACKS (%u)", ui.page);
         CHECK(pget(P_TSEL) == 5, "TRACKS: the sound selected (%d)", pget(P_TSEL));
+        reset_count();
+        host_key(key_white(2));
+        host_run(100, watch, 0);
+        CHECK(song.sel == 2u && hits[2] == 0u, "TRACKS: key 3 picks the clap, silently");
+        host_key(key_white(5));
         host_turn(EN_K2, 1);
         CHECK((song.mute >> 5) & 1u, "TRACKS, KNOB 2: mute");
         host_turn(EN_K2, -1);
@@ -621,8 +626,20 @@ int main(int argc, char **argv)
     host_turn(EN_K2, -30);
     host_turn(EN_K3, 20);
     host_turn(EN_K4, -127);
-    CHECK(snd[song.sel].sstart == 40u && snd[song.sel].stone == -30 && snd[song.sel].sbend == 20 && !snd[song.sel].syn,
-          "SAMPLE 2: start, tone, bend, synth level");
+    CHECK(snd[song.sel].sstart == 40u && snd[song.sel].stone == -30 && snd[song.sel].sbend == 20 && !snd[song.sel].sdec,
+          "SAMPLE 2: start, tone, bend, decay");
+    snd[song.sel].sdec = 127;
+    host_tap(B_EDIT); host_tap(B_EDIT); host_tap(B_EDIT); host_tap(B_EDIT);
+    CHECK(ui.page == PG_SAMPLE, "EDIT round: SAMPLE");
+    host_turn(EN_K4, -127);
+    CHECK(!snd[song.sel].syn, "SAMPLE K4: the synth level");
+    {
+        sound_t keep = snd[3];
+        sound_preset(3, 17);
+        CHECK(snd[3].p[1] == 50u && snd[3].spitch == 43u, "a rolled sound: decay 50, the sample at 75 %% (%u %u)", snd[3].p[1], snd[3].spitch);
+        snd[3] = keep;
+    }
+    host_tap(B_EDIT);
     snprintf(path, sizeof path, "%s/lx_sample2.ppm", dir);
     host_ppm(path);
     host_run(3000, 0, 0);                        /* (all quiet) */

@@ -75,9 +75,9 @@ Eine Seiten-Taste nochmal tippen zeigt ihre nächste Seite (Punkte unten rechts)
 | SEQ (3.) | **TRACKS** | Spur, Mute, Solo, Spur löschen | alle an, Pattern löschen |
 | EDIT | SYNTH 1-4 | Synth-Parameter 1–4 | Parameter 5–8 |
 | EDIT (2.) | SYNTH 5-8 | Synth-Parameter 5–8 (z. B. Tone, Snap, Click, Drive) | Parameter 1–4 |
-| EDIT (3.) | SAMPLE LAYER | Sample, Level, Pitch, Decay | Synth-Pegel |
+| EDIT (3.) | SAMPLE LAYER | Sample, Level, Pitch, Synth-Pegel | |
 | ENV | **ENVELOPE** | Attack (OFF … 252 ms), Decay (der Decay des Synth-Layers), Release, Gate (OFF oder ¼ … 16 Steps: danach übernimmt das Release den Decay) – alles lockbar | |
-| EDIT (4.) | SAMPLE 2 | Start, Tone, Bend, Synth-Pegel | |
+| EDIT (4.) | SAMPLE 2 | Start, Tone, Bend, Decay | |
 | EDIT (5.) | SOUND MIX | Volume, Pan, Delay-Send, Reverb-Send | Drive-Send |
 | LFO / LFO (2.) | LFO 1 / LFO 2 | Ziel, Welle, Rate (im Tempo), Tiefe (bipolar) | |
 | FX | FX SENDS (des Sounds, im Kit) | Drive-Send, Delay-Send, Reverb-Send, Volume | |
@@ -117,7 +117,7 @@ D4–G5 Solo.
 **LIVE PADS (SEQ zweimal).** Alle acht Sounds gleichzeitig spielbar: F3–C4 sind Sound 1–8, D4–G5 dieselben mit Accent.
 Mit REC + PLAY wird jeder Schlag aufgenommen, auf das Raster aus QUANTIZE (REC halten) gelegt.
 
-**TRACKS (SEQ dreimal).** Die acht Spuren mit Notenzahl, Mute (M) und Solo (S). KNOB 1 wählt die Spur, KNOB 2 Mute,
+**TRACKS (SEQ dreimal).** Die acht Spuren mit Notenzahl, Mute (M) und Solo (S). KNOB 1 (oder die weißen Tasten 1–8, lautlos) wählt die Spur, KNOB 2 Mute,
 KNOB 3 Solo, KNOB 4 gedreht löscht die Spur. Zeile B (GLO halten): KNOB 2 alle an (Mute und Solo aus), KNOB 4 löscht das
 ganze Pattern. Alles Gelöschte holt A#4 (UNDO) zurück.
 
