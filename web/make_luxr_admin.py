@@ -130,8 +130,17 @@ HELP_HTML = """  <section aria-labelledby="h-map">
   </section>
 
 """
+DONATE_HTML = """
+  <section aria-labelledby="h-don" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px">
+    <p id="h-don" style="margin:0;font:600 15px var(--body)">Support me and my projects – thank you so much!</p>
+    <a class="donate" href="https://www.paypal.com/donate?business=holodeckmusicproject%40gmail.com&amp;item_name=Support+LUXR+and+Holodeck+projects&amp;currency_code=EUR"
+       target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 18px;
+       border-radius:8px;background:#FFC439;color:#111;font:700 14px var(--body);text-decoration:none">♥ Donate with PayPal</a>
+  </section>
+"""
 EDITS = [   # (what, replacement): each must occur exactly once
     ("<title>ONE CLICK Admin</title>", "<title>LUXR Update</title>"),
+    ("  </header>\n", "  </header>\n" + DONATE_HTML),
     ("<h1>ONE CLICK <span>Admin</span></h1>", "<h1>LUXR <span>Update</span></h1>"),
     ("Firmware-Update und Wartung für den M-VAVE FM-1 über USB.",
      "LUXR, die Drum-Machine-Firmware für den M-VAVE FM-1, per USB installieren."),
