@@ -55,7 +55,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: |
           python3 web/make_luxr_admin.py
-          mkdir -p site && cp build/web/luxr-update.html site/index.html && cp build/luxr.fwsc site/
+          mkdir -p site && cp build/web/luxr-update.html site/index.html && cp build/luxr.fwsc web/luxr-help-map-en.jpg site/
           printf '{"date":"%s","commit":"%s","sha256":"%s"}\n' "$(date -u +%F\ %H:%M)" "$GITHUB_SHA" "$(sha256sum build/luxr.fwsc | cut -d' ' -f1)" > site/build.json
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main'
