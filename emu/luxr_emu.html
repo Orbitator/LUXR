@@ -137,12 +137,13 @@ a { color: var(--accent); }
       <div class="row">
         <button class="btn go" id="imp">Import backup (.luxr)</button>
         <button class="btn" id="exp">Export backup</button>
+        <button class="btn" id="preset">Restore preset patches</button>
         <button class="btn warn" id="wipe">Erase all patches</button>
         <input type="file" id="file" accept=".luxr,application/octet-stream" hidden>
       </div>
       <div class="confirm" id="ask" hidden><span id="askText"></span><button class="btn warn" id="askYes">Replace</button><button class="btn" id="askNo">Cancel</button></div>
       <p class="msg" id="pmsg"></p>
-      <p class="hint">Import the <code>.luxr</code> file the LUXR update page saves with “Download backup”. Each patch goes to its own slot
+      <p class="hint">The emulator starts with 13 preset patches. Import the <code>.luxr</code> file the LUXR update page saves with “Download backup”. Each patch goes to its own slot
       and is converted like a restore on the device. Click a blue slot to load it. Patches stay in this browser; “Export backup”
       writes a file the update page can restore to a real FM-1.</p>
     </div>
@@ -195,6 +196,9 @@ const $ = (id) => document.getElementById(id);
 const wasmBytes = Uint8Array.from(atob(WASM_B64), (c) => c.charCodeAt(0));
 const B = { FX: 0, SCL: 1, ENV: 2, LFO: 3, EDIT: 4, GLO: 5, HOME: 6, SAVE: 7, ARP: 8, SEQ: 9, PLAY: 10, REC: 11, OCTDN: 12, OCTUP: 13 };
 const STORE_KEY = "luxr-fm1-store";
+/* the patches a first visit starts with: the .luxr file next to this page, else the copy built into it */
+const PRESET_FILE = "luxr-backup-20261024-1221.luxr";
+const PRESET_B64 = "@PRESET@";
 
 /* ------------------------------------------------------------ the store --- */
 function storeLoad() { try { const s = localStorage.getItem(STORE_KEY); return s ? Uint8Array.from(atob(s), (c) => c.charCodeAt(0)) : null; } catch { return null; } }
@@ -441,13 +445,8 @@ $("askYes").onclick = async () => {
   const list = pending; pending = null;
   if (!list) return;
   try {
-    const ex = await offline(); let ok = 0; const bad = [];
-    for (const { s, bytes } of list) {
-      if (bytes.length > ex.emu_stage_len() || s >= ex.emu_nslot()) { bad.push(s + 1); continue; }
-      new Uint8Array(ex.memory.buffer, ex.emu_stage(), bytes.length).set(bytes);
-      if (ex.emu_import(s, bytes.length)) bad.push(s + 1); else ok++;
-    }
-    newStore(new Uint8Array(ex.memory.buffer, ex.emu_store(), ex.emu_store_len()).slice());
+    const { ok, bad, img } = await importList(list);
+    newStore(img);
     pmsg(`${ok} patch${ok === 1 ? "" : "es"} imported` + (bad.length ? `, not readable: slot ${bad.join(", ")}` : "") +
          (node ? ". The emulator restarted with patch 1." : ". Switch on to play them."), bad.length ? "err" : "ok");
   } catch (err) { pmsg("Import failed: " + err.message, "err"); }
@@ -456,7 +455,7 @@ $("wipe").onclick = () => {
   $("askText").textContent = "Erase all patches in the emulator? This cannot be undone (export a backup first).";
   $("askYes").textContent = "Erase"; $("ask").hidden = false;
   $("askYes").onclick = () => {
-    $("ask").hidden = true; $("askYes").textContent = "Replace"; $("askYes").onclick = importYes;
+    $("ask").hidden = true; $("askYes").textContent = "Replace"; $("askYes").onclick = importYes; $("askNo").onclick = noAsk;
     try { localStorage.removeItem(STORE_KEY); } catch {}
     store = null; offline().then((ex) => { newStore(new Uint8Array(ex.memory.buffer, ex.emu_store(), ex.emu_store_len()).slice()); pmsg("All patches erased.", "ok"); });
   };
@@ -513,8 +512,32 @@ function onMout(p) {                               // USB-MIDI packets: CIN in t
 }
 
 /* --------------------------------------------- the first frame, then power --- */
+async function presetBytes() {
+  try { const r = await fetch(PRESET_FILE, { cache: "no-cache" }); if (r.ok) return new Uint8Array(await r.arrayBuffer()); } catch {}
+  return Uint8Array.from(atob(PRESET_B64), (c) => c.charCodeAt(0));
+}
+async function importList(list) {                 // the patches into the stored image; ok count and the slots that failed
+  const ex = await offline(); let ok = 0; const bad = [];
+  for (const { s, bytes } of list) {
+    if (bytes.length > ex.emu_stage_len() || s >= ex.emu_nslot()) { bad.push(s + 1); continue; }
+    new Uint8Array(ex.memory.buffer, ex.emu_stage(), bytes.length).set(bytes);
+    if (ex.emu_import(s, bytes.length)) bad.push(s + 1); else ok++;
+  }
+  return { ok, bad, img: new Uint8Array(ex.memory.buffer, ex.emu_store(), ex.emu_store_len()).slice() };
+}
+$("preset").onclick = async () => {
+  try {
+    pending = parseBackup(await presetBytes());
+    $("askText").textContent = `Restore the ${pending.length} preset patches (slots ${pending.map((x) => x.s + 1).join(", ")})? Your patches in these slots are replaced.`;
+    $("ask").hidden = false; pmsg("");
+  } catch (err) { pmsg("The preset patches could not be read: " + err.message, "err"); }
+};
 (async function preview() {
   try {
+    if (!store) {                                  /* a first visit: the preset patches */
+      try { const r = await importList(parseBackup(await presetBytes())); store = r.img; storeSave(r.img); pmsg(`${r.ok} preset patches loaded.`, "ok"); }
+      catch (err) { pmsg("The preset patches could not be loaded: " + err.message, "err"); }
+    }
     const ex = await refreshSlots();
     for (let i = 0; i < 40; i++) ex.emu_render(128);
     drawScreen(new Uint16Array(ex.memory.buffer, ex.emu_screen(), 57600));

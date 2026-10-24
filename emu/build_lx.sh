@@ -9,5 +9,6 @@ clang --target=wasm32 -O2 -std=gnu99 -ffreestanding -nostdlib -fno-builtin -Wall
     -DOC_VERSION="\"${LUXR_VERSION:-WEB}\"" \
     -Ibuild/gen -Ifirmware/src -Wl,--no-entry -Wl,--export-dynamic -Wl,--strip-all -Wl,-z,stack-size=262144 \
     -o build/emu/luxr.wasm emu/lx_emu_web.c
-python3 emu/inline_lx.py emu/luxr_emu.html build/emu/luxr.wasm build/emu
+python3 emu/inline_lx.py emu/luxr_emu.html build/emu/luxr.wasm build/emu web/emu/luxr-backup-20261024-1221.luxr
+cp web/emu/luxr-backup-20261024-1221.luxr build/emu/
 echo "emu: build/emu/luxr-emu.html ($(wc -c < build/emu/luxr.wasm | tr -d ' ') B wasm)"
