@@ -81,6 +81,23 @@ h1 small { font-size: .5em; letter-spacing: 2px; color: var(--muted); padding-bo
 .lock[aria-pressed="true"] .lk-dot { background: #ffe2a8; box-shadow: 0 0 6px #ffe2a8; }
 .lock:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .stage { container-type: inline-size; width: 100%; max-width: 1100px; margin: 0 auto; }
+/* FIT: the instrument alone, as large as the screen allows, on its own body colour (the rest of the page hidden) */
+.fitbtn { display: inline-flex; align-items: center; gap: 8px; font: 600 14px var(--f-body); padding: 8px 14px; min-height: 40px; border-radius: 999px;
+          border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+.fitbtn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.fitbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fitbar { display: none; }
+body.fit { overflow: hidden; background: #e7e5de; overscroll-behavior: none; }
+body.fit .wrap > :not(.stage):not(.fitbar) { display: none; }
+body.fit .stage { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: none; margin: 0;
+                  --sw: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+                  --sh: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 8px);
+                  width: min(var(--sw), var(--sh) * 920 / 550); }
+body.fit .fm1 { box-shadow: none; background: #e7e5de; }
+body.fit .fitbar { display: flex; gap: 8px; position: fixed; z-index: 30; right: calc(10px + env(safe-area-inset-right, 0px));
+                   top: calc(10px + env(safe-area-inset-top, 0px)); }
+body.fit .fitbar .fitbtn, body.fit .fitbar .lock { background: #ffffffcc; border-color: #0000001f; color: #2b2f37; min-height: 36px; padding: 6px 12px; font-size: 13px; }
+body.fit .fitbar .lock[aria-pressed="true"] { background: #4c6a97; color: #fff; }
 .fm1 { --u: calc(100cqw / 920); position: relative; width: 100%; aspect-ratio: 920 / 550; max-width: 100%;
        background: linear-gradient(180deg, #f3f2ed, var(--body-c) 40%, #e4e2db); border-radius: calc(34 * var(--u));
        box-shadow: 0 calc(26 * var(--u)) calc(50 * var(--u)) calc(-22 * var(--u)) #0007, inset 0 calc(-3 * var(--u)) 0 var(--body-edge), inset 0 1px 0 #fff;
@@ -180,6 +197,7 @@ a { color: var(--accent); }
            target="_blank" rel="noopener"><span class="hrt" aria-hidden="true">♥</span> Donate with PayPal</a>
       </aside>
       <div class="status"><span class="dot" id="dot"></span><span id="stat">off</span></div>
+      <button class="fitbtn" id="fitOn" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>Fit to screen</button>
     </div>
   </header>
 
@@ -195,6 +213,10 @@ a { color: var(--accent); }
       <div class="fine-row"><button data-d="-10">−10</button><button data-d="-1">−1</button><button data-d="1">+1</button><button data-d="10">+10</button></div>
     </div>
   </div></div>
+  <div class="fitbar" id="fitbar">
+    <button class="lock" id="lock2" aria-pressed="false"><span class="lk-dot" aria-hidden="true"></span>SHIFT lock</button>
+    <button class="fitbtn" id="fitOff"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>Exit</button>
+  </div>
   <div class="under">
     <button class="lock" id="lock" aria-pressed="false"><span class="lk-dot" aria-hidden="true"></span>SHIFT lock</button>
     <span class="hint">For the mouse: SHIFT lock keeps GLO held, so you can click a key or turn a knob with SHIFT
@@ -394,7 +416,7 @@ let shiftLock = false;
 const heldNow = () => held | (shiftLock ? 1 << B.GLO : 0);
 function setHeld(b, on) { held = on ? held | (1 << b) : held & ~(1 << b); btnEls[b]?.classList.toggle("down", !!(heldNow() & (1 << b))); send({ type: "btn", held: heldNow() }); }
 function setLock(on) {
-  shiftLock = on; $("lock").setAttribute("aria-pressed", String(on));
+  shiftLock = on; $("lock").setAttribute("aria-pressed", String(on)); $("lock2").setAttribute("aria-pressed", String(on));
   btnEls[B.GLO]?.classList.toggle("down", !!(heldNow() & (1 << B.GLO))); send({ type: "btn", held: heldNow() });
 }
 function tap(b, ms = 70) { setHeld(b, true); setTimeout(() => setHeld(b, false), ms); }
@@ -536,6 +558,22 @@ document.addEventListener("keyup", (e) => {
 });
 window.addEventListener("blur", () => { held = 0; kbKeys = 0; btnEls.forEach((el, b) => el?.classList.toggle("down", !!(heldNow() & (1 << b)))); send({ type: "btn", held: heldNow() }); setKeys(); });
 $("lock").onclick = () => setLock(!shiftLock);
+$("lock2").onclick = () => setLock(!shiftLock);
+/* FIT: the instrument fills the screen (and the browser goes full screen where it may; the iPad app is already) */
+function setFit(on) {
+  closeFine();
+  document.body.classList.toggle("fit", on);
+  $("fitOn").setAttribute("aria-pressed", String(on));
+  try { localStorage.setItem("luxr-fit", on ? "1" : ""); } catch {}
+  const de = document.documentElement, fs = document.fullscreenElement || document.webkitFullscreenElement;
+  if (on && !fs && !NATIVE) (de.requestFullscreen || de.webkitRequestFullscreen)?.call(de)?.catch?.(() => {});
+  if (!on && fs) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document)?.catch?.(() => {});
+}
+$("fitOn").onclick = () => setFit(true);
+$("fitOff").onclick = () => setFit(false);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && fineRole === null && document.body.classList.contains("fit")) setFit(false); });
+document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && document.body.classList.contains("fit") && !NATIVE) setFit(false); });
+try { if (localStorage.getItem("luxr-fit")) document.body.classList.add("fit"); } catch {}
 $("fineX").onclick = closeFine;
 $("fineRange").addEventListener("pointerdown", () => { fineDrag = true; });
 window.addEventListener("pointerup", () => { fineDrag = false; });
