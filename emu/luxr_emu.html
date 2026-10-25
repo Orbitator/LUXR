@@ -390,7 +390,14 @@ class Luxr extends AudioWorkletProcessor {
   async msg(m) {
     if (m.type === "load") {
       const { instance } = await WebAssembly.instantiate(m.wasm, {});
-      this.ex = instance.exports; this.ex.emu_master(m.master); this.boot(m.store, m.seed);
+      this.ex = instance.exports;
+      if (m.mem) {                                             /* a restart: the machine as it was (all its state is in memory) */
+        const mem = this.ex.memory, need = m.mem.byteLength - mem.buffer.byteLength;
+        if (need > 0) mem.grow(Math.ceil(need / 65536));
+        new Uint8Array(mem.buffer).set(new Uint8Array(m.mem));
+        this.sg = this.ex.emu_store_gen(); this.full = true;
+      } else this.boot(m.store, m.seed);
+      this.ex.emu_master(m.master);
       this.port.postMessage({ type: "ready" });
     } else if (!this.ex) return;
     else if (m.type === "btn" || m.type === "keys") this.q.push(m);
@@ -398,6 +405,7 @@ class Luxr extends AudioWorkletProcessor {
     else if (m.type === "master") this.ex.emu_master(m.v);
     else if (m.type === "midi") this.ex.emu_midi(m.st, m.d1, m.d2);
     else if (m.type === "load_slot") this.ex.emu_load(m.slot);
+    else if (m.type === "snap") this.port.postMessage({ type: "snap", mem: this.ex.memory.buffer.slice(0) });
     else if (m.type === "kwatch") { this.kw = m.role; this.last = -1e9; }
     else if (m.type === "kset") {                              /* the fine slider: turn the knob to the value */
       const k = this.knob(m.role);
@@ -424,7 +432,8 @@ class Luxr extends AudioWorkletProcessor {
       const m = { type: "frame", btn: new Uint8Array(ex.memory.buffer, ex.emu_leds_btn(), 14).slice(),
                   key: new Uint8Array(ex.memory.buffer, ex.emu_leds_key(), 27).slice(), playing: ex.emu_playing(), bpm: ex.emu_bpm(),
                   page: ex.emu_page(), pgMidi: ex.emu_pg_midi() };
-      const r = ex.emu_hd_rows();                             /* the sharp screen: the rows that changed */
+      let r = ex.emu_hd_rows();                               /* the sharp screen: the rows that changed */
+      if (this.full) { this.full = false; r = ex.emu_hd_size() << 16; }
       if (r) { const y0 = r & 65535, y1 = r >>> 16, w = ex.emu_hd_size(); m.rows = { y0, y1, px: new Uint16Array(ex.memory.buffer, ex.emu_hd() + y0 * w * 2, (y1 - y0) * w).slice() }; }
       if (ex.emu_store_gen() !== this.sg) { this.sg = ex.emu_store_gen(); m.store = new Uint8Array(ex.memory.buffer, ex.emu_store(), ex.emu_store_len()).slice(); }
       if (this.kw !== null) m.knob = this.knob(this.kw);
@@ -634,8 +643,13 @@ function wake() { try { if (ac && ac.state !== "running" && ac.state !== "closed
 ["pointerdown", "touchstart", "keydown"].forEach((n) => document.addEventListener(n, wake, { capture: true, passive: true }));
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { wake(); setTimeout(wake, 300); } });
 window.addEventListener("pageshow", wake); window.addEventListener("focus", wake);
-setInterval(() => { $("resume").hidden = !(ac && node && ac.state !== "running" && !document.hidden); }, 700);
-$("resume").onclick = () => { wake(); setTimeout(wake, 200); };
+let stallSince = 0;
+setInterval(() => {
+  const st = stalled() && !document.hidden;
+  if (!st) stallSince = 0; else if (!stallSince) { stallSince = performance.now(); wake(); }
+  $("resume").hidden = !(st && performance.now() - stallSince > 1200);
+}, 400);
+$("resume").onclick = () => { wake(); setTimeout(() => { if (stalled()) restart(); }, 400); };
 $("fitOff").onclick = () => setFit(false);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && fineRole === null && document.body.classList.contains("fit")) setFit(false); });
 document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && document.body.classList.contains("fit") && !NATIVE) setFit(false); });
@@ -878,7 +892,9 @@ $("preset").onclick = async () => {
     drawRows(0, SW, new Uint16Array(ex.memory.buffer, ex.emu_hd(), SW * SW));
   } catch (err) { $("stat").textContent = "WebAssembly is not available in this browser"; }
 })();
-$("power").onclick = async () => {
+/* power on (mem: a snapshot of the running machine: a restart keeps patterns, sounds and position) */
+let lastFrame = 0, snapMem = null;
+async function powerOn(mem) {
   try {
     ac = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" });
     try { await ac.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" }))); }
@@ -889,6 +905,7 @@ $("power").onclick = async () => {
       const m = e.data;
       if (m.type === "ready") { $("dot").classList.add("on"); $("stat").textContent = `on · ${ac.sampleRate} Hz`; }
       else if (m.type === "frame") {
+        lastFrame = performance.now();
         if (m.rows) drawRows(m.rows.y0, m.rows.y1, m.rows.px);
         if (m.knob && fineRole !== null && fineRole >= 0) showFine(m.knob);
         pgMidi = m.pgMidi; pageSeen(m.page);
@@ -896,12 +913,28 @@ $("power").onclick = async () => {
         btnEls.forEach((el, b) => el && el.classList.toggle("lit", !!m.btn[b]));
         keyEls.forEach((el, k) => el.classList.toggle("lit", !!m.key[k]));
         $("stat").textContent = `on · ${m.playing ? "playing" : "stopped"} · ${m.bpm} BPM`;
-      } else if (m.type === "mout") onMout(m.p);
+      } else if (m.type === "snap") snapMem = m.mem;
+      else if (m.type === "mout") onMout(m.p);
     };
-    node.port.postMessage({ type: "load", wasm: wasmBytes.buffer.slice(0), seed: (Date.now() >>> 0) | 1, master: knob.master(), store });
-    $("power").remove();
+    lastFrame = performance.now();
+    node.port.postMessage({ type: "load", wasm: wasmBytes.buffer.slice(0), seed: (Date.now() >>> 0) | 1, master: knob.master(), store, mem }, mem ? [mem] : []);
+    $("power")?.remove();
     if (ac.state !== "running") await ac.resume();
-    midiSetup();
-  } catch (err) { $("stat").textContent = "Audio is not available: " + err.message; ac = null; node = null; }
-};
+    return true;
+  } catch (err) { $("stat").textContent = "Audio is not available: " + err.message; ac = null; node = null; return false; }
+}
+$("power").onclick = async () => { if (await powerOn(null)) midiSetup(); };
+/* the sound stopped (iOS: another app, a call): resume; when the audio does not run again, a tap restarts it from the
+ * last snapshot (taken when LUXR went to the background, and every 10 s) */
+function stalled() { return !!(ac && node && (ac.state !== "running" || performance.now() - lastFrame > 1500)); }
+async function restart() {
+  if (!ac || !stalled()) return;
+  const old = ac, mem = snapMem; snapMem = null;
+  ac = null; node = null;
+  try { await old.close(); } catch {}
+  await powerOn(mem);
+}
+setInterval(() => { if (node && !document.hidden && !stalled()) node.port.postMessage({ type: "snap" }); }, 10000);
+document.addEventListener("visibilitychange", () => { if (document.hidden && node && !stalled()) node.port.postMessage({ type: "snap" }); });
+
 </script>
