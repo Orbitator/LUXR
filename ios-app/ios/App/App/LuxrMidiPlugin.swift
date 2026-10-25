@@ -339,6 +339,10 @@ public class LuxrMidiPlugin: CAPPlugin, CAPBridgedPlugin {
 class LuxrBridgeViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(LuxrMidiPlugin())
+        // no zoom: a double tap or a pinch must not enlarge the instrument
+        webView?.scrollView.minimumZoomScale = 1
+        webView?.scrollView.maximumZoomScale = 1
+        webView?.scrollView.bouncesZoom = false
     }
 }
 
