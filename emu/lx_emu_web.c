@@ -236,3 +236,42 @@ EXPORT uint32_t emu_hd_rows(void)                 /* the rows changed: y0 | y1 <
     hd_y1 = 0;
     return r;
 }
+
+/* ---- the page's fine slider (a knob held): what a knob sets now, and its value as the screen shows it.
+ * role: EN_SELECT, EN_PRESET, EN_K1 .. EN_K4. A turn is pset(id, pget(id) + d), so the page reaches a value
+ * by turning the knob value - (now + the steps not taken yet); parameters a turn acts on (copy, load, clear)
+ * get no slider (kind 0) */
+static struct { int32_t kind, id, min, max, val, pending; char label[24], text[24]; } e_knob;
+EXPORT void *emu_knob(uint32_t role)
+{
+    const char *unit = "";
+    e_knob.kind = 0;
+    e_knob.pending = role < NE ? e_enc[role] : 0;
+    e_knob.label[0] = e_knob.text[0] = 0;
+    if (role == EN_SELECT && !ui.shift && ui.page != PG_MIX && ui.page != PG_COMP && ui.page != PG_LIM &&
+        ui.page != PG_OUT && ui.page != PG_SAVE) {
+        e_knob.kind = 2; e_knob.id = 0; e_knob.min = 1; e_knob.max = NTRK; e_knob.val = song.sel % NTRK + 1;
+        str_cpy(e_knob.label, "SOUND", sizeof e_knob.label);
+        str_cpy(e_knob.text, TRK_NAME[song.sel % NTRK], sizeof e_knob.text);
+    } else if (role == EN_PRESET && !ui.shift) {
+        e_knob.kind = 2; e_knob.id = 0; e_knob.min = 1; e_knob.max = NSLOT; e_knob.val = ui.slot + 1;
+        str_cpy(e_knob.label, "SLOT", sizeof e_knob.label);
+        fmt_u(e_knob.text, ui.slot + 1u);
+        str_cat(e_knob.text, ui.used[ui.slot] ? " IN USE" : " EMPTY", sizeof e_knob.text);
+    } else if (role >= EN_K1 && role <= EN_K4) {
+        uint32_t id = knob_id(role - EN_K1);
+        pdesc_t d = pdesc_of(id);
+        switch (id) {
+        case P_NONE: case P_PCOPY: case P_PPASTE: case P_LOAD: case P_NGO: case P_TCLR: case P_TALL: case P_PCLR:
+        case P_LDEL: case P_PLEN: case P_VERSION:
+            return &e_knob;
+        }
+        if (d.max <= d.min)
+            return &e_knob;
+        e_knob.kind = 1; e_knob.id = (int32_t)id; e_knob.min = d.min; e_knob.max = d.max; e_knob.val = pget(id);
+        str_cpy(e_knob.label, d.label ? d.label : "", sizeof e_knob.label);
+        pformat(id, e_knob.text, &unit);
+        if (unit[0]) { str_cat(e_knob.text, " ", sizeof e_knob.text); str_cat(e_knob.text, unit, sizeof e_knob.text); }
+    }
+    return &e_knob;
+}

@@ -59,6 +59,19 @@ h1 small { font-size: .5em; letter-spacing: 2px; color: var(--muted); padding-bo
 .dot.on { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
 
 /* ------------------------------------------------------------------ the device */
+.fine { position: absolute; z-index: 20; width: min(300px, 86vw); padding: 12px 14px 14px; border-radius: 14px; display: grid; gap: 6px;
+        background: #121317; color: #f1f1ee; box-shadow: 0 18px 40px -10px #000a, 0 0 0 1px #ffffff1a; touch-action: none; user-select: none; }
+.fine-head { display: flex; justify-content: space-between; align-items: center; font: 13px var(--f-silk); letter-spacing: 1.5px; color: #a8adb8; }
+.fine-x { border: 0; background: transparent; color: #c9ccd4; font: 22px/1 var(--f-body); width: 36px; height: 36px; border-radius: 50%; cursor: pointer; }
+.fine-x:hover { background: #ffffff14; }
+.fine-label { font: 600 14px var(--f-body); color: #c9ccd4; min-height: 1.2em; }
+.fine-val { font: 600 30px/1.1 var(--f-body); color: #ffb43c; font-variant-numeric: tabular-nums; min-height: 1.1em; overflow-wrap: anywhere; }
+.fine input[type=range] { width: 100%; height: 34px; accent-color: #ffb43c; margin: 4px 0 0; }
+.fine-scale { display: flex; justify-content: space-between; font: 12px var(--f-silk); color: #7d828d; }
+.fine-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 4px; }
+.fine-row button { min-height: 40px; border-radius: 9px; border: 1px solid #ffffff22; background: #1d1f25; color: #f1f1ee; font: 600 15px var(--f-body); cursor: pointer; touch-action: manipulation; }
+.fine-row button:hover { background: #272a31; }
+.fine button:focus-visible, .fine input:focus-visible { outline: 2px solid #ffb43c; outline-offset: 2px; }
 .under { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; max-width: 1100px; width: 100%; margin: -6px auto 0; }
 .under .hint { flex: 1 1 320px; min-width: 0; }
 .lock { display: inline-flex; align-items: center; gap: 8px; font: 600 14px var(--f-body); padding: 9px 16px; min-height: 42px; border-radius: 999px;
@@ -173,6 +186,14 @@ a { color: var(--accent); }
   <div class="stage"><div class="fm1" id="fm1" aria-label="FM-1 panel">
     <div class="bezel"><canvas id="lcd" width="720" height="720" aria-label="Display"></canvas>
       <button class="poweron" id="power"><b>POWER ON</b><span>click to start the sound</span></button></div>
+    <div class="fine" id="fine" hidden role="dialog" aria-labelledby="fineName">
+      <div class="fine-head"><span id="fineName"></span><button class="fine-x" id="fineX" aria-label="Close">×</button></div>
+      <div class="fine-label" id="fineLabel"></div>
+      <div class="fine-val" id="fineVal"></div>
+      <input type="range" id="fineRange" step="1" aria-label="Value">
+      <div class="fine-scale"><span id="fineMin"></span><span id="fineMax"></span></div>
+      <div class="fine-row"><button data-d="-10">−10</button><button data-d="-1">−1</button><button data-d="1">+1</button><button data-d="10">+10</button></div>
+    </div>
   </div></div>
   <div class="under">
     <button class="lock" id="lock" aria-pressed="false"><span class="lk-dot" aria-hidden="true"></span>SHIFT lock</button>
@@ -209,7 +230,7 @@ a { color: var(--accent); }
         <div><kbd>←</kbd> <kbd>→</kbd><span>OCT− / OCT+</span></div>
         <div><kbd>↑</kbd> <kbd>↓</kbd><span>SELECT</span></div>
       </div>
-      <p class="hint">Knobs: drag up or down, or use the mouse wheel. MASTER is the volume. On a phone, turn it sideways.</p>
+      <p class="hint">Knobs: drag up or down, or use the mouse wheel. Hold a knob still for half a second: a slider sets its value exactly. MASTER is the volume. On a phone, turn it sideways.</p>
       <div class="row"><label for="midiIn">MIDI in</label><select id="midiIn"><option value="">none</option></select>
         <label for="midiOut">MIDI out</label><select id="midiOut"><option value="">none</option></select></div>
       <p class="hint" id="midiInfo">MIDI works in Chrome and Edge once the emulator is on. Notes on a sound's MIDI channel play it, alone on its channel it plays tonally (C3 = original pitch).</p>
@@ -293,7 +314,12 @@ function parseBackup(u8) {
 /* -------------------------------------------------------------- worklet --- */
 const WORKLET = `
 class Luxr extends AudioWorkletProcessor {
-  constructor() { super(); this.ex = null; this.q = []; this.t = 0; this.nextOk = 0; this.last = 0; this.sg = 0; this.port.onmessage = (e) => this.msg(e.data); }
+  constructor() { super(); this.ex = null; this.q = []; this.t = 0; this.nextOk = 0; this.last = 0; this.sg = 0; this.kw = null; this.port.onmessage = (e) => this.msg(e.data); }
+  knob(role) {
+    const ex = this.ex, p = ex.emu_knob(role), b = ex.memory.buffer, i = new Int32Array(b, p, 6);
+    const str = (o) => { const u = new Uint8Array(b, p + o, 24), z = u.indexOf(0); return String.fromCharCode(...u.slice(0, z < 0 ? 24 : z)).replace(String.fromCharCode(133), "…"); };
+    return { kind: i[0], id: i[1], min: i[2], max: i[3], val: i[4], pending: i[5], label: str(24), text: str(48) };
+  }
   boot(store, seed) {
     const ex = this.ex;
     if (store) new Uint8Array(ex.memory.buffer, ex.emu_store(), ex.emu_store_len()).set(store.subarray(0, ex.emu_store_len()));
@@ -310,6 +336,11 @@ class Luxr extends AudioWorkletProcessor {
     else if (m.type === "master") this.ex.emu_master(m.v);
     else if (m.type === "midi") this.ex.emu_midi(m.st, m.d1, m.d2);
     else if (m.type === "load_slot") this.ex.emu_load(m.slot);
+    else if (m.type === "kwatch") { this.kw = m.role; this.last = -1e9; }
+    else if (m.type === "kset") {                              /* the fine slider: turn the knob to the value */
+      const k = this.knob(m.role);
+      if (k.kind) { const d = m.v - (k.val + k.pending); if (d) this.ex.emu_enc(m.role, d); }
+    }
     else if (m.type === "store") { this.boot(m.store, m.seed); this.port.postMessage({ type: "rebooted" }); }
   }
   process(_, outputs) {
@@ -333,6 +364,7 @@ class Luxr extends AudioWorkletProcessor {
       const r = ex.emu_hd_rows();                             /* the sharp screen: the rows that changed */
       if (r) { const y0 = r & 65535, y1 = r >>> 16, w = ex.emu_hd_size(); m.rows = { y0, y1, px: new Uint16Array(ex.memory.buffer, ex.emu_hd() + y0 * w * 2, (y1 - y0) * w).slice() }; }
       if (ex.emu_store_gen() !== this.sg) { this.sg = ex.emu_store_gen(); m.store = new Uint8Array(ex.memory.buffer, ex.emu_store(), ex.emu_store_len()).slice(); }
+      if (this.kw !== null) m.knob = this.knob(this.kw);
       this.port.postMessage(m);
     }
     return true;
@@ -388,13 +420,57 @@ function knob(role, label, x, y) {               // role: EN_* (0 SELECT, 1 ALGO
     else { ang += n * 18; send({ type: "enc", role, n }); }
     show();
   };
-  k.addEventListener("pointerdown", (e) => { e.preventDefault(); k.setPointerCapture(e.pointerId); y0 = e.clientY; acc = 0; k.focus({ preventScroll: true }); });
-  k.addEventListener("pointermove", (e) => { if (!k.hasPointerCapture(e.pointerId)) return; acc += y0 - e.clientY; y0 = e.clientY; const n = Math.trunc(acc / 9); if (n) { acc -= n * 9; turn(n); } });
+  let hold = null, moved = 0;                     /* held still: the fine slider (MASTER, SELECT, PRESETS, KNOB 1-4) */
+  const fine = role < 0 || role === 0 || role >= 2;
+  k.addEventListener("pointerdown", (e) => {
+    e.preventDefault(); k.setPointerCapture(e.pointerId); y0 = e.clientY; acc = 0; moved = 0; k.focus({ preventScroll: true });
+    if (fine) hold = setTimeout(() => { hold = null; if (moved < 4) { try { k.releasePointerCapture(e.pointerId); } catch {} openFine(role, label, k); } }, 450);
+  });
+  k.addEventListener("pointermove", (e) => { if (!k.hasPointerCapture(e.pointerId)) return; moved += Math.abs(y0 - e.clientY); acc += y0 - e.clientY; y0 = e.clientY; const n = Math.trunc(acc / 9); if (n) { acc -= n * 9; turn(n); } });
+  const stop = () => { if (hold) { clearTimeout(hold); hold = null; } };
+  k.addEventListener("pointerup", stop); k.addEventListener("pointercancel", stop);
+  k.addEventListener("contextmenu", (e) => e.preventDefault());
   k.addEventListener("wheel", (e) => { e.preventDefault(); turn(e.deltaY < 0 ? 1 : -1); }, { passive: false });
   k.addEventListener("keydown", (e) => { const n = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1 }[e.key]; if (n) { e.preventDefault(); e.stopPropagation(); turn(n); } });
   show(); fm1.append(place(k, x, y)); silk(label, x, y - 45);
   if (role >= 0) knobTurn[role] = turn;
-  if (role < 0) knob.master = () => pot;
+  if (role < 0) { knob.master = () => pot; knob.setMaster = (v) => { pot = v; show(); send({ type: "master", v: pot }); }; }
+  else (knob.spin = knob.spin || {})[role] = (n) => { ang += n * 18; show(); };
+}
+
+/* the fine slider: a knob held still opens it; it shows the parameter as the screen does and sets it exactly
+ * (the emulator turns the knob by the difference, so every page reacts as to a turn) */
+let fineRole = null, fineInfo = null, fineDrag = false;
+function openFine(role, label, el) {
+  if (!node) { $("stat").textContent = "Switch on first (click the screen)"; return; }
+  fineRole = role; fineInfo = null;
+  const f = $("fine"), r = el.getBoundingClientRect(), d = fm1.getBoundingClientRect();
+  $("fineName").textContent = label; $("fineLabel").textContent = ""; $("fineVal").textContent = "…";
+  f.hidden = false;
+  const fw = f.offsetWidth, x = Math.min(Math.max(r.left + r.width / 2 - d.left - fw / 2, 8), d.width - fw - 8);
+  f.style.left = x + "px"; f.style.top = Math.max(8, Math.min(r.bottom - d.top + 8, d.height - f.offsetHeight - 8)) + "px";
+  if (role < 0) showFine({ kind: 3, min: 0, max: 100, val: Math.round(knob.master() / 10.23), pending: 0, label: "VOLUME", text: Math.round(knob.master() / 10.23) + " %" });
+  else send({ type: "kwatch", role });
+  $("fineRange").focus({ preventScroll: true });
+}
+function closeFine() { if (fineRole === null) return; fineRole = null; $("fine").hidden = true; send({ type: "kwatch", role: null }); }
+function showFine(k) {
+  fineInfo = k;
+  const rg = $("fineRange");
+  if (!k.kind) { $("fineLabel").textContent = "No value on this card"; $("fineVal").textContent = "–"; rg.disabled = true; return; }
+  rg.disabled = false; rg.min = k.min; rg.max = k.max;
+  if (!fineDrag) rg.value = k.val + (k.pending || 0);
+  $("fineLabel").textContent = k.label; $("fineVal").textContent = k.text;
+  $("fineMin").textContent = k.min; $("fineMax").textContent = k.max;
+}
+function fineSet(v) {
+  const k = fineInfo; if (!k || !k.kind) return;
+  v = Math.max(k.min, Math.min(k.max, Math.round(v)));
+  if (fineRole < 0) { knob.setMaster(Math.round(v * 10.23)); showFine({ ...k, val: v, text: v + " %" }); $("fineRange").value = v; return; }
+  knob.spin?.[fineRole]?.(v - (k.val + (k.pending || 0)));
+  fineInfo = { ...k, pending: v - k.val };          /* (until the next frame reports it) */
+  $("fineRange").value = v;
+  send({ type: "kset", role: fineRole, v });
 }
 
 /* the keys: 27 from F3, 16 white */
@@ -443,7 +519,7 @@ const BLACK_CODES = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6",
 const codeKey = {};
 { let w = 0, b = 0; for (let k = 0; k < 27; k++) codeKey[isBlack(k) ? BLACK_CODES[b++] : WHITE_CODES[w++]] = k; }
 document.addEventListener("keydown", (e) => {
-  if (!node || e.target.closest("input, select, .knob") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (!node || e.target.closest("input, select, .knob, .fine") || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.target.closest("button") && (e.key === " " || e.key === "Enter")) return;
   if (e.key === "Shift") { if (!e.repeat) setHeld(B.GLO, true); return; }
   if (e.code in codeKey) { e.preventDefault(); if (!e.repeat) { kbKeys |= 1 << codeKey[e.code]; setKeys(); } return; }
@@ -459,6 +535,13 @@ document.addEventListener("keyup", (e) => {
 });
 window.addEventListener("blur", () => { held = 0; kbKeys = 0; btnEls.forEach((el, b) => el?.classList.toggle("down", !!(heldNow() & (1 << b)))); send({ type: "btn", held: heldNow() }); setKeys(); });
 $("lock").onclick = () => setLock(!shiftLock);
+$("fineX").onclick = closeFine;
+$("fineRange").addEventListener("pointerdown", () => { fineDrag = true; });
+window.addEventListener("pointerup", () => { fineDrag = false; });
+$("fineRange").addEventListener("input", (e) => fineSet(+e.target.value));
+document.querySelectorAll(".fine-row button").forEach((b) => b.addEventListener("click", () => fineSet(+$("fineRange").value + +b.dataset.d)));
+$("fine").addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); closeFine(); } });
+document.addEventListener("pointerdown", (e) => { if (fineRole !== null && !e.target.closest(".fine, .knob")) closeFine(); }, true);
 
 /* -------------------------------------------------------------- patches --- */
 let used = [];
@@ -613,6 +696,7 @@ $("power").onclick = async () => {
       if (m.type === "ready") { $("dot").classList.add("on"); $("stat").textContent = `on · ${ac.sampleRate} Hz`; }
       else if (m.type === "frame") {
         if (m.rows) drawRows(m.rows.y0, m.rows.y1, m.rows.px);
+        if (m.knob && fineRole !== null && fineRole >= 0) showFine(m.knob);
         if (m.store) { store = m.store; storeSave(m.store); refreshSlots(); }
         btnEls.forEach((el, b) => el && el.classList.toggle("lit", !!m.btn[b]));
         keyEls.forEach((el, k) => el.classList.toggle("lit", !!m.key[k]));
