@@ -232,7 +232,8 @@ a { color: var(--accent); }
       </div>
       <p class="hint">Knobs: drag up or down, or use the mouse wheel. Hold a knob still for half a second: a slider sets its value exactly. MASTER is the volume. On a phone, turn it sideways.</p>
       <div class="row"><label for="midiIn">MIDI in</label><select id="midiIn"><option value="">none</option></select>
-        <label for="midiOut">MIDI out</label><select id="midiOut"><option value="">none</option></select></div>
+        <label for="midiOut">MIDI out</label><select id="midiOut"><option value="">none</option></select>
+        <button class="btn" id="midiBt" hidden>Bluetooth MIDI …</button></div>
       <p class="hint" id="midiInfo">MIDI works in Chrome and Edge once the emulator is on. Notes on a sound's MIDI channel play it, alone on its channel it plays tonally (C3 = original pitch).</p>
     </div>
     <div class="card wide">
@@ -615,6 +616,14 @@ $("exp").onclick = async () => {
       chunks.push(Uint8Array.from([s, ...lx4(inf.size)]), b);
     }
     const d = new Date(), p = (x) => String(x).padStart(2, "0"), name = `luxr-emulator-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.luxr`;
+    if (NATIVE) {                                  /* (a web view cannot download: the iOS share sheet) */
+      const all = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0)); let o = 0;
+      for (const c of chunks) { all.set(c, o); o += c.length; }
+      let b = ""; for (let i = 0; i < all.length; i += 8192) b += String.fromCharCode(...all.subarray(i, i + 8192));
+      await NATIVE.shareFile({ name, data: btoa(b) });
+      pmsg(`${inf.used.length} patches in ${name}.`, "ok");
+      return;
+    }
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(chunks, { type: "application/octet-stream" })); a.download = name;
     document.body.append(a); a.click(); a.remove();
     pmsg(`${inf.used.length} patches written to ${name}. (If nothing downloads here, open the emulator in its own browser tab.)`, "ok");
@@ -623,7 +632,37 @@ $("exp").onclick = async () => {
 
 /* ----------------------------------------------------------------- MIDI --- */
 let midi = null;
+/* in the iPad app (Capacitor, ios-app/): CoreMIDI and the share sheet through the native plugin LuxrMidi */
+const NATIVE = (() => {
+  try { const C = window.capacitorExports; return C && C.Capacitor.isNativePlatform() ? C.registerPlugin("LuxrMidi") : null; } catch { return null; }
+})();
+const midiOk = (st) => st < 0xF0 || st === 0xF8 || st === 0xFA || st === 0xFB || st === 0xFC;   /* (and the clock) */
+async function nativeMidi() {
+  try { await NATIVE.start(); } catch (e) { $("midiInfo").textContent = "MIDI could not start: " + (e.message || e); return; }
+  const fill = async () => {
+    let ports = { inputs: [], outputs: [] };
+    try { ports = await NATIVE.listPorts(); } catch {}
+    for (const [id, list] of [["midiIn", ports.inputs], ["midiOut", ports.outputs]]) {
+      const sel = $(id), cur = sel.value; sel.length = 1;
+      if (id === "midiIn") sel.add(new Option("all inputs", "*"));
+      for (const p of list) sel.add(new Option(p.name, p.id));
+      sel.value = [...sel.options].some((o) => o.value === cur) && cur ? cur : (id === "midiIn" ? "*" : "");
+      sel.dispatchEvent(new Event("change"));
+    }
+  };
+  NATIVE.addListener("midimessage", (e) => {
+    const want = $("midiIn").value;
+    if (!want || (want !== "*" && want !== e.port)) return;
+    const [st, d1 = 0, d2 = 0] = e.data;
+    if (midiOk(st)) send({ type: "midi", st, d1, d2 });
+  });
+  NATIVE.addListener("statechange", fill);
+  await fill();
+  $("midiBt").hidden = false;
+  $("midiInfo").textContent = "CoreMIDI: USB, Bluetooth and network MIDI. Notes on a sound's MIDI channel play it, alone on its channel it plays tonally (C3 = original pitch).";
+}
 async function midiSetup() {
+  if (NATIVE) return nativeMidi();
   if (!navigator.requestMIDIAccess) { $("midiInfo").textContent = "This browser has no Web MIDI (use Chrome or Edge for a MIDI keyboard)."; return; }
   try { midi = await navigator.requestMIDIAccess(); } catch { $("midiInfo").textContent = "MIDI access was not granted here. Open the emulator in its own tab to use MIDI."; return; }
   const fill = () => {
@@ -640,9 +679,14 @@ let inPort = null;
 $("midiIn").onchange = () => {
   if (inPort) inPort.onmidimessage = null;
   inPort = midi && $("midiIn").value ? midi.inputs.get($("midiIn").value) : null;
-  if (inPort) inPort.onmidimessage = (e) => { const [st, d1 = 0, d2 = 0] = e.data; if (st < 0xF0) send({ type: "midi", st, d1, d2 }); };
+  if (inPort) inPort.onmidimessage = (e) => { const [st, d1 = 0, d2 = 0] = e.data; if (midiOk(st)) send({ type: "midi", st, d1, d2 }); };
 };
-$("midiOut").onchange = () => { midiOut = midi && $("midiOut").value ? midi.outputs.get($("midiOut").value) : null; };
+$("midiOut").onchange = () => {
+  const id = $("midiOut").value;
+  if (NATIVE) midiOut = id ? { send: (data) => NATIVE.sendBatch({ messages: [{ port: id, data, delay: 0 }], now: performance.now() }).catch(() => {}) } : null;
+  else midiOut = midi && id ? midi.outputs.get(id) : null;
+};
+$("midiBt").onclick = () => NATIVE?.showBluetooth().catch(() => {});
 function onMout(p) {                               // USB-MIDI packets: CIN in the low nibble of byte 0, then 3 bytes
   if (!midiOut) return;
   for (const v of p) {

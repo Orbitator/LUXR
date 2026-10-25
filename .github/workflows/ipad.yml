@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# The LUXR emulator as an iPad app (ios-app/: Capacitor + CoreMIDI, after Hapax Web): the emulator page built on
+# Linux (clang -> WebAssembly), the app on macOS, unsigned (signed on the iPad by SideStore / AltStore, or by Xcode:
+# ios-app/README.md). Published as the release "ipad": .../releases/download/ipad/LUXR.ipa (and LUXR-Emulator.html).
+name: ipad
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["emu/**", "ios-app/**", "firmware/src/lx_*", "firmware/src/gfx.c", "tools/gen_aa_*", "web/emu/**", ".github/workflows/ipad.yml"]
+permissions: { contents: write }
+concurrency: { group: ipad, cancel-in-progress: true }
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Tools
+        run: |
+          sudo apt-get -qq update && sudo apt-get -qq install -y libraqm0 libfribidi0 clang lld >/dev/null
+          pip install -q pillow
+          command -v wasm-ld || sudo ln -sf "$(ls /usr/bin/wasm-ld-* | sort -V | tail -1)" /usr/local/bin/wasm-ld
+      - name: Emulator page
+        run: |
+          LUXR_VERSION="iPad $(date -u +%F)" sh emu/build_lx.sh
+          node emu/lx_emu_test.mjs build/emu/luxr.wasm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: luxr-emu
+          path: |
+            build/emu/luxr-emu.html
+            build/emu/*.luxr
+  ipa:
+    needs: web
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: luxr-emu, path: build/emu }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Web assets into the iOS project
+        working-directory: ios-app
+        run: npm ci && npm run sync
+      - name: Build app (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild -project ios-app/ios/App/App.xcodeproj -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build/ios \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            build > xcodebuild.log 2>&1 || { grep "error:" xcodebuild.log | sort -u; tail -n 40 xcodebuild.log; exit 1; }
+          tail -n 5 xcodebuild.log
+          test -d build/ios/Build/Products/Release-iphoneos/App.app
+      - name: Package .ipa
+        run: |
+          mkdir -p Payload && cp -R build/ios/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qry LUXR.ipa Payload && ls -lh LUXR.ipa
+          cp build/emu/luxr-emu.html LUXR-Emulator.html
+      - uses: actions/upload-artifact@v4
+        with: { name: LUXR-ipa, path: LUXR.ipa, retention-days: 30 }
+      - name: Release "ipad"
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh release delete ipad -y --cleanup-tag 2>/dev/null || true
+          gh release create ipad LUXR.ipa LUXR-Emulator.html --target "$GITHUB_SHA" --prerelease \
+            --title "LUXR for iPad (build ${{ github.run_number }})" \
+            --notes "The LUXR emulator as an iPad app, built from ${GITHUB_SHA::7}. Unsigned: install it with SideStore or AltStore (free Apple ID, renewed every 7 days) or with Xcode. See ios-app/README.md."

@@ -1,0 +1,9 @@
+{
+  "appId": "de.orbitator.luxr",
+  "appName": "LUXR",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#11141a"
+  }
+}
