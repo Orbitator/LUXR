@@ -72,6 +72,14 @@ h1 small { font-size: .5em; letter-spacing: 2px; color: var(--muted); padding-bo
 .fine-row button { min-height: 40px; border-radius: 9px; border: 1px solid #ffffff22; background: #1d1f25; color: #f1f1ee; font: 600 15px var(--f-body); cursor: pointer; touch-action: manipulation; }
 .fine-row button:hover { background: #272a31; }
 .fine button:focus-visible, .fine input:focus-visible { outline: 2px solid #ffb43c; outline-offset: 2px; }
+.mpanel { width: min(340px, 88vw); }
+.mp-row { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 8px; font: 13px var(--f-silk); color: #a8adb8; }
+.mp-row select { width: 100%; min-height: 40px; background: #1d1f25; color: #f1f1ee; border: 1px solid #ffffff22; border-radius: 9px; font: 15px var(--f-body); padding: 6px 8px; }
+.mp-bt { min-height: 40px; border-radius: 9px; border: 1px solid #ffffff22; background: #1d1f25; color: #f1f1ee; font: 600 14px var(--f-body); cursor: pointer; }
+.mp-info { font: 12px/1.4 var(--f-body); color: #8d929c; white-space: pre-wrap; }
+.resume { position: absolute; inset: calc(10 * var(--u)) calc(9 * var(--u)); border: 0; border-radius: calc(4 * var(--u)); cursor: pointer; z-index: 5;
+          background: #000c; color: #fff; font: calc(14 * var(--u))/1.3 var(--f-silk); letter-spacing: calc(1 * var(--u)); display: grid; place-content: center; gap: calc(6 * var(--u)); }
+.resume b { font-weight: 400; font-size: calc(20 * var(--u)); }
 .under { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; max-width: 1100px; width: 100%; margin: -6px auto 0; }
 .under .hint { flex: 1 1 320px; min-width: 0; }
 .lock { display: inline-flex; align-items: center; gap: 8px; font: 600 14px var(--f-body); padding: 9px 16px; min-height: 42px; border-radius: 999px;
@@ -87,17 +95,18 @@ h1 small { font-size: .5em; letter-spacing: 2px; color: var(--muted); padding-bo
 .fitbtn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .fitbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .fitbar { display: none; }
-body.fit { overflow: hidden; background: #e7e5de; overscroll-behavior: none; }
+body.fit { overflow: hidden; background: #d3d7de; overscroll-behavior: none; }
 body.fit .wrap > :not(.stage):not(.fitbar) { display: none; }
 body.fit .stage { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: none; margin: 0;
                   --sw: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
-                  --sh: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 8px);
-                  width: min(var(--sw), var(--sh) * 920 / 550); }
-body.fit .fm1 { box-shadow: none; background: #e7e5de; }
+                  --sh: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 64px);
+                  top: calc(50% + 26px); width: min(calc(var(--sw) - 24px), var(--sh) * 920 / 550); }
+
 body.fit .fitbar { display: flex; gap: 8px; position: fixed; z-index: 30; right: calc(10px + env(safe-area-inset-right, 0px));
                    top: calc(10px + env(safe-area-inset-top, 0px)); }
-body.fit .fitbar .fitbtn, body.fit .fitbar .lock { background: #ffffffcc; border-color: #0000001f; color: #2b2f37; min-height: 36px; padding: 6px 12px; font-size: 13px; }
-body.fit .fitbar .lock[aria-pressed="true"] { background: #4c6a97; color: #fff; }
+body.fit .fitbar .fitbtn, body.fit .fitbar .lock { background: #ffffff; border-color: #00000024; color: #2b2f37; min-height: 42px; padding: 8px 16px; font-size: 14px;
+                                                   box-shadow: 0 2px 6px #0000001f; }
+body.fit .fitbar .lock[aria-pressed="true"] { background: #4c6a97; border-color: #4c6a97; color: #fff; }
 .fm1 { --u: calc(100cqw / 920); position: relative; width: 100%; aspect-ratio: 920 / 550; max-width: 100%;
        background: linear-gradient(180deg, #f3f2ed, var(--body-c) 40%, #e4e2db); border-radius: calc(34 * var(--u));
        box-shadow: 0 calc(26 * var(--u)) calc(50 * var(--u)) calc(-22 * var(--u)) #0007, inset 0 calc(-3 * var(--u)) 0 var(--body-edge), inset 0 1px 0 #fff;
@@ -203,7 +212,15 @@ a { color: var(--accent); }
 
   <div class="stage"><div class="fm1" id="fm1" aria-label="FM-1 panel">
     <div class="bezel"><canvas id="lcd" width="720" height="720" aria-label="Display"></canvas>
-      <button class="poweron" id="power"><b>POWER ON</b><span>click to start the sound</span></button></div>
+      <button class="poweron" id="power"><b>POWER ON</b><span>click to start the sound</span></button>
+      <button class="resume" id="resume" hidden><b>SOUND PAUSED</b><span>tap to go on</span></button></div>
+    <div class="fine mpanel" id="mpanel" hidden role="dialog" aria-labelledby="mpName">
+      <div class="fine-head"><span id="mpName">MIDI DEVICES</span><button class="fine-x" id="mpX" aria-label="Close">×</button></div>
+      <label class="mp-row"><span>IN</span><select id="midiIn"><option value="">none</option></select></label>
+      <label class="mp-row"><span>OUT</span><select id="midiOut"><option value="">none</option></select></label>
+      <button class="mp-bt" id="midiBt" hidden>Bluetooth MIDI …</button>
+      <div class="mp-info" id="mpInfo"></div>
+    </div>
     <div class="fine" id="fine" hidden role="dialog" aria-labelledby="fineName">
       <div class="fine-head"><span id="fineName"></span><button class="fine-x" id="fineX" aria-label="Close">×</button></div>
       <div class="fine-label" id="fineLabel"></div>
@@ -215,6 +232,7 @@ a { color: var(--accent); }
   </div></div>
   <div class="fitbar" id="fitbar">
     <button class="lock" id="lock2" aria-pressed="false"><span class="lk-dot" aria-hidden="true"></span>SHIFT lock</button>
+    <button class="fitbtn" id="midiOpen2"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="8" cy="11" r="1"/><circle cx="16" cy="11" r="1"/><circle cx="12" cy="8" r="1"/><circle cx="9.5" cy="15" r="1"/><circle cx="14.5" cy="15" r="1"/></svg>MIDI</button>
     <button class="fitbtn" id="fitOff"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>Exit</button>
   </div>
   <div class="under">
@@ -253,10 +271,8 @@ a { color: var(--accent); }
         <div><kbd>↑</kbd> <kbd>↓</kbd><span>SELECT</span></div>
       </div>
       <p class="hint">Knobs: drag up or down, or use the mouse wheel. Hold a knob still for half a second: a slider sets its value exactly. MASTER is the volume. On a phone, turn it sideways.</p>
-      <div class="row"><label for="midiIn">MIDI in</label><select id="midiIn"><option value="">none</option></select>
-        <label for="midiOut">MIDI out</label><select id="midiOut"><option value="">none</option></select>
-        <button class="btn" id="midiBt" hidden>Bluetooth MIDI …</button></div>
-      <p class="hint" id="midiInfo">MIDI works in Chrome and Edge once the emulator is on. Notes on a sound's MIDI channel play it, alone on its channel it plays tonally (C3 = original pitch).</p>
+      <div class="row"><button class="btn go" id="midiOpen">MIDI devices …</button></div>
+      <p class="hint" id="midiInfo">Choose the MIDI input and output in the MIDI devices panel; it also opens by itself on HOME → MIDI. Works in Chrome, Edge and the iPad app. Notes on a sound's MIDI channel play it, alone on its channel it plays tonally (C3 = original pitch).</p>
     </div>
     <div class="card wide">
       <h2>Controls</h2>
@@ -383,7 +399,8 @@ class Luxr extends AudioWorkletProcessor {
     if (this.t - this.last >= 1470) {
       this.last = this.t;
       const m = { type: "frame", btn: new Uint8Array(ex.memory.buffer, ex.emu_leds_btn(), 14).slice(),
-                  key: new Uint8Array(ex.memory.buffer, ex.emu_leds_key(), 27).slice(), playing: ex.emu_playing(), bpm: ex.emu_bpm() };
+                  key: new Uint8Array(ex.memory.buffer, ex.emu_leds_key(), 27).slice(), playing: ex.emu_playing(), bpm: ex.emu_bpm(),
+                  page: ex.emu_page(), pgMidi: ex.emu_pg_midi() };
       const r = ex.emu_hd_rows();                             /* the sharp screen: the rows that changed */
       if (r) { const y0 = r & 65535, y1 = r >>> 16, w = ex.emu_hd_size(); m.rows = { y0, y1, px: new Uint16Array(ex.memory.buffer, ex.emu_hd() + y0 * w * 2, (y1 - y0) * w).slice() }; }
       if (ex.emu_store_gen() !== this.sg) { this.sg = ex.emu_store_gen(); m.store = new Uint8Array(ex.memory.buffer, ex.emu_store(), ex.emu_store_len()).slice(); }
@@ -570,6 +587,14 @@ function setFit(on) {
   if (!on && fs) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document)?.catch?.(() => {});
 }
 $("fitOn").onclick = () => setFit(true);
+/* iOS suspends ("interrupted") the audio when another app comes to the front: resume it when LUXR is back, and on any
+ * touch; if it stays paused, a tap on the screen continues (the instrument's state is kept, it only stood still) */
+function wake() { try { if (ac && ac.state !== "running" && ac.state !== "closed") ac.resume().catch(() => {}); } catch {} }
+["pointerdown", "touchstart", "keydown"].forEach((n) => document.addEventListener(n, wake, { capture: true, passive: true }));
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { wake(); setTimeout(wake, 300); } });
+window.addEventListener("pageshow", wake); window.addEventListener("focus", wake);
+setInterval(() => { $("resume").hidden = !(ac && node && ac.state !== "running" && !document.hidden); }, 700);
+$("resume").onclick = () => { wake(); setTimeout(wake, 200); };
 $("fitOff").onclick = () => setFit(false);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && fineRole === null && document.body.classList.contains("fit")) setFit(false); });
 document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && document.body.classList.contains("fit") && !NATIVE) setFit(false); });
@@ -672,22 +697,35 @@ $("exp").onclick = async () => {
 let midi = null;
 /* in the iPad app (Capacitor, ios-app/): CoreMIDI and the share sheet through the native plugin LuxrMidi */
 const NATIVE = (() => {
-  try { const C = window.capacitorExports; return C && C.Capacitor.isNativePlatform() ? C.registerPlugin("LuxrMidi") : null; } catch { return null; }
+  try {
+    const C = window.Capacitor;
+    if (!C || typeof C.isNativePlatform !== "function" || !C.isNativePlatform() || typeof C.nativePromise !== "function") return null;
+    const call = (m, o) => C.nativePromise("LuxrMidi", m, o || {});
+    return { start: () => call("start"), listPorts: () => call("listPorts"), sendBatch: (o) => call("sendBatch", o),
+             showBluetooth: () => call("showBluetooth"), shareFile: (o) => call("shareFile", o),
+             addListener: (ev, cb) => C.addListener("LuxrMidi", ev, cb) };
+  } catch { return null; }
 })();
 const midiOk = (st) => st < 0xF0 || st === 0xF8 || st === 0xFA || st === 0xFB || st === 0xFC;   /* (and the clock) */
 async function nativeMidi() {
-  try { await NATIVE.start(); } catch (e) { $("midiInfo").textContent = "MIDI could not start: " + (e.message || e); return; }
+  mpInfo("Starting CoreMIDI …");
+  try { await NATIVE.start(); } catch (e) { mpInfo("MIDI could not start: " + (e.message || e)); return; }
   const fill = async () => {
     let ports = { inputs: [], outputs: [] };
     try { ports = await NATIVE.listPorts(); } catch {}
+    const key = JSON.stringify(ports);
+    if (key === fill.last) return;
+    fill.last = key;
     for (const [id, list] of [["midiIn", ports.inputs], ["midiOut", ports.outputs]]) {
       const sel = $(id), cur = sel.value; sel.length = 1;
       if (id === "midiIn") sel.add(new Option("all inputs", "*"));
       for (const p of list) sel.add(new Option(p.name, p.id));
-      sel.value = [...sel.options].some((o) => o.value === cur) && cur ? cur : (id === "midiIn" ? "*" : "");
+      sel.value = pickPort(sel, cur, id === "midiIn" ? "*" : "");
       sel.dispatchEvent(new Event("change"));
     }
+    mpInfo(`CoreMIDI: ${ports.inputs.length} in, ${ports.outputs.length} out (USB, Bluetooth, network)`);
   };
+  setInterval(fill, 2000);                         /* (a device plugged in may come without a notification) */
   NATIVE.addListener("midimessage", (e) => {
     const want = $("midiIn").value;
     if (!want || (want !== "*" && want !== e.port)) return;
@@ -697,19 +735,31 @@ async function nativeMidi() {
   NATIVE.addListener("statechange", fill);
   await fill();
   $("midiBt").hidden = false;
-  $("midiInfo").textContent = "CoreMIDI: USB, Bluetooth and network MIDI. Notes on a sound's MIDI channel play it, alone on its channel it plays tonally (C3 = original pitch).";
 }
+function mpInfo(t) { $("mpInfo").textContent = t; }
+/* the port chosen before (by name, kept in this browser / app), else the one now, else the default */
+function pickPort(sel, cur, dflt) {
+  let want = "";
+  try { want = localStorage.getItem("luxr-" + sel.id) || ""; } catch {}
+  const opts = [...sel.options];
+  const byName = want && opts.find((o) => o.text === want);
+  if (byName) return byName.value;
+  if (cur && opts.some((o) => o.value === cur)) return cur;
+  return want === "-" ? "" : dflt;
+}
+function rememberPort(sel) { try { localStorage.setItem("luxr-" + sel.id, sel.value ? sel.options[sel.selectedIndex].text : "-"); } catch {} }
 async function midiSetup() {
   if (NATIVE) return nativeMidi();
-  if (!navigator.requestMIDIAccess) { $("midiInfo").textContent = "This browser has no Web MIDI (use Chrome or Edge for a MIDI keyboard)."; return; }
-  try { midi = await navigator.requestMIDIAccess(); } catch { $("midiInfo").textContent = "MIDI access was not granted here. Open the emulator in its own tab to use MIDI."; return; }
+  if (!navigator.requestMIDIAccess) { mpInfo("This browser has no Web MIDI: use Chrome or Edge (or the iPad app) for MIDI devices."); return; }
+  try { midi = await navigator.requestMIDIAccess(); } catch { mpInfo("MIDI access was not granted here. Open the emulator in its own tab to use MIDI."); return; }
   const fill = () => {
     for (const [id, list] of [["midiIn", midi.inputs], ["midiOut", midi.outputs]]) {
       const sel = $(id), cur = sel.value; sel.length = 1;
       for (const p of list.values()) sel.add(new Option(p.name, p.id));
-      sel.value = [...list.keys()].includes(cur) ? cur : (id === "midiIn" && list.size ? [...list.keys()][0] : "");
+      sel.value = pickPort(sel, cur, id === "midiIn" && list.size ? [...list.keys()][0] : "");
       sel.dispatchEvent(new Event("change"));
     }
+    mpInfo(`Web MIDI: ${midi.inputs.size} in, ${midi.outputs.size} out`);
   };
   midi.onstatechange = fill; fill();
 }
@@ -725,6 +775,27 @@ $("midiOut").onchange = () => {
   else midiOut = midi && id ? midi.outputs.get(id) : null;
 };
 $("midiBt").onclick = () => NATIVE?.showBluetooth().catch(() => {});
+$("midiIn").addEventListener("input", (e) => rememberPort(e.target));
+$("midiOut").addEventListener("input", (e) => rememberPort(e.target));
+/* the MIDI devices panel: opened by the buttons, and by itself while the instrument shows HOME > MIDI */
+let mpAuto = false, pgMidi = -1, lastPage = -1;
+function openMidiPanel(auto) {
+  const f = $("mpanel"), d = fm1.getBoundingClientRect(), b = document.querySelector(".bezel").getBoundingClientRect();
+  mpAuto = !!auto; f.hidden = false;
+  f.style.left = Math.max(8, Math.min(b.left - d.left + b.width / 2 - f.offsetWidth / 2, d.width - f.offsetWidth - 8)) + "px";
+  f.style.top = Math.min(b.bottom - d.top + 8, d.height - f.offsetHeight - 8) + "px";
+  if (!node) mpInfo("Switch the emulator on (tap the screen); then the MIDI devices are listed.");
+}
+function closeMidiPanel() { $("mpanel").hidden = true; mpAuto = false; }
+$("mpX").onclick = closeMidiPanel;
+$("midiOpen").onclick = () => { if (document.body.classList.contains("fit")) return openMidiPanel(false); document.querySelector(".stage").scrollIntoView({ block: "center" }); setTimeout(() => openMidiPanel(false), 300); };
+$("midiOpen2").onclick = () => ($("mpanel").hidden ? openMidiPanel(false) : closeMidiPanel());
+function pageSeen(pg) {
+  if (pg === lastPage) return;
+  lastPage = pg;
+  if (pg === pgMidi && $("mpanel").hidden) openMidiPanel(true);
+  else if (pg !== pgMidi && mpAuto) closeMidiPanel();
+}
 function onMout(p) {                               // USB-MIDI packets: CIN in the low nibble of byte 0, then 3 bytes
   if (!midiOut) return;
   for (const v of p) {
@@ -779,6 +850,7 @@ $("power").onclick = async () => {
       else if (m.type === "frame") {
         if (m.rows) drawRows(m.rows.y0, m.rows.y1, m.rows.px);
         if (m.knob && fineRole !== null && fineRole >= 0) showFine(m.knob);
+        pgMidi = m.pgMidi; pageSeen(m.page);
         if (m.store) { store = m.store; storeSave(m.store); refreshSlots(); }
         btnEls.forEach((el, b) => el && el.classList.toggle("lit", !!m.btn[b]));
         keyEls.forEach((el, k) => el.classList.toggle("lit", !!m.key[k]));

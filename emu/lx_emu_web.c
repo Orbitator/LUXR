@@ -275,3 +275,4 @@ EXPORT void *emu_knob(uint32_t role)
     }
     return &e_knob;
 }
+EXPORT uint32_t emu_pg_midi(void) { return PG_MIDI; }

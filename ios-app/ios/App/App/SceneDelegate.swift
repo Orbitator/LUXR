@@ -14,6 +14,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
     }
 
+    /// back from another app: the audio session active again (the page resumes its AudioContext itself)
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        configureAudioSession()
+    }
+
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
         SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
     }
