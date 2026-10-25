@@ -11,6 +11,7 @@
   --ok: #2e8b57; --err: #c23b4a; --pp-heart: #d1344b;
   --body-c: #ecebe5; --body-edge: #d9d7cf; --silk: #4a4d55; --tray: #56709a; --pad: #6582ad; --pad-hi: #7593bd;
   --pad-ink: #eef2f8; --slot: #3d4350; --glow: #ffe2a8; --knob: #17181b;
+  --body-hi: #f3f2ed; --body-lo: #e4e2db; --tray-hi: #4d668e; --pad-lo: #5a76a0; --pad-sh: #3e557a; --kl: #e3e9f3; --gdot: #1d2433;
   --f-silk: "Share Tech Mono", ui-monospace, Menlo, Consolas, monospace;
   --f-pad: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
   --f-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -81,6 +82,25 @@ h1 small { font-size: .5em; letter-spacing: 2px; color: var(--muted); padding-bo
 .resume { position: absolute; inset: calc(10 * var(--u)) calc(9 * var(--u)); border: 0; border-radius: calc(4 * var(--u)); cursor: pointer; z-index: 5;
           background: #000c; color: #fff; font: calc(14 * var(--u))/1.3 var(--f-silk); letter-spacing: calc(1 * var(--u)); display: grid; place-content: center; gap: calc(6 * var(--u)); }
 .resume b { font-weight: 400; font-size: calc(20 * var(--u)); }
+.fm1[data-c="grey"]   { --tray: #6f747d; --tray-hi: #666b74; --pad: #8c919a; --pad-hi: #9ea3ab; --pad-lo: #82878f; --pad-sh: #595e66; --pad-ink: #f5f6f8; --kl: #eef0f3; --gdot: #3a3d43; }
+.fm1[data-c="green"]  { --tray: #5b8a6c; --tray-hi: #537f63; --pad: #74a585; --pad-hi: #84b393; --pad-lo: #6a9a7b; --pad-sh: #446b52; --pad-ink: #f2f8f4; --kl: #e8f3ec; --gdot: #233a2c; }
+.fm1[data-c="black"]  { --body-c: #26272c; --body-hi: #303137; --body-lo: #1e1f23; --body-edge: #151619; --silk: #b4b8c1;
+                        --tray: #17181b; --tray-hi: #121315; --pad: #3b3d43; --pad-hi: #47494f; --pad-lo: #34363b; --pad-sh: #0e0f11;
+                        --pad-ink: #e7e8eb; --kl: #c9ccd3; --slot: #17181b; --gdot: #8a8e97; }
+.fm1[data-c="blackgreen"] { --body-c: #26272c; --body-hi: #303137; --body-lo: #1e1f23; --body-edge: #151619; --silk: #b4b8c1;
+                        --tray: #17181b; --tray-hi: #121315; --pad: #3f8a58; --pad-hi: #4c9a66; --pad-lo: #388050; --pad-sh: #1d4a2c;
+                        --pad-ink: #effaf2; --kl: #dff2e5; --slot: #1a2a1f; --gdot: #8a8e97; }
+.fm1[data-c="purple"] { --body-c: #7a5aa6; --body-hi: #8667b1; --body-lo: #6d4f98; --body-edge: #5b3f84; --silk: #f1ebfa;
+                        --tray: #5a3f86; --tray-hi: #523a7c; --pad: #a083cf; --pad-hi: #ae94d8; --pad-lo: #9577c5; --pad-sh: #4a336f;
+                        --pad-ink: #ffffff; --kl: #f4eefc; --slot: #3b2a5a; --gdot: #2c1f45; }
+.fm1[data-c="orange"] { --body-c: #ea7a30; --body-hi: #f28a43; --body-lo: #dd6c22; --body-edge: #c45c18; --silk: #2a1a10;
+                        --tray: #2b2a2c; --tray-hi: #262527; --pad: #3d3c3f; --pad-hi: #49484b; --pad-lo: #363538; --pad-sh: #141315;
+                        --pad-ink: #f6efe8; --kl: #e9dfd6; --slot: #1b1a1c; --gdot: #3a1d0b; }
+.colors { display: inline-flex; gap: 6px; align-items: center; }
+.colors button { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0;
+                 background: linear-gradient(135deg, var(--a) 0 50%, var(--b) 50% 100%); box-shadow: 0 0 0 1px #0003 inset; }
+.colors button[aria-pressed="true"] { border-color: var(--accent); }
+.colors button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .under { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; max-width: 1100px; width: 100%; margin: -6px auto 0; }
 .under .hint { flex: 1 1 320px; min-width: 0; }
 .lock { display: inline-flex; align-items: center; gap: 8px; font: 600 14px var(--f-body); padding: 9px 16px; min-height: 42px; border-radius: 999px;
@@ -109,7 +129,7 @@ body.fit .fitbar .fitbtn, body.fit .fitbar .lock { background: #ffffff; border-c
                                                    box-shadow: 0 2px 6px #0000001f; }
 body.fit .fitbar .lock[aria-pressed="true"] { background: #4c6a97; border-color: #4c6a97; color: #fff; }
 .fm1 { --u: calc(100cqw / 920); position: relative; width: 100%; aspect-ratio: 920 / 550; max-width: 100%;
-       background: linear-gradient(180deg, #f3f2ed, var(--body-c) 40%, #e4e2db); border-radius: calc(34 * var(--u));
+       background: linear-gradient(180deg, var(--body-hi), var(--body-c) 40%, var(--body-lo)); border-radius: calc(34 * var(--u));
        box-shadow: 0 calc(26 * var(--u)) calc(50 * var(--u)) calc(-22 * var(--u)) #0007, inset 0 calc(-3 * var(--u)) 0 var(--body-edge), inset 0 1px 0 #fff;
        user-select: none; -webkit-user-select: none; touch-action: pan-y; color: var(--silk); }
 .fm1 .at { position: absolute; }
@@ -123,13 +143,13 @@ body.fit .fitbar .lock[aria-pressed="true"] { background: #4c6a97; border-color:
                background: #d8d8d4; border-radius: 1px; transform-origin: 50% calc(12 * var(--u)); transform: rotate(var(--a, 0deg)); }
 .knob.pot::after { background: #f1f1ee; width: calc(5 * var(--u)); margin-left: calc(-2.5 * var(--u)); }
 .knob:focus-visible, .pad:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.tray { position: absolute; background: linear-gradient(180deg, #4d668e, var(--tray)); border-radius: calc(12 * var(--u));
+.tray { position: absolute; background: linear-gradient(180deg, var(--tray-hi), var(--tray)); border-radius: calc(12 * var(--u));
         box-shadow: inset 0 calc(2 * var(--u)) calc(4 * var(--u)) #0004, 0 1px 0 #fff8; }
 .pad { position: absolute; border: 0; padding: 0; cursor: pointer; color: var(--pad-ink); font: 700 calc(12.5 * var(--u))/1.05 var(--f-pad); letter-spacing: calc(.4 * var(--u));
-       background: linear-gradient(180deg, var(--pad-hi), var(--pad) 55%, #5a76a0); border-radius: calc(9 * var(--u));
-       box-shadow: 0 calc(3 * var(--u)) 0 #3e557a, 0 calc(4 * var(--u)) calc(6 * var(--u)) #0004, inset 0 1px 0 #ffffff40;
+       background: linear-gradient(180deg, var(--pad-hi), var(--pad) 55%, var(--pad-lo)); border-radius: calc(9 * var(--u));
+       box-shadow: 0 calc(3 * var(--u)) 0 var(--pad-sh), 0 calc(4 * var(--u)) calc(6 * var(--u)) #0004, inset 0 1px 0 #ffffff40;
        transition: box-shadow .06s, transform .06s, color .1s, text-shadow .1s; touch-action: none; }
-.pad.down { transform: translateY(calc(2 * var(--u))); box-shadow: 0 calc(1 * var(--u)) 0 #3e557a, inset 0 1px 0 #ffffff30; }
+.pad.down { transform: translateY(calc(2 * var(--u))); box-shadow: 0 calc(1 * var(--u)) 0 var(--pad-sh), inset 0 1px 0 #ffffff30; }
 .pad.lit { color: #fffaf0; text-shadow: 0 0 calc(6 * var(--u)) var(--glow), 0 0 calc(12 * var(--u)) var(--glow); }
 .pad.sq { width: calc(46 * var(--u)); height: calc(42 * var(--u)); margin: calc(-21 * var(--u)) 0 0 calc(-23 * var(--u)); }
 .pad.oct { width: calc(62 * var(--u)); height: calc(33 * var(--u)); }
@@ -142,8 +162,8 @@ body.fit .fitbar .lock[aria-pressed="true"] { background: #4c6a97; border-color:
 .key.b .slot { top: calc(20 * var(--u)); height: calc(26 * var(--u)); }
 .key.w .slot { top: calc(19 * var(--u)); height: calc(46 * var(--u)); }
 .key.lit .slot { background: var(--glow); box-shadow: 0 0 calc(8 * var(--u)) var(--glow), 0 0 calc(3 * var(--u)) #fff; }
-.key .kl { position: absolute; left: 0; right: 0; top: calc(56 * var(--u)); text-align: center; font: 700 calc(10.5 * var(--u))/1 var(--f-pad); color: #e3e9f3; }
-.gdot { position: absolute; width: calc(5 * var(--u)); height: calc(5 * var(--u)); margin: calc(-2.5 * var(--u)) 0 0 calc(-2.5 * var(--u)); border-radius: 50%; background: #1d2433; }
+.key .kl { position: absolute; left: 0; right: 0; top: calc(56 * var(--u)); text-align: center; font: 700 calc(10.5 * var(--u))/1 var(--f-pad); color: var(--kl); }
+.gdot { position: absolute; width: calc(5 * var(--u)); height: calc(5 * var(--u)); margin: calc(-2.5 * var(--u)) 0 0 calc(-2.5 * var(--u)); border-radius: 50%; background: var(--gdot); }
 .bezel { position: absolute; left: calc(238 * var(--u)); top: calc(40 * var(--u)); width: calc(216 * var(--u)); height: calc(218 * var(--u));
          background: #0b0b0c; border-radius: calc(20 * var(--u)); box-shadow: inset 0 0 0 calc(2 * var(--u)) #2a2a2c, 0 1px 0 #fff; }
 canvas#lcd { position: absolute; left: calc(9 * var(--u)); top: calc(10 * var(--u)); width: calc(198 * var(--u)); height: calc(198 * var(--u));
@@ -233,11 +253,13 @@ a { color: var(--accent); }
   </div></div>
   <div class="fitbar" id="fitbar">
     <button class="lock" id="lock2" aria-pressed="false"><span class="lk-dot" aria-hidden="true"></span>SHIFT lock</button>
+    <button class="fitbtn" id="colorNext" title="Next FM-1 colour"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg>Colour</button>
     <button class="fitbtn" id="midiOpen2"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="8" cy="11" r="1"/><circle cx="16" cy="11" r="1"/><circle cx="12" cy="8" r="1"/><circle cx="9.5" cy="15" r="1"/><circle cx="14.5" cy="15" r="1"/></svg>MIDI</button>
     <button class="fitbtn" id="fitOff"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>Exit</button>
   </div>
   <div class="under">
     <button class="lock" id="lock" aria-pressed="false"><span class="lk-dot" aria-hidden="true"></span>SHIFT lock</button>
+    <div class="colors" id="colors" role="group" aria-label="FM-1 colour"></div>
     <span class="hint">For the mouse: SHIFT lock keeps GLO held, so you can click a key or turn a knob with SHIFT
     (SHIFT + F#3 keeps snapshot 1). Click again to let go. Right-clicking GLO does the same; on a touch screen hold GLO with one finger.</span>
   </div>
@@ -552,7 +574,7 @@ function setKeys() {
   fm1.addEventListener("pointerup", end); fm1.addEventListener("pointercancel", end);
 })();
 // key LED pads: the .key elements take the "down" look from .pad.down
-document.head.insertAdjacentHTML("beforeend", "<style>.key.down{transform:translateY(calc(2 * var(--u)));box-shadow:0 calc(1 * var(--u)) 0 #3e557a}</style>");
+document.head.insertAdjacentHTML("beforeend", "<style>.key.down{transform:translateY(calc(2 * var(--u)));box-shadow:0 calc(1 * var(--u)) 0 var(--pad-sh)}</style>");
 
 /* the computer keyboard, by physical key (any layout) */
 const WHITE_CODES = ["KeyA", "KeyS", "KeyD", "KeyF", "KeyG", "KeyH", "KeyJ", "KeyK", "KeyZ", "KeyX", "KeyC", "KeyV", "KeyB", "KeyN", "KeyM", "Comma"];
@@ -577,6 +599,24 @@ document.addEventListener("keyup", (e) => {
 window.addEventListener("blur", () => { held = 0; kbKeys = 0; btnEls.forEach((el, b) => el?.classList.toggle("down", !!(heldNow() & (1 << b)))); send({ type: "btn", held: heldNow() }); setKeys(); });
 $("lock").onclick = () => setLock(!shiftLock);
 $("lock2").onclick = () => setLock(!shiftLock);
+/* the FM-1's colours (as sold: white & blue, white & grey, white & green, black, black & green, purple, orange) */
+const COLORS = [["blue", "White & Blue", "#ecebe5", "#6582ad"], ["grey", "White & Grey", "#ecebe5", "#8c919a"],
+                ["green", "White & Green", "#ecebe5", "#74a585"], ["black", "Black", "#26272c", "#3b3d43"],
+                ["blackgreen", "Black & Green", "#26272c", "#3f8a58"], ["purple", "Purple", "#7a5aa6", "#a083cf"],
+                ["orange", "Orange", "#ea7a30", "#3d3c3f"]];
+function setColor(c) {
+  if (!COLORS.some((x) => x[0] === c)) c = "blue";
+  if (c === "blue") delete fm1.dataset.c; else fm1.dataset.c = c;
+  document.querySelectorAll("#colors button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.c === c)));
+  try { localStorage.setItem("luxr-color", c); } catch {}
+}
+for (const [c, name, a, b] of COLORS) {
+  const el = document.createElement("button");
+  el.dataset.c = c; el.title = name; el.setAttribute("aria-label", name); el.style.setProperty("--a", a); el.style.setProperty("--b", b);
+  el.onclick = () => setColor(c); $("colors").append(el);
+}
+$("colorNext").onclick = () => { const i = COLORS.findIndex((x) => x[0] === (fm1.dataset.c || "blue")); setColor(COLORS[(i + 1) % COLORS.length][0]); };
+{ let c = "blue"; try { c = localStorage.getItem("luxr-color") || "blue"; } catch {} setColor(c); }
 /* FIT: the instrument fills the screen (and the browser goes full screen where it may; the iPad app is already) */
 function setFit(on) {
   closeFine();
