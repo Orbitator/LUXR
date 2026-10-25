@@ -162,7 +162,9 @@ body.fit .fitbar .lock[aria-pressed="true"] { background: #4c6a97; border-color:
 .key.b .slot { top: calc(20 * var(--u)); height: calc(26 * var(--u)); }
 .key.w .slot { top: calc(19 * var(--u)); height: calc(46 * var(--u)); }
 .key.lit .slot { background: var(--glow); box-shadow: 0 0 calc(8 * var(--u)) var(--glow), 0 0 calc(3 * var(--u)) #fff; }
-.key .kl { position: absolute; left: 0; right: 0; top: calc(56 * var(--u)); text-align: center; font: 700 calc(10.5 * var(--u))/1 var(--f-pad); color: var(--kl); }
+.key .kl { position: absolute; left: 0; right: 0; top: calc(53 * var(--u)); text-align: center; font: 700 calc(9.5 * var(--u))/1 var(--f-pad); color: var(--kl);
+           letter-spacing: calc(-.1 * var(--u)); white-space: nowrap; }
+.key .kl i { display: block; font-style: normal; font-weight: 500; font-size: calc(7.5 * var(--u)); margin-top: calc(3 * var(--u)); opacity: .72; }
 .gdot { position: absolute; width: calc(5 * var(--u)); height: calc(5 * var(--u)); margin: calc(-2.5 * var(--u)) 0 0 calc(-2.5 * var(--u)); border-radius: 50%; background: var(--gdot); }
 .bezel { position: absolute; left: calc(238 * var(--u)); top: calc(40 * var(--u)); width: calc(216 * var(--u)); height: calc(218 * var(--u));
          background: #0b0b0c; border-radius: calc(20 * var(--u)); box-shadow: inset 0 0 0 calc(2 * var(--u)) #2a2a2c, 0 1px 0 #fff; }
@@ -547,7 +549,13 @@ function fineSet(v) {
 
 /* the keys: 27 from F3, 16 white */
 const isBlack = (k) => (0x54A >> ((k + 5) % 12)) & 1, keyEls = [], pointers = new Map();
-const BLACK_X = [96, 148, 199, 302, 354, 457, 509, 560, 665, 717, 820], BLACK_PRINT = ["OP1", "OP2", "OP3", "OP4", "OP5", "OP6", "PIT", "GLO", "MONO", "POLY", ""];
+const BLACK_X = [96, 148, 199, 302, 354, 457, 509, 560, 665, 717, 820], BLACK_PRINT = [   /* LUXR's black keys: [label, with SHIFT, what they do] (README, lx_ui.c black_key) */
+  ["SNAP 1", "KEEP", "Snapshot 1: hold to play it (SHIFT: keep the sound now)"], ["SNAP 2", "KEEP", "Snapshot 2: hold to play it (SHIFT: keep the sound now)"],
+  ["MUTE", "ALL ON", "Mute the sound (SHIFT: all on)"], ["SOLO", "OFF", "Solo the sound (SHIFT: solo off)"],
+  ["RND", "NEW SND", "Random mute; hold: all on (SHIFT: a new sound)"], ["COPY", "PATTERN", "Copy the bar (SHIFT: the pattern)"],
+  ["PASTE", "PATTERN", "Paste the bar (SHIFT: the pattern)"], ["UNDO", "REDO", "Undo (SHIFT: redo)"],
+  ["P-LOCK", "ACCENT", "P-lock on / off (SHIFT: accent mode)"], ["NUDGE", "FOLLOW", "Nudge on / off (SHIFT: follow)"],
+  ["FILL", "TAP", "Fill while held (SHIFT: tap tempo)"]];
 function setKeys() {
   keys = kbKeys;
   for (const k of pointers.values()) if (k >= 0) keys |= 1 << k;
@@ -572,7 +580,8 @@ function setKeys() {
   for (let k = 0; k < 27; k++) {
     const el = document.createElement("div"), b = isBlack(k);
     el.className = "pad key " + (b ? "b" : "w"); el.dataset.k = k;
-    el.innerHTML = `<span class="slot"></span>` + (b && BLACK_PRINT[bl] ? `<span class="kl">${BLACK_PRINT[bl]}</span>` : "");
+    el.innerHTML = `<span class="slot"></span>` + (b ? `<span class="kl">${BLACK_PRINT[bl][0]}<i>${BLACK_PRINT[bl][1]}</i></span>` : "");
+    if (b) el.title = BLACK_PRINT[bl][2];
     el.style.left = U(b ? BLACK_X[bl++] : 70 + 51.73 * w++);
     fm1.append(el); keyEls[k] = el;
   }
