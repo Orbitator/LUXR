@@ -90,6 +90,7 @@ static void kit_apply(const lxk_kit_t *k)
 
 /* ----------------------------------------------------------- parameters --- */
 static uint8_t e_kit, e_vol = 100, e_map, e_tsnd;  /* the kit loaded, VOLUME, NOTE MAP, TONAL SND */
+static uint8_t e_focus;                          /* the sound being edited (ui_voice: PERFORM sets it, the grid follows) */
 enum { PT_INT, PT_ENUM };
 typedef struct {
     const char *key, *name;
@@ -382,25 +383,63 @@ static void jb_param(jb_t *j, const char *key, const char *name, const pdef_t *d
         jb_put(j, ",\"unit\":\"%s\"", d->unit);
     jb_put(j, "}");
 }
-static const uint8_t KIT_PAGE[][8] = {           /* the kit's pages (G_*; 0xFF a gap) */
-    {G_VOL, G_TUNE, G_DDEC, G_OGAIN, G_MAP, G_TSND, G_MFLT, G_MRES},
+/* The eight knobs. ROOT: the kit's performance macros (knob 1 VOLUME .. 8 REVERB RETURN). A sound (Kick .. Cymbal): page
+ * 1 its synth layer in LUXR's EDIT order (knobs 1-4 LUXR's row A, 5-8 the row B LUXR has under SHIFT), page 2 the sample
+ * layer, page 3 the mix and the envelope (LEVEL PAN DELAY REVERB | DRIVE ATTACK GATE RELEASE), page 4 the LFOs (1 on
+ * knobs 1-4, 2 on 5-8), page 5 VARIATION. The kit's other pages below. PERFORM (perform.js) puts two of these pages on
+ * the knobs at once: the first as they are, the second with SHIFT held. */
+static const uint8_t KIT_ROOT[8] = {G_VOL, G_TUNE, G_DDEC, G_MFLT, G_MRES, G_DRVA, G_DLYL, G_REVL};
+static const uint8_t KIT_PAGE[][8] = {           /* (G_*; 0xFF a gap) */
     {G_DRVM, G_DRVA, G_DRVT, G_DRVL, G_REVS, G_REVD, G_REVP, G_REVL},
     {G_DLYM, G_DLYD, G_DLYD2, G_DLYF, G_DLYT, G_DLYL, 0xFF, 0xFF},
-    {G_CTHR, G_CRAT, G_CATK, G_CREL, G_CMAK, G_PCLIP, G_ALVL, G_ATGT},
-    {G_CLIM, G_LCEIL, G_LREL, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
+    {G_CTHR, G_CRAT, G_CATK, G_CREL, G_CMAK, G_CLIM, G_LCEIL, G_LREL},
+    {G_OGAIN, G_MAP, G_TSND, 0xFF, G_PCLIP, G_ALVL, G_ATGT, 0xFF},
 };
-static const char *const KIT_PAGE_NAME[] = {"Kit", "Drive & Reverb", "Delay", "Compressor", "Limiter"};
-static const char *const KIT_PAGE_ID[] = {"kit", "fx", "delay", "comp", "limit"};
+static const char *const KIT_PAGE_NAME[] = {"Drive & Reverb", "Delay", "Comp & Limiter", "Setup"};
+static const char *const KIT_PAGE_ID[] = {"fx", "delay", "dyn", "setup"};
+#define PERFORM_JSON "{\"key\":\"perform\",\"name\":\"Perform\",\"type\":\"canvas\",\"canvas_script\":\"perform.js\"," \
+                     "\"enterable\":true,\"show_footer\":false,\"show_value\":false}"
+static void knobs_put(jb_t *j, const uint8_t *g, uint32_t n)   /* a knob list of G_* (0xFF: null), trailing gaps dropped */
+{
+    uint32_t i, last = 0;
+    for (i = 0; i < n; i++)
+        if (g[i] != 0xFF)
+            last = i;
+    jb_put(j, "\"knobs\":[");
+    for (i = 0; i <= last; i++) {
+        if (i)
+            jb_put(j, ",");
+        if (g[i] == 0xFF)
+            jb_put(j, "null");
+        else
+            jb_put(j, "\"%s\"", GDEF[g[i]].key);
+    }
+    jb_put(j, "]");
+}
+static void gparams_put(jb_t *j, const uint8_t *g, uint32_t n)
+{
+    uint32_t i, k = 0;
+    for (i = 0; i < n; i++)
+        if (g[i] != 0xFF) {
+            if (k++)
+                jb_put(j, ",");
+            jb_param(j, GDEF[g[i]].key, GDEF[g[i]].name, &GDEF[g[i]], g_get(g[i]));
+        }
+}
 static void hierarchy(jb_t *j)
 {
     uint32_t t, k, i;
-    jb_put(j, "{\"pad_layout\":\"drums\",\"levels\":{\"root\":{\"name\":\"LUXR\",\"list_param\":\"kit\","
-              "\"count_param\":\"kit_count\",\"name_param\":\"kit_name\",\"params\":[");
+    jb_put(j, "{\"pad_layout\":\"drums\",\"focus_param\":\"ui_voice\",\"levels\":{\"root\":{\"name\":\"LUXR\","
+              "\"list_param\":\"kit\",\"count_param\":\"kit_count\",\"name_param\":\"kit_name\",\"params\":["
+              PERFORM_JSON ",");
+    gparams_put(j, KIT_ROOT, 8);
     for (t = 0; t < NTRK; t++)
-        jb_put(j, "{\"level\":\"snd%u\",\"label\":\"%s\"},", t + 1u, O_SND[t]);
+        jb_put(j, ",{\"level\":\"snd%u\",\"label\":\"%s\"}", t + 1u, O_SND[t]);
     for (k = 0; k < NELEM(KIT_PAGE); k++)
-        jb_put(j, "%s{\"level\":\"%s\",\"label\":\"%s\"}", k ? "," : "", KIT_PAGE_ID[k], KIT_PAGE_NAME[k]);
-    jb_put(j, "],\"knobs\":[\"k_vol\",\"k_tune\",\"k_decay\",\"k_ogain\",\"k_map\",\"k_tsnd\",\"k_mflt\",\"k_mres\"]}");
+        jb_put(j, ",{\"level\":\"%s\",\"label\":\"%s\"}", KIT_PAGE_ID[k], KIT_PAGE_NAME[k]);
+    jb_put(j, "],");
+    knobs_put(j, KIT_ROOT, 8);
+    jb_put(j, "}");
     for (t = 0; t < NTRK; t++) {                 /* a voice a sound: its note as the MOVE map has it */
         static const char *const ROLE[NTRK] = {"kick", "snare", "clap", "hat", "hat", "tom", "rim", "cymbal"};
         char key[16];
@@ -418,21 +457,11 @@ static void hierarchy(jb_t *j)
         jb_put(j, "]}");
     }
     for (k = 0; k < NELEM(KIT_PAGE); k++) {
-        uint32_t n = 0, last = 0;
         jb_put(j, ",\"%s\":{\"name\":\"%s\",\"params\":[", KIT_PAGE_ID[k], KIT_PAGE_NAME[k]);
-        for (i = 0; i < 8u; i++)
-            if (KIT_PAGE[k][i] != 0xFF) {
-                const pdef_t *d = &GDEF[KIT_PAGE[k][i]];
-                if (n++)
-                    jb_put(j, ",");
-                jb_param(j, d->key, d->name, d, g_get(KIT_PAGE[k][i]));
-                last = i;
-            }
-        jb_put(j, "],\"knobs\":[");
-        for (i = 0; i <= last; i++)
-            jb_put(j, "%s%s%s%s", i ? "," : "", KIT_PAGE[k][i] == 0xFF ? "" : "\"",
-                   KIT_PAGE[k][i] == 0xFF ? "null" : GDEF[KIT_PAGE[k][i]].key, KIT_PAGE[k][i] == 0xFF ? "" : "\"");
-        jb_put(j, "]}");
+        gparams_put(j, KIT_PAGE[k], 8);
+        jb_put(j, "],");
+        knobs_put(j, KIT_PAGE[k], 8);
+        jb_put(j, "}");
     }
     jb_put(j, "}}");
 }
@@ -442,7 +471,8 @@ static void chain_params(jb_t *j)
 {
     uint32_t t, i, n = 0;
     char key[16], name[32];
-    jb_put(j, "[{\"key\":\"kit\",\"name\":\"Kit\",\"type\":\"int\",\"min\":0,\"max\":%u,\"step\":1}", LXK_NKITS - 1u);
+    jb_put(j, "[" PERFORM_JSON ",{\"key\":\"kit\",\"name\":\"Kit\",\"type\":\"int\",\"min\":0,\"max\":%u,\"step\":1}",
+           LXK_NKITS - 1u);
     for (i = 0; i < G_N; i++)
         if (GDEF[i].type == PT_INT) {
             jb_put(j, ",");
@@ -526,6 +556,7 @@ static void e_init(uint32_t seed)
     e_vol = 100;
     e_map = 0;
     e_tsnd = 0;
+    e_focus = 0;
     master_set();
     rv_init();
     for (i = 0; i < TR_N; i++) {                 /* the sample layer's names */
@@ -605,6 +636,10 @@ static void e_set(const char *key, const char *val)
         kit_load((uint32_t)clamp(atoi(val), 0, LXK_NKITS - 1));
     } else if (!strcmp(key, "state")) {
         state_set(val);
+    } else if (!strcmp(key, "ui_voice")) {       /* "snd3" (a level), or 0..7 */
+        int n = !strncmp(val, "snd", 3) ? atoi(val + 3) - 1 : atoi(val);
+        if (n >= 0 && n < NTRK)
+            e_focus = (uint8_t)n;
     } else {
         set_value(key, val);
     }
@@ -623,6 +658,8 @@ static int e_get(const char *key, char *buf, int buf_len)
         chain_params(&j);
     } else if (!strcmp(key, "state")) {
         state_get(&j);
+    } else if (!strcmp(key, "ui_voice")) {
+        jb_put(&j, "snd%u", e_focus + 1u);
     } else if (!strcmp(key, "name")) {
         jb_put(&j, "LUXR");
     } else if (!strcmp(key, "kit")) {

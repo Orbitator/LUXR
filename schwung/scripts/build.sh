@@ -60,7 +60,7 @@ compile "$CROSS" "$OUT/aarch64/dsp.so" -march=armv8-a -mtune=cortex-a72 -DNDEBUG
 "${CROSS_PREFIX:-aarch64-linux-gnu-}strip" --strip-unneeded "$OUT/aarch64/dsp.so" 2>/dev/null || true
 cp "$OUT/aarch64/dsp.so" "$DIST/dsp.so"
 chmod 0755 "$DIST/dsp.so"
-cp schwung/src/module.json schwung/src/help.json "$DIST/"
+cp schwung/src/module.json schwung/src/help.json schwung/src/perform.js "$DIST/"
 cp LICENSE "$DIST/LICENSE"
 cp schwung/LICENSE-SCHWUNG "$DIST/LICENSE-SCHWUNG"
 cp schwung/NOTICE-LXR.txt "$DIST/NOTICE-LXR.txt"

@@ -2,7 +2,7 @@
   "id": "luxr",
   "name": "LUXR",
   "abbrev": "LUXR",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "LUXR drum machine: eight LXR-style drum voices with sample layer, kit FX, compressor and limiter",
   "author": "orbitator",
   "license": "GPL-3.0 (LXR transient samples: non-commercial, see NOTICE-LXR.txt)",

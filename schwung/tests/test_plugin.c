@@ -123,6 +123,15 @@ int main(int argc, char **argv)
     api->get_param(a, "s1_p1", val, sizeof val);
     CHECK(!strcmp(val, "14"), "the factory kick's pitch: %s", val);
     CHECK(api->get_param(a, "nonsense", val, sizeof val) == -1, "an unknown key");
+    n = api->get_param(a, "ui_hierarchy", big, sizeof big);
+    CHECK(strstr(big, "\"focus_param\":\"ui_voice\"") && strstr(big, "\"canvas_script\":\"perform.js\""),
+          "the hierarchy: focus and PERFORM");
+    api->set_param(a, "ui_voice", "snd5");
+    api->get_param(a, "ui_voice", val, sizeof val);
+    CHECK(!strcmp(val, "snd5"), "ui_voice: %s", val);
+    api->set_param(a, "ui_voice", "snd9");
+    api->get_param(a, "ui_voice", val, sizeof val);
+    CHECK(!strcmp(val, "snd5"), "ui_voice out of range ignored: %s", val);
 
     /* silence, then the eight sounds on the Move map, then accents */
     r = block_rms(a, 40, 0, 0, 0);

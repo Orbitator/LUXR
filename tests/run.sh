@@ -23,6 +23,7 @@ python3 -c "import importlib.util,sys;sys.argv=['x'];s=importlib.util.spec_from_
 NATIVE=1 schwung/scripts/build.sh >/dev/null
 cc -O1 -g -Wall -Ischwung/dsp -o build/schwung/test_plugin schwung/tests/test_plugin.c -ldl -lm
 mkdir -p build/schwung/out && build/schwung/test_plugin build/schwung/native/dsp.so build/schwung/out >/dev/null
+node schwung/tests/test_perform.mjs build/schwung/out/ui_hierarchy.json
 # the voice pool: audible cuts a minute over 40 songs (limit 2), and the render cost (ratios only)
 clang -O2 -w $CF -o build/voices_bench tests/voices_bench.c -lm
 build/voices_bench 40 8 2 | tail -2

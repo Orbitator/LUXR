@@ -41,6 +41,7 @@ jobs:
           mkdir -p build/schwung/out && build/schwung/test_plugin build/schwung/native/dsp.so build/schwung/out
           for f in ui_hierarchy chain_params state; do python3 -m json.tool build/schwung/out/$f.json >/dev/null; done
           python3 -m json.tool schwung/src/help.json >/dev/null
+          node schwung/tests/test_perform.mjs build/schwung/out/ui_hierarchy.json
       - name: Module (aarch64), tested under QEMU
         run: |
           schwung/scripts/build.sh

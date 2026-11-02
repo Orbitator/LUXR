@@ -50,6 +50,67 @@
       ]
     },
     {
+      "title": "Knobs & Shift",
+      "children": [
+        {
+          "title": "Knob pages",
+          "lines": [
+            "LUXR (first page):",
+            "1 Volume  2 Tune",
+            "3 Decay   4 Filter",
+            "5 Reso    6 Drive",
+            "7 Delay return",
+            "8 Reverb return",
+            "",
+            "A sound, page 1:",
+            "its synth layer, as",
+            "LUXR's EDIT: knobs",
+            "1-4 row A, 5-8 the",
+            "row B (SHIFT on",
+            "LUXR).",
+            "Page 2: sample layer",
+            "Page 3: Level Pan",
+            "Delay Reverb | Drive",
+            "Attack Gate Release",
+            "Page 4: LFO 1 | 2",
+            "Page 5: Variation",
+            "",
+            "Shift + knob: fine."
+          ]
+        },
+        {
+          "title": "Perform",
+          "lines": [
+            "LUXR page > Perform:",
+            "the knobs as on",
+            "LUXR, a row and its",
+            "SHIFT row.",
+            "",
+            "Knob 1-8: row A",
+            "Shift+knob: row B",
+            "Jog: the sound",
+            "Jog click: layer",
+            "Pad: its sound",
+            "Touch knob: value",
+            "Back: out",
+            "",
+            "SOUND: synth layer",
+            "Shift: sample layer",
+            "MIX: Level Pan Dly",
+            "Rev Drv Atk Gate Rel",
+            "Shift: LFO 1 + 2",
+            "KIT: Vol Tune Decay",
+            "Filt Reso Drive",
+            "Dly Rev returns",
+            "Shift: Dly time",
+            "Fdbk Size Damp",
+            "Thresh Ratio",
+            "Makeup Limiter"
+          ]
+        }
+      ]
+    },
+    {
       "title": "Pages",
       "children": [
         {

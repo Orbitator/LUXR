@@ -6,7 +6,7 @@ Delay, Reverb), Master-Filter, Kompressor und Limiter – derselbe Festkomma-Cod
 (`firmware/src/lx_synth.c`, unverändert eingebunden). Der Sequencer und das Panel von LUXR bleiben auf dem FM-1: auf dem
 Move sequenziert der Move, LUXR klingt.
 
-Status: **v0.1.0, auf dem Rechner und unter QEMU (aarch64) getestet, noch nie auf einem Move gelaufen.**
+Status: **v0.2.0, auf dem Rechner und unter QEMU (aarch64) getestet, noch nie auf einem Move gelaufen.**
 
 ## Installieren
 
@@ -32,18 +32,61 @@ Dann im Shadow-Modus auf einer Spur **LUXR** als Synth laden – am besten auf e
 Die geschlossene Hi-Hat würgt die offene ab (wie auf LUXR). Note-Off bedeutet nichts – die Länge macht **Gate** (in
 Vierteln eines 16tels, 0 = aus) und **Release** des Sounds.
 
+## Die 8 Drehknöpfe und Shift
+
+Schwung gibt einem Modul die Knöpfe auf zwei Wegen: im **Knopf-Grid** des Hosts (Seiten zu je 8, Jog blättert,
+Shift + Knopf = Feineinstellung – Shift gehört dort dem Host) und auf einem eigenen **Vollbild-Screen**, auf dem das
+Modul Knöpfe, Jog-Rad, Jog-Klick und Pads selbst bekommt und abfragen darf, ob Shift gehalten wird. LUXR nutzt beides.
+
+**Im Grid** sind die Seiten so geordnet, dass Knopf *n* überall dasselbe Gewicht hat:
+
+| Seite | Knopf 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| LUXR (die erste) | Volume | Tune | Decay | Filter | Reso | Drive | Delay-Return | Reverb-Return |
+| Sound, Seite 1 (Synth) | LUXRs EDIT 1 | 2 | 3 | 4 | EDIT 5 (auf LUXR mit SHIFT) | 6 | 7 | 8 |
+| Sound, Seite 2 (Sample) | Sample | Pegel | Pitch | Decay | Start | Tone | Bend | Synth-Pegel |
+| Sound, Seite 3 (Mix/Env) | Level | Pan | Delay | Reverb | Drive | Attack | Gate | Release |
+| Sound, Seite 4 (LFOs) | LFO 1 Ziel | Welle | Rate | Tiefe | LFO 2 Ziel | Welle | Rate | Tiefe |
+| Sound, Seite 5 | Variation | | | | | | | |
+| Drive & Reverb | Drv Mode | Drv Gain | Drv Tone | Drv Return | Size | Damp | Pre-Delay | Rev Return |
+| Delay | Mode | Zeit | Zeit R | Feedback | Tone | Return | | |
+| Comp & Limiter | Threshold | Ratio | Attack | Release | Makeup | Limiter | Ceiling | Lim Release |
+| Setup | Output | Note Map | Tonal Snd | | Pre-Clip | Auto Level | Target | |
+
+Der Synth-Layer liegt wie auf dem FM-1: Knöpfe 1–4 sind LUXRs Reihe A, 5–8 die Reihe B, die man dort mit SHIFT
+(GLO halten) erreicht – z. B. Kick: Pitch, Decay, P.Env, P.Dec | Wave, FM, Click, Drive.
+
+**PERFORM** (auf der LUXR-Seite die Zelle *Perform* anklicken) bringt LUXRs Doppelbelegung zurück: die 8 Knöpfe
+spielen eine Reihe, **mit Shift die zweite**.
+
+| | ohne Shift (Reihe A) | mit Shift (Reihe B) |
+|---|---|---|
+| Ebene **SOUND** | der Synth-Layer des Sounds (EDIT 1–8) | der Sample-Layer (Sample, Pegel, Pitch, Decay, Start, Tone, Bend, Synth) |
+| Ebene **MIX** | Level, Pan, Delay, Reverb, Drive, Attack, Gate, Release | LFO 1 (Ziel, Welle, Rate, Tiefe), LFO 2 |
+| Ebene **KIT** | Volume, Tune, Decay, Filter, Reso, Drive, Delay-Return, Reverb-Return | Delay-Zeit, Feedback, Size, Damp, Threshold, Ratio, Makeup, Limiter |
+
+| Bedienung | Wirkung |
+|---|---|
+| Jog drehen | Sound wählen (Kick … Cymbal) |
+| Jog klicken | nächste Ebene: SOUND › MIX › KIT |
+| Pad anschlagen | wählt seinen Sound (er klingt trotzdem) |
+| Knopf berühren | Name und Wert unten im Display |
+| Shift + Jog, Back | zurück ins Grid (gehört dem Host) |
+
+Der gewählte Sound ist auch der, dem das Grid folgt (`focus_param` `ui_voice`).
+
 ## Seiten
 
 - **Preset-Browser**: *Factory* und die Kits der 13 Preset-Patches (dieselben, mit denen der Emulator startet:
   `web/emu/luxr-backup-*.luxr`, beim Bauen von `schwung/tools/gen_kits.c` mit dem Firmware-Code ausgelesen).
-- **Root / Kit**: Volume, Tune (±24 Halbtöne), Decay (alle Sounds), Output (0/+3/+6 dB), Note Map, Tonal Snd,
-  Master-Filter (− Tiefpass, + Hochpass) und Resonanz.
+- **LUXR (Root)**: Perform, dann Volume, Tune (±24 Halbtöne), Decay (alle Sounds), Master-Filter (− Tiefpass,
+  + Hochpass), Resonanz, Drive, Delay- und Reverb-Return; Output, Note Map und Tonal Snd stehen unter **Setup**.
 - **Kick … Cymbal** (je ein „Voice“ mit seiner Note): die 8 Synth-Parameter nach Art des Sounds (z. B. Kick: Pitch,
   Decay, P.Env, P.Dec, Wave, FM, Click, Drive), dann der Sample-Layer (Sample – Off, Snap, die 12 LXR-Transienten, 16
   eigene, 16 nach 808/909/606/707/DMX/LM-1/LM-2/SDS –, Pegel, Pitch, Decay, Start, Tone, Bend, Synth-Pegel), Level,
   Pan, die Sends Delay/Reverb/Drive, Attack/Gate/Release, zwei LFOs (Ziel, Welle, Rate im Tempo, Tiefe) und
   **Variation** (würfelt den Sound neu wie PRESETS auf LUXR; 0 = der Werks-Sound).
-- **Drive & Reverb**, **Delay** (1/8 … 3/4 im Tempo des Move; Mono/Stereo/Ping-Pong), **Compressor**, **Limiter**.
+- **Drive & Reverb**, **Delay** (1/8 … 3/4 im Tempo des Move; Mono/Stereo/Ping-Pong), **Comp & Limiter**, **Setup**.
 
 Tempo und Takt kommen vom Move (`get_bpm`, `get_beat_position`): Delay-Zeiten, Gate und die LFOs laufen mit, die LFOs
 phasenstarr zum Takt, solange der Move spielt. Alles steht im Zustand (`state`), den Schwung mit dem Set und den
@@ -79,8 +122,9 @@ Bauen braucht dasselbe wie `tools/build.py --gen` (Python mit Pillow; die LXR-Tr
 | `dsp/luxr_tables.c` | die Transienten, einmal für alle Maschinen |
 | `dsp/plugin_api_v1.h` | aus Schwung (MIT, `LICENSE-SCHWUNG`) |
 | `src/module.json`, `src/help.json` | das Modul, die Hilfe auf dem Move |
+| `src/perform.js` | PERFORM: die Knöpfe mit Reihe A / Shift-Reihe B, Jog, Pads |
 | `tools/gen_kits.c` | die Preset-Kits aus einem `.luxr`-Backup (`LUXR_KITS=…` wählt ein anderes) |
-| `tests/test_plugin.c` | der Test |
+| `tests/test_plugin.c`, `tests/test_perform.mjs` | die Tests (Plugin; PERFORM gegen einen nachgebauten Canvas-Host) |
 
 ## Lizenz
 
