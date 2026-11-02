@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 #include "luxr_user.h"
 
@@ -30,6 +31,10 @@ struct lxu {
     int cur;                                     /* (atomic) the table in use */
     int scanned;                                 /* (the worker's) */
     char err[64];
+    uint32_t cpu_seq, cpu_done;                  /* (atomic) a report waiting */
+    uint32_t cpu_avg, cpu_peak, cpu_voices;
+    char cpu_kit[LXU_NAME];
+    uint32_t cpu_lines;
 };
 
 static int name_ok(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == ' ' || c == '-' || c == '_'; }
@@ -105,6 +110,27 @@ HID void lxu_poll(void *arg)
     if (!u->scanned) {
         scan(u);
         u->scanned = 1;
+    }
+    {                                            /* the CPU log: a line a report */
+        uint32_t q = __atomic_load_n(&u->cpu_seq, __ATOMIC_ACQUIRE);
+        if (q != __atomic_load_n(&u->cpu_done, __ATOMIC_ACQUIRE)) {
+            char lp[260], ts[32], kit[LXU_NAME];
+            FILE *f;
+            time_t now = time(0);
+            uint32_t avg = u->cpu_avg, peak = u->cpu_peak, vo = u->cpu_voices;
+            memcpy(kit, u->cpu_kit, sizeof kit);
+            __atomic_store_n(&u->cpu_done, q, __ATOMIC_RELEASE);   /* (copied: the next report may come) */
+            strftime(ts, sizeof ts, "%Y-%m-%d %H:%M:%S", localtime(&now));
+            mkdirs(u->dir);
+            snprintf(lp, sizeof lp, "%s/../cpu.log", u->dir);
+            if (u->cpu_lines++ % 2000u == 0u)    /* (a fresh file now and then: it stays small) */
+                unlink(lp);
+            if ((f = fopen(lp, "a"))) {
+                fprintf(f, "%s  avg %4u us  peak %5u us  (%2u%% / %2u%% of a block)  voices %u  kit %s\n", ts, avg, peak,
+                        avg * 100u / 2902u, peak * 100u / 2902u, vo, kit);
+                fclose(f);
+            }
+        }
     }
     r = __atomic_load_n(&u->req, __ATOMIC_ACQUIRE);
     if (r == RQ_SAVE) {
@@ -195,3 +221,13 @@ HID int lxu_saved(lxu_t *u, char *name, uint32_t n)
     return 1;
 }
 HID const char *lxu_error(lxu_t *u) { return u ? u->err : ""; }
+HID void lxu_cpu(lxu_t *u, uint32_t avg_us, uint32_t peak_us, uint32_t voices, const char *kit)
+{
+    if (!u || __atomic_load_n(&u->cpu_seq, __ATOMIC_ACQUIRE) != __atomic_load_n(&u->cpu_done, __ATOMIC_ACQUIRE))
+        return;                                  /* (the last one not written yet: skipped) */
+    u->cpu_avg = avg_us;
+    u->cpu_peak = peak_us;
+    u->cpu_voices = voices;
+    snprintf(u->cpu_kit, sizeof u->cpu_kit, "%s", kit);
+    __atomic_add_fetch(&u->cpu_seq, 1u, __ATOMIC_RELEASE);
+}

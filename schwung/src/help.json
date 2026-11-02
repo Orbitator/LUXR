@@ -65,7 +65,7 @@
             "Sounds: hit a pad -",
             "its sound's pages",
             "open (that one",
-          "only).",
+            "only).",
             "Page 1: synth layer",
             "1 Pitch 2 Decay",
             "3-7 LUXR's EDIT 3-7",
@@ -211,6 +211,24 @@
             "stereo, ping pong),",
             "Compressor, Limiter:",
             "as on LUXR."
+          ]
+        },
+        {
+          "title": "CPU",
+          "lines": [
+            "Setup > CPU: LUXR's",
+            "share of the audio",
+            "time in the last",
+            "second, average and",
+            "peak (100% = 2.9 ms,",
+            "a whole block).",
+            "Perform shows it at",
+            "the bottom.",
+            "",
+            "A log line a second",
+            "while it sounds:",
+            "UserData/schwung/",
+            "luxr/cpu.log"
           ]
         }
       ]

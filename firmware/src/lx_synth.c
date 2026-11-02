@@ -155,6 +155,8 @@ static voice_t ghost[NTRK];
 /* delay and reverb rest while nothing is sent to them and they have been silent for 1 s (longer than the delay line,
  * 0.74 s: no echo still on its way is lost) - they cost a fifth of the time otherwise, sent to or not */
 #define LX_FX_IDLE 1
+/* a voice ends at -60 dB (amp 32) instead of -72 dB (8): its last, inaudible part rendered no more */
+#define LX_VOICE_END 32
 #define FX_IDLE_N (FS / CTL)
 static uint32_t fx_still;                        /* blocks of CTL without a send and without their output */
 typedef struct { const int16_t *d; uint32_t n, rate; uint8_t whole; } lx_file_t;
@@ -429,7 +431,10 @@ static void lx_render(uint32_t t, voice_t *v, const sound_t *s, int32_t *out, ui
             out[i] += (((clamp(post, -65535, 65535) * ea) >> 15) * gain) >> 7;
 #endif
         v->amp = lx_dec(v->amp, v->gate_n && tt >= v->gate_n ? krel : ka);   /* (the gate over: the release) */
-        if (v->amp < 8 && tt > 1400u && !(((tr && v->tph < tend) || LX_FL_ON) && slvl)) {
+#ifndef LX_VOICE_END
+#define LX_VOICE_END 8
+#endif
+        if (v->amp < LX_VOICE_END && tt > 1400u && !(((tr && v->tph < tend) || LX_FL_ON) && slvl)) {
             v->active = 0;
             break;
         }

@@ -151,6 +151,10 @@
                 st.touch = -1;
             }
         },
+        onValues(ctx, payload) {                 /* (the host's live read: k_cpu, every 500 ms) */
+            const v = payload && payload.values && payload.values.k_cpu;
+            if (v !== null && v !== undefined) ctx.state.cpu = String(v);
+        },
         handleBack() { return false; },
         draw(ctx) {
             const st = ctx.state, shift = ctx.shiftHeld();
@@ -176,7 +180,7 @@
             }
             ctx.fillRect(0, 55, W, 1, 1);
             ctx.print(0, 57, st.touch >= 0 ? "K" + (st.touch + 1) + " " + r[st.touch].l + " " +
-                      text(r[st.touch], st.vals[r[st.touch].key]) : "JOG SOUND  CLICK LAYER", 1);
+                      text(r[st.touch], st.vals[r[st.touch].key]) : st.cpu ? "CPU " + st.cpu : "JOG SOUND  CLICK LAYER", 1);
         },
     };
 })();
