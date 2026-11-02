@@ -57,9 +57,8 @@ static void destroy_instance(void *instance)
 static void on_midi(void *instance, const uint8_t *msg, int len, int source)
 {
     inst_t *in = instance;
-    (void)source;
     if (in && msg)
-        in->e->midi(msg, len);
+        in->e->midi(msg, len, source);
 }
 static void set_param(void *instance, const char *key, const char *val)
 {

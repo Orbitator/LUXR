@@ -446,6 +446,19 @@ int main(int argc, char **argv)
         CHECK(block_rms(a, 10, 0, 0, 0) > 100.0, "MIDI Ch 1: a note on channel 1 does");
         api->get_param(a, "state", big, sizeof big);
         CHECK(strstr(big, "\"k_mch\":1") != NULL, "MIDI Ch is in the state");
+        {                                        /* (midi.log: the notes, their channel and whether they played) */
+            char lp[700], line[200];
+            FILE *f;
+            int ign = 0;
+            usleep(100000);
+            snprintf(lp, sizeof lp, "%s/midi.log", dir);
+            if ((f = fopen(lp, "r"))) {
+                while (fgets(line, sizeof line, f))
+                    ign += strstr(line, "ch  4") && strstr(line, "ignored") ? 1 : 0;
+                fclose(f);
+            }
+            CHECK(ign >= 1, "midi.log shows the channel-4 note ignored (%d)", ign);
+        }
         api->set_param(a, "k_mch", "All");
     }
 

@@ -27,5 +27,8 @@ int lxu_saved(lxu_t *u, char *name, uint32_t n); /* 1 once a save is on disk and
 const char *lxu_error(lxu_t *u);                 /* the last failure ("" none) */
 /* the CPU log: the audio thread reports each second (us a block on average and at most, voices, the kit); the worker
  * appends it to cpu.log next to the kits (the last 2000 lines kept) */
+/* the MIDI log: each note-on as it reaches LUXR (channel, note, velocity, Schwung's source, played or not); the worker
+ * appends them to midi.log next to cpu.log (the last 2000 lines kept) */
+void lxu_note(lxu_t *u, uint32_t ch, uint32_t note, uint32_t vel, int source, int played);
 void lxu_cpu(lxu_t *u, uint32_t avg_us, uint32_t peak_us, uint32_t voices, const char *kit);
 #endif

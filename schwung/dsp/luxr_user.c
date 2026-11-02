@@ -35,6 +35,8 @@ struct lxu {
     uint32_t cpu_avg, cpu_peak, cpu_voices;
     char cpu_kit[LXU_NAME];
     uint32_t cpu_lines;
+    struct { uint8_t ch, note, vel, played; int8_t src; } nq[64];   /* the notes: the audio thread writes at nw */
+    uint32_t nw, nr, midi_lines;                 /* (nw atomic) */
 };
 
 static int name_ok(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == ' ' || c == '-' || c == '_'; }
@@ -132,6 +134,33 @@ HID void lxu_poll(void *arg)
             }
         }
     }
+    {                                            /* the MIDI log */
+        uint32_t w = __atomic_load_n(&u->nw, __ATOMIC_ACQUIRE);
+        if (w != u->nr) {
+            char lp[260], ts[32];
+            FILE *f;
+            time_t now = time(0);
+            strftime(ts, sizeof ts, "%H:%M:%S", localtime(&now));
+            mkdirs(u->dir);
+            snprintf(lp, sizeof lp, "%s/../midi.log", u->dir);
+            if (u->midi_lines > 2000u) {
+                unlink(lp);
+                u->midi_lines = 0;
+            }
+            f = fopen(lp, "a");
+            if (w - u->nr > 64u)                 /* (more than the ring: the oldest are gone) */
+                u->nr = w - 64u;
+            for (; u->nr != w; u->nr++) {
+                const uint32_t k = u->nr % 64u;
+                if (f)
+                    fprintf(f, "%s  ch %2u  note %3u  vel %3u  source %d  %s\n", ts, u->nq[k].ch, u->nq[k].note,
+                            u->nq[k].vel, u->nq[k].src, u->nq[k].played ? "played" : "ignored (MIDI Ch)");
+                u->midi_lines++;
+            }
+            if (f)
+                fclose(f);
+        }
+    }
     r = __atomic_load_n(&u->req, __ATOMIC_ACQUIRE);
     if (r == RQ_SAVE) {
         FILE *f;
@@ -221,6 +250,19 @@ HID int lxu_saved(lxu_t *u, char *name, uint32_t n)
     return 1;
 }
 HID const char *lxu_error(lxu_t *u) { return u ? u->err : ""; }
+HID void lxu_note(lxu_t *u, uint32_t ch, uint32_t note, uint32_t vel, int source, int played)
+{
+    uint32_t k;
+    if (!u)
+        return;
+    k = __atomic_load_n(&u->nw, __ATOMIC_RELAXED) % 64u;
+    u->nq[k].ch = (uint8_t)ch;
+    u->nq[k].note = (uint8_t)note;
+    u->nq[k].vel = (uint8_t)vel;
+    u->nq[k].src = (int8_t)source;
+    u->nq[k].played = (uint8_t)played;
+    __atomic_add_fetch(&u->nw, 1u, __ATOMIC_RELEASE);
+}
 HID void lxu_cpu(lxu_t *u, uint32_t avg_us, uint32_t peak_us, uint32_t voices, const char *kit)
 {
     if (!u || __atomic_load_n(&u->cpu_seq, __ATOMIC_ACQUIRE) != __atomic_load_n(&u->cpu_done, __ATOMIC_ACQUIRE))

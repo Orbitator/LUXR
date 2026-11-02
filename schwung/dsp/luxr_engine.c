@@ -834,7 +834,7 @@ static int32_t midi_track_gm(uint32_t n)         /* General MIDI drums (as lx_se
     }
     return -1;
 }
-static void e_midi(const uint8_t *m, int len)
+static void e_midi(const uint8_t *m, int len, int source)
 {
     uint32_t st, n, v;
     int32_t t;
@@ -845,6 +845,7 @@ static void e_midi(const uint8_t *m, int len)
     v = m[2] & 0x7Fu;
     if (st != 0x90u || !v)                       /* (drums: a note off means nothing; GATE times the release) */
         return;
+    lxu_note(f_kits, (m[0] & 0x0Fu) + 1u, n, v, source, !e_mch || (uint32_t)(m[0] & 0x0Fu) + 1u == e_mch);
     if (e_mch && (uint32_t)(m[0] & 0x0Fu) + 1u != e_mch)   /* MIDI CH: notes of other channels are not LUXR's */
         return;
     switch (e_map) {
