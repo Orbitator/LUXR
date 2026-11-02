@@ -147,3 +147,5 @@ Code: GPL-3.0 wie das Repository. **Der Sample-Layer enthält die Transienten de
 Schmidt), deren Lizenz kommerzielle Nutzung verbietet und nicht GPL-verträglich ist – ein damit gebautes Modul ist
 nur für den **persönlichen, nicht-kommerziellen Gebrauch** (`NOTICE-LXR.txt`, liegt im Modul bei). Deshalb ist es auch
 nicht für den offiziellen Schwung-Katalog gedacht, sondern wird aus diesem Repo installiert.
+
+Für den Betreiber von Schwung (englisch): [`MAINTAINER.md`](MAINTAINER.md) – Installationslink, wie das Modul die Host-API nutzt, die Lizenzfrage und ein Vorschlag für den Katalog-Eintrag.
