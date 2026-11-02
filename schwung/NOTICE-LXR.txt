@@ -1,0 +1,14 @@
+LUXR for Ableton Move (Schwung module)
+
+The code of this module is GPL-3.0 (see LICENSE), like the rest of the LUXR repository:
+https://github.com/orbitator/LUXR
+
+The sample layer contains the transient samples of the Sonic Potions LXR firmware
+(c) 2013 Julian Schmidt, https://github.com/SonicPotions/LXR. Their licence forbids
+commercial use and is not compatible with the GPL. They are not in the repository; the
+build fetches them. A dsp.so built with them is for personal, non-commercial use only:
+do not sell it, and do not pass it on as plain GPL software. It is offered free of
+charge together with its complete source code (as the LXR licence asks).
+
+plugin_api_v1.h is from Schwung (https://github.com/charlesvestal/schwung), MIT licence,
+see LICENSE-SCHWUNG.

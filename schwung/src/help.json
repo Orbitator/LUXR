@@ -1,0 +1,203 @@
+{
+  "title": "LUXR",
+  "children": [
+    {
+      "title": "Overview",
+      "lines": [
+        "The LUXR drum",
+        "machine (M-VAVE FM-1",
+        "firmware) as a sound",
+        "generator: eight",
+        "drum voices after",
+        "the Sonic Potions",
+        "LXR, each a synth",
+        "layer and a sample",
+        "layer, with drive,",
+        "delay, reverb, a",
+        "master filter, a",
+        "compressor and a",
+        "limiter.",
+        "",
+        "Move sequences it:",
+        "put LUXR on a drum",
+        "track and play the",
+        "pads."
+      ]
+    },
+    {
+      "title": "Pads",
+      "lines": [
+        "Note map MOVE:",
+        "Pads 1-8 (notes",
+        "36-43): Kick, Snare,",
+        "Clap, Cl Hat,",
+        "Op Hat, Tom, Rim,",
+        "Cymbal.",
+        "Pads 9-16 (44-51):",
+        "the same, accented.",
+        "Velocity over 110",
+        "accents too.",
+        "",
+        "Note map GM: General",
+        "MIDI drum notes.",
+        "Note map TONAL:",
+        "every note plays",
+        "Tonal Snd, C3 its",
+        "own pitch.",
+        "",
+        "The closed hat",
+        "chokes the open one."
+      ]
+    },
+    {
+      "title": "Knobs & Shift",
+      "children": [
+        {
+          "title": "Knob pages",
+          "lines": [
+            "LUXR (first page):",
+            "1 Volume  2 Tune",
+            "3 Decay   4 Filter",
+            "5 Reso    6 Drive",
+            "7 Delay return",
+            "8 Reverb return",
+            "",
+            "A sound, page 1:",
+            "its synth layer, as",
+            "LUXR's EDIT: knobs",
+            "1-4 row A, 5-8 the",
+            "row B (SHIFT on",
+            "LUXR).",
+            "Page 2: sample layer",
+            "Page 3: Level Pan",
+            "Delay Reverb | Drive",
+            "Attack Gate Release",
+            "Page 4: LFO 1 | 2",
+            "Page 5: WAV File,",
+            "Length, Variation",
+            "",
+            "Shift + knob: fine."
+          ]
+        },
+        {
+          "title": "Perform",
+          "lines": [
+            "LUXR page > Perform:",
+            "the knobs as on",
+            "LUXR, a row and its",
+            "SHIFT row.",
+            "",
+            "Knob 1-8: row A",
+            "Shift+knob: row B",
+            "Jog: the sound",
+            "Jog click: layer",
+            "Pad: its sound",
+            "Touch knob: value",
+            "Back: out",
+            "",
+            "SOUND: synth layer",
+            "Shift: sample layer",
+            "MIX: Level Pan Dly",
+            "Rev Drv Atk Gate Rel",
+            "Shift: LFO 1 + 2",
+            "KIT: Vol Tune Decay",
+            "Filt Reso Drive",
+            "Dly Rev returns",
+            "Shift: Dly time",
+            "Fdbk Size Damp",
+            "Thresh Ratio",
+            "Makeup Limiter"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Pages",
+      "children": [
+        {
+          "title": "Kits",
+          "lines": [
+            "The preset browser:",
+            "Factory and the 13",
+            "LUXR preset patches",
+            "(their kits)."
+          ]
+        },
+        {
+          "title": "Sounds",
+          "lines": [
+            "Each sound: 8 synth",
+            "parameters (by its",
+            "kind), the sample",
+            "layer (sample,",
+            "level,",
+            "pitch, decay, start,",
+            "tone, bend, synth",
+            "level), level, pan,",
+            "delay, reverb and",
+            "drive sends, attack,",
+            "gate, release, two",
+            "LFOs synced to the",
+            "tempo.",
+            "Variation rolls the",
+            "sound anew (0 = its",
+            "factory sound)."
+          ]
+        },
+        {
+          "title": "WAV layer",
+          "lines": [
+            "A sound's sample",
+            "layer can play a WAV",
+            "of your own:",
+            "Page 5 > WAV File",
+            "opens the sample",
+            "browser (UserLibrary",
+            "/Samples). Choosing",
+            "a file sets Sample",
+            "to WAV.",
+            "",
+            "Length:",
+            "50 ms - its first 50",
+            "ms, a transient, in",
+            "the drum's envelope",
+            "(like the LXR's).",
+            "Whole - the whole",
+            "file to its end,",
+            "past the envelope.",
+            "",
+            "Pitch, Smp Decay,",
+            "Start, Tone, Bend,",
+            "Smp Lvl: on both.",
+            "Up to 23 s at 44.1k,",
+            "PCM 8-32 bit, float,",
+            "mono or stereo."
+          ]
+        },
+        {
+          "title": "Kit",
+          "lines": [
+            "Volume, Tune, Decay",
+            "(all sounds), Output",
+            "(+0/+3/+6 dB), Note",
+            "Map, Tonal Snd, the",
+            "master filter (- low",
+            "pass, + high pass)",
+            "and its resonance."
+          ]
+        },
+        {
+          "title": "FX",
+          "lines": [
+            "Drive & Reverb,",
+            "Delay (tempo synced:",
+            "1/8 to 3/4, mono,",
+            "stereo, ping pong),",
+            "Compressor, Limiter:",
+            "as on LUXR."
+          ]
+        }
+      ]
+    }
+  ]
+}

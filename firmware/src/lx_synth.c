@@ -144,6 +144,18 @@ static const sound_t *voice_sound(uint32_t t, const voice_t *v, sound_t *tmp)
     return tmp;
 }
 
+#ifdef LX_FILE_LAYER
+/* (Ableton Move / Schwung only, schwung/dsp/luxr_engine.c: the sample layer from a WAV of the sound's own, TR_FILE -
+ * 16 bit mono at its own rate, its position Q12 - either its first 50 ms, played as a transient inside the synth's
+ * envelope, or WHOLE, past the envelope to its end. The firmware is built without it.) */
+#define TR_FILE TR_N
+typedef struct { const int16_t *d; uint32_t n, rate; uint8_t whole; } lx_file_t;
+static lx_file_t lx_file[NTRK];
+static uint32_t lx_file_len(const lx_file_t *f)   /* the frames played: all, or the first 50 ms */
+{
+    return f->whole || f->n < f->rate / 20u ? f->n : f->rate / 20u;
+}
+#endif
 /* a hit on track t (the audio ISR: the sequencer, the pads, MIDI), with its locks (nlk of them: pid, value) */
 #define PAN_SOUND 0x7F
 static int8_t hit_semi;                          /* the next hit's transpose (MIDI IN, tonal: lx_seq.c midi_note) */
@@ -185,6 +197,13 @@ static void voice_hit_lk(uint32_t t, uint32_t vel, uint32_t acc, int32_t pan, ui
     v->tph = (((s->smp >= TR_MACH0 ? 2u * MACH_TRANS_LEN : LXR_TRANS_LEN) * s->sstart) >> 7) << 20;
     v->tinc = (1u << 18) + s->spitch * ((3u << 19) / 127u);   /* Q20: 0.25 .. 1.75 */
     v->semi = hit_semi;
+#ifdef LX_FILE_LAYER
+    if (s->smp == TR_FILE) {                     /* (Q12; PITCH 0.25 .. 1.75 times the file's rate over ours) */
+        const lx_file_t *f = &lx_file[t % NTRK];
+        v->tph = (uint32_t)(((uint64_t)lx_file_len(f) * s->sstart) >> 7) << 12;
+        v->tinc = (uint32_t)((uint64_t)((1u << 10) + s->spitch * ((3u << 11) / 127u)) * (f->rate ? f->rate : FS) / FS);
+    }
+#endif
     if (v->semi)
         v->tinc = semi_scale(v->tinc, v->semi);
     v->tlp = 0;
@@ -214,6 +233,15 @@ static void lx_render(uint32_t t, voice_t *v, const sound_t *s, int32_t *out, ui
     int32_t tk = s->stone < 0 ? 4095 + s->stone * 60 : s->stone * 40, kb = lx_k(18);   /* TONE (Q12), BEND's envelope */
     uint32_t didx, an = s->atk ? 1u + (uint32_t)s->atk * s->atk * 441u / 640u : 1u;   /* ENV: attack in samples, */
     int32_t ainc = (int32_t)(32767u / an), krel = lx_k(s->rel & 127u);                 /* .. release after the gate */
+#ifdef LX_FILE_LAYER
+    const lx_file_t *fl = s->smp == TR_FILE && lx_file[t].d ? &lx_file[t] : 0;
+    uint32_t fend = fl ? lx_file_len(fl) << 12 : 0u;
+    if (s->smp >= TR_N)
+        tr = 0;
+#define LX_FL_ON (fl && v->tph < fend)
+#else
+#define LX_FL_ON 0
+#endif
     switch (kind) {
     case K_DRUM:
         didx = 25u + p[1] * 85u / 127u;
@@ -271,6 +299,9 @@ static void lx_render(uint32_t t, voice_t *v, const sound_t *s, int32_t *out, ui
     for (i = 0; i < n; i++) {
         int32_t a = v->amp, y = 0, nz = (int32_t)(xrand(&v->noise) >> 17) - 16384, layer = 0;
         uint32_t tt = v->t++, snap = 0;
+#ifdef LX_FILE_LAYER
+        int32_t post = 0, ea = 32767;            /* WHOLE: the layer past the envelope; the attack and a choke on it */
+#endif
         if (s->smp == TR_SNAP && slvl)            /* SNAP: up to 4x the pitch at the hit, gone in a few ms */
             snap = (uint32_t)((v->snap * slvl) >> 15);
         switch (kind) {
@@ -319,9 +350,18 @@ static void lx_render(uint32_t t, voice_t *v, const sound_t *s, int32_t *out, ui
         if (snap)
             v->snap = lx_dec(v->snap, ks);
         y = (y * syn) >> 7;
-        if (tr && v->tph < tend) {               /* the sample layer */
+        if ((tr && v->tph < tend) || LX_FL_ON) {   /* the sample layer */
             uint32_t k = mach ? v->tph >> 21 : v->tph >> 20, inc = v->tinc;
             int32_t x;
+#ifdef LX_FILE_LAYER
+            if (fl) {                            /* (a WAV: between two frames, linearly; a fade over its last ones) */
+                uint32_t fk = v->tph >> 12, fn = fend >> 12, fade = fl->whole ? 64u : 256u;
+                int32_t a0 = fl->d[fk], a1 = fk + 1u < fl->n ? fl->d[fk + 1u] : 0;
+                x = a0 + (((a1 - a0) * (int32_t)(v->tph & 0xFFFu)) >> 12);
+                if (fk + fade > fn)
+                    x = x * (int32_t)(fn - fk) / (int32_t)fade;
+            } else
+#endif
             if (mach) {                          /* (22.05 kHz: between two samples, linearly) */
                 int32_t a0 = tr[k], a1 = k + 1u < tn ? tr[k + 1u] : 0;
                 x = a0 * 256 + (a1 - a0) * (int32_t)((v->tph >> 13) & 0xFFu);
@@ -343,6 +383,11 @@ static void lx_render(uint32_t t, voice_t *v, const sound_t *s, int32_t *out, ui
                 v->benv = lx_dec(v->benv, kb);
             }
             v->tph += inc;
+#ifdef LX_FILE_LAYER
+            if (fl && fl->whole)
+                post = layer;
+            else
+#endif
             y += layer;
         }
         if (p[7])
@@ -353,18 +398,29 @@ static void lx_render(uint32_t t, voice_t *v, const sound_t *s, int32_t *out, ui
             v->cfade -= 248;
             if (v->cfade <= 0) { v->active = 0; break; }
             a = (a * v->cfade) >> 15;
+#ifdef LX_FILE_LAYER
+            ea = (ea * v->cfade) >> 15;
+#endif
         }
         if (v->att < 32767) {                    /* ENV: the attack */
             v->att = v->att + ainc < 32767 ? v->att + ainc : 32767;
             a = (a * v->att) >> 15;
+#ifdef LX_FILE_LAYER
+            ea = (ea * v->att) >> 15;
+#endif
         }
         out[i] += (((y * a) >> 15) * gain) >> 7;
+#ifdef LX_FILE_LAYER
+        if (post)
+            out[i] += (((clamp(post, -65535, 65535) * ea) >> 15) * gain) >> 7;
+#endif
         v->amp = lx_dec(v->amp, v->gate_n && tt >= v->gate_n ? krel : ka);   /* (the gate over: the release) */
-        if (v->amp < 8 && tt > 1400u && (!tr || v->tph >= tend || !slvl)) {
+        if (v->amp < 8 && tt > 1400u && !(((tr && v->tph < tend) || LX_FL_ON) && slvl)) {
             v->active = 0;
             break;
         }
     }
+#undef LX_FL_ON
 }
 
 /* the sounds at power-on (preset 0) and the ranges PRESETS rolls the others in (lo, hi per parameter) */

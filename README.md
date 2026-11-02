@@ -260,6 +260,13 @@ Note Repeat, Aufnahme, Erase, Patterns, Speicher, UBOOT-Countdown; Screenshots d
 Speicher: derselbe Bereich wie ONE CLICK (0x97000–0xE0000). Wer zwischen ONE CLICK und LUXR wechselt, verliert die
 dort gespeicherten Daten der anderen Firmware (sie erkennt fremde Daten und ignoriert sie).
 
+## Ableton Move (Schwung)
+
+Die Klangerzeugung von LUXR gibt es auch als Sound Generator für **Schwung** auf dem Ableton Move: die acht Sounds,
+die Preset-Kits, Kit-FX, Master-Filter, Kompressor und Limiter, gespielt von den Pads des Move (1–8 die Sounds, 9–16
+mit Accent). Installieren über Schwung Manager › Install Custom Module mit `https://github.com/Orbitator/LUXR`;
+alles Weitere in [`schwung/README.md`](schwung/README.md).
+
 ## Lizenz – bitte lesen
 
 Der Code dieser Firmware ist GPL-3.0 wie der Rest des Repositorys. **Die Transienten-Samples sind es nicht:** sie stammen
