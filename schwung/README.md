@@ -6,7 +6,7 @@ Delay, Reverb), Master-Filter, Kompressor und Limiter – derselbe Festkomma-Cod
 (`firmware/src/lx_synth.c`, unverändert eingebunden). Der Sequencer und das Panel von LUXR bleiben auf dem FM-1: auf dem
 Move sequenziert der Move, LUXR klingt.
 
-Status: **v0.5.0, auf dem Rechner und unter QEMU (aarch64) getestet, noch nie auf einem Move gelaufen.**
+Status: **v0.5.1, auf dem Rechner und unter QEMU (aarch64) getestet, noch nie auf einem Move gelaufen.**
 
 ## Installieren
 
@@ -25,9 +25,15 @@ Dann im Shadow-Modus auf einer Spur **LUXR** als Synth laden – am besten auf e
 
 | Note Map (Kit-Seite) | Noten |
 |---|---|
-| **Move** (Standard) | Pads 1–8 (Noten 36–43): Kick, Snare, Clap, Cl Hat, Op Hat, Tom, Rim, Cymbal; Pads 9–16 (44–51): dieselben mit Accent. Velocity über 110 gibt ebenfalls Accent. |
+| **Move** (Standard) | Pads 1–8 (Noten 36–43): Kick, Snare, Clap, Cl Hat, Op Hat, Tom, Rim, Cymbal; die oberen acht Pads 9–16 (44–51) spielen nichts. Velocity über 110 gibt Accent. |
 | **GM** | General-MIDI-Drums wie LUXRs MIDI IN (36 Kick, 38/40 Snare, 39 Clap, 42/44 CH, 46 OH, 41–50 Tom, 37 Rim, 49/51/57 Cymbal) |
 | **Tonal** | jede Note spielt den Sound **Tonal Snd**, C3 (60) ist seine eigene Tonhöhe, ein Halbton je Taste (±3 Oktaven) |
+
+**MIDI-Kanal.** Welche Noten ein Slot bekommt, entscheidet Schwung über den *Receive Channel* des Slots (Slot 1 =
+Kanal 1 …; *All* = alle Kanäle). LUXR spielt bei *Setup › MIDI Ch = All* (Standard) alles, was der Slot weitergibt; auf
+1–16 gestellt nur Noten dieses Kanals – so bleibt LUXR stumm für die Noten anderer Spuren, auch wenn der Slot sie
+durchlässt. Jede ankommende Note steht in `/data/UserData/schwung/luxr/midi.log` – Kanal, Note, Velocity, Schwungs
+Quelle und ob LUXR sie gespielt hat –, so lässt sich prüfen, auf welchem Kanal die Noten einer Spur wirklich ankommen.
 
 Die geschlossene Hi-Hat würgt die offene ab (wie auf LUXR). Note-Off bedeutet nichts – die Länge macht **Gate** (in
 Vierteln eines 16tels, 0 = aus) und **Release** des Sounds.

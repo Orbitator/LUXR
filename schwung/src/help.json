@@ -34,9 +34,9 @@
         "Op Hat, Tom, Rim,",
         "Cymbal.",
         "Pads 9-16 (44-51):",
-        "the same, accented.",
+        "nothing.",
         "Velocity over 110",
-        "accents too.",
+        "accents.",
         "",
         "Note map GM: General",
         "MIDI drum notes.",
@@ -46,7 +46,13 @@
         "own pitch.",
         "",
         "The closed hat",
-        "chokes the open one."
+        "chokes the open one.",
+        "",
+        "Setup > MIDI Ch:",
+        "All - every channel",
+        "the slot passes on.",
+        "1-16 - only that",
+        "channel plays LUXR."
       ]
     },
     {

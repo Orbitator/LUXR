@@ -195,9 +195,14 @@ int main(int argc, char **argv)
     note(a, 36, 100);
     ra = block_rms(a, 30, rec, &nrec, (int)(sizeof rec / sizeof *rec));
     block_rms(a, 200, rec, &nrec, (int)(sizeof rec / sizeof *rec));
-    note(a, 44, 100);
+    note(a, 36, 120);
     rb = block_rms(a, 30, rec, &nrec, (int)(sizeof rec / sizeof *rec));
-    CHECK(rb > ra, "the upper row accents (%f > %f)", rb, ra);
+    CHECK(rb > ra, "a velocity over 110 accents (%f > %f)", rb, ra);
+    block_rms(a, 400, 0, 0, 0);
+    for (k = 44; k < 52; k++)                    /* (the upper eight pads: nothing) */
+        note(a, k, 120);
+    r = block_rms(a, 20, 0, 0, 0);
+    CHECK(r < 1.0, "the upper eight pads play nothing (%f)", r);
     note(a, 60, 100);                            /* (MOVE: outside the two rows, nothing) */
     block_rms(a, 200, 0, 0, 0);
     r = block_rms(a, 10, 0, 0, 0);
@@ -429,6 +434,37 @@ int main(int argc, char **argv)
         e1 = block_rms(a, 40, 0, 0, 0);          /* (0.46 .. 0.58 s: the echo) */
         printf("  delay: kick %.0f, its echo %.0f\n", e0, e1);
         CHECK(e1 > e0 * 0.05 && e1 > 50.0, "the echo comes (%f)", e1);
+    }
+
+    /* MIDI CH: All plays every channel the host passes on; a channel set, only that one */
+    {
+        uint8_t m4[3] = {0x93, 36, 120}, m1[3] = {0x90, 36, 120};
+        api->set_param(a, "kit", "0");
+        block_rms(a, 800, 0, 0, 0);
+        api->on_midi(a, m4, 3, 0);
+        CHECK(block_rms(a, 10, 0, 0, 0) > 100.0, "All: a note on channel 4 plays");
+        api->set_param(a, "k_mch", "1");
+        block_rms(a, 800, 0, 0, 0);
+        api->on_midi(a, m4, 3, 0);
+        CHECK(block_rms(a, 10, 0, 0, 0) < 1.0, "MIDI Ch 1: a note on channel 4 does not");
+        api->on_midi(a, m1, 3, 0);
+        CHECK(block_rms(a, 10, 0, 0, 0) > 100.0, "MIDI Ch 1: a note on channel 1 does");
+        api->get_param(a, "state", big, sizeof big);
+        CHECK(strstr(big, "\"k_mch\":1") != NULL, "MIDI Ch is in the state");
+        {                                        /* (midi.log: the notes, their channel and whether they played) */
+            char lp[700], line[200];
+            FILE *f;
+            int ign = 0;
+            usleep(100000);
+            snprintf(lp, sizeof lp, "%s/midi.log", dir);
+            if ((f = fopen(lp, "r"))) {
+                while (fgets(line, sizeof line, f))
+                    ign += strstr(line, "ch  4") && strstr(line, "ignored") ? 1 : 0;
+                fclose(f);
+            }
+            CHECK(ign >= 1, "midi.log shows the channel-4 note ignored (%d)", ign);
+        }
+        api->set_param(a, "k_mch", "All");
     }
 
     /* kits of your own: saved, listed, loaded back, deleted */

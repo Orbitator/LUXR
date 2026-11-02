@@ -12,7 +12,7 @@
 
 typedef struct {
     void (*init)(uint32_t seed);                                   /* the factory kit, the voices quiet */
-    void (*midi)(const uint8_t *msg, int len);                     /* a MIDI message (status, data) */
+    void (*midi)(const uint8_t *msg, int len, int source);         /* a MIDI message (status, data); Schwung's source */
     void (*set)(const char *key, const char *val);
     int (*get)(const char *key, char *buf, int buf_len);           /* the length written, -1 unknown key */
     void (*render)(int16_t *out_lr, int frames, float bpm, double beat);   /* beat < 0: no transport */
