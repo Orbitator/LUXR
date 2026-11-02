@@ -6,7 +6,7 @@ Delay, Reverb), Master-Filter, Kompressor und Limiter – derselbe Festkomma-Cod
 (`firmware/src/lx_synth.c`, unverändert eingebunden). Der Sequencer und das Panel von LUXR bleiben auf dem FM-1: auf dem
 Move sequenziert der Move, LUXR klingt.
 
-Status: **v0.4.0, auf dem Rechner und unter QEMU (aarch64) getestet, noch nie auf einem Move gelaufen.**
+Status: **v0.5.0, auf dem Rechner und unter QEMU (aarch64) getestet, noch nie auf einem Move gelaufen.**
 
 ## Installieren
 
@@ -119,6 +119,21 @@ Zusammenspiel mit dem Host:
   zum nächsten Anschlag.
 - **Kein Knacksen beim Neuanschlag:** der laufende Schlag klingt noch ~3 ms aus statt hart abgeschnitten zu werden.
 - `-O3` statt `-O2`.
+
+- **Tempo geglättet:** Delay-Zeit, LFOs und Gate folgen dem Tempo des Move erst, wenn es sich um mehr als 0,75 BPM
+  ändert. Ein Host, dessen Tempo um einen Wert pendelt (119,4 / 120,6), ließ sonst bei jedem Pendeln die Delay-Leitung
+  springen (im Test 10 % des Klangs bei Patch 1) – jetzt bitgleich mit festem Tempo.
+- **Stimmen enden bei −60 dB** statt −72 dB: der letzte, unhörbare Teil langer Ausklänge (offene Hi-Hat, Becken) wird
+  nicht mehr gerechnet.
+
+**Messen auf dem Move.** Auf dem Rechner ist kein Kit auffällig teurer (Patch 11: ~37 µs je Block, Patch 3/4 ~41 µs,
+Factory ~16 µs). Was der Move tatsächlich braucht, zeigt LUXR jetzt selbst:
+
+- *Setup › CPU* (und unten auf der Perform-Seite): LUXRs Anteil an der Audio-Zeit in der letzten Sekunde, Mittel und
+  Spitze, z. B. `4% pk 12%` (100 % = 2,9 ms = ein ganzer Block, den sich alle Module und der Move teilen).
+- `/data/UserData/schwung/luxr/cpu.log`: solange etwas klingt, eine Zeile je Sekunde – Mittel und Spitze in µs, die
+  Zahl der Stimmen, das Kit. Lesen per SSH (`ssh ableton@move.local tail -50 /data/UserData/schwung/luxr/cpu.log`)
+  oder per SFTP (z. B. Cyberduck). Geschrieben vom Hintergrund-Thread, nie vom Audio-Thread.
 
 (Hall-Ruhe, Ausklingen und die WAV-Ebene stehen in `lx_synth.c` unter `#ifdef`, nur im Modul eingeschaltet – die
 Firmware bleibt gleich.)

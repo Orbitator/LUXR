@@ -25,4 +25,7 @@ int lxu_delete(lxu_t *u, uint32_t i);
 const char *lxu_loaded(lxu_t *u);                /* a kit read, once (its text until the next call), or 0 */
 int lxu_saved(lxu_t *u, char *name, uint32_t n); /* 1 once a save is on disk and listed (its name), else 0 */
 const char *lxu_error(lxu_t *u);                 /* the last failure ("" none) */
+/* the CPU log: the audio thread reports each second (us a block on average and at most, voices, the kit); the worker
+ * appends it to cpu.log next to the kits (the last 2000 lines kept) */
+void lxu_cpu(lxu_t *u, uint32_t avg_us, uint32_t peak_us, uint32_t voices, const char *kit);
 #endif

@@ -515,6 +515,27 @@ int main(int argc, char **argv)
         CHECK(jump_hit <= jump_all + 2000, "no click at a retrigger (%d vs %d)", jump_hit, jump_all);
     }
 
+    /* the CPU meter: a readout, and a log line a second while something sounds (next to the kits) */
+    {
+        char lp[700];
+        FILE *f;
+        int lines = 0, c2;
+        for (k = 0; k < 900; k++) {              /* (2.6 s of hits) */
+            if (k % 43 == 0) note(a, 36 + k / 43 % 8, 100);
+            block_rms(a, 1, 0, 0, 0);
+        }
+        api->get_param(a, "k_cpu", val, sizeof val);
+        printf("  CPU readout: %s\n", val);
+        CHECK(strstr(val, "% pk ") != NULL, "k_cpu: %s", val);
+        usleep(100000);                          /* (the worker writes it) */
+        snprintf(lp, sizeof lp, "%s/cpu.log", dir);
+        if ((f = fopen(lp, "r"))) {
+            while ((c2 = fgetc(f)) != EOF) lines += c2 == '\n';
+            fclose(f);
+        }
+        CHECK(lines >= 1, "cpu.log has lines (%d)", lines);
+    }
+
     /* the slots: six engines, the seventh instance refused, a freed slot taken again */
     ins[0] = a; ins[1] = b;
     for (k = 2; k < 6; k++) {

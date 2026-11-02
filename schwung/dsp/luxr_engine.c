@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include "luxr_engine.h"
 
 #ifndef LXE_SLOT
@@ -444,7 +445,9 @@ static const char *const KIT_PAGE_ID[] = {"fx", "delay", "dyn", "setup"};
 /* the synth layer's eight on the SOUND pages: one name for every sound's (the kinds differ; PERFORM names them all) */
 static const char *const SYN_NAME[8] = {"Pitch", "Decay", "Syn 3", "Syn 4", "Syn 5", "Syn 6", "Syn 7", "Drive"};
 #define PERFORM_JSON "{\"key\":\"perform\",\"name\":\"Perform\",\"type\":\"canvas\",\"canvas_script\":\"perform.js\"," \
-                     "\"enterable\":true,\"show_footer\":false,\"show_value\":false}"
+                     "\"enterable\":true,\"show_footer\":false,\"show_value\":false,\"extra_keys\":[\"k_cpu\"]," \
+                     "\"fullscreen_live_ms\":500}"
+#define CPU_JSON "{\"key\":\"k_cpu\",\"name\":\"CPU\",\"type\":\"string\",\"access\":\"read\"}"
 #define SAVE_JSON "{\"key\":\"k_save\",\"name\":\"Save Kit\",\"type\":\"string\"}," \
                   "{\"key\":\"k_delete\",\"name\":\"Delete Kit\",\"type\":\"enum\",\"options\":[\"-\",\"Delete\"]," \
                   "\"access\":\"write\"}"
@@ -516,7 +519,7 @@ static void hierarchy(jb_t *j)
         jb_put(j, ",\"%s\":{\"name\":\"%s\",\"params\":[", KIT_PAGE_ID[k], KIT_PAGE_NAME[k]);
         gparams_put(j, KIT_PAGE[k], 8);
         if (!strcmp(KIT_PAGE_ID[k], "setup"))
-            jb_put(j, "," SAVE_JSON);
+            jb_put(j, "," SAVE_JSON "," CPU_JSON);
         jb_put(j, "],");
         knobs_put(j, KIT_PAGE[k], 8);
         jb_put(j, "}");
@@ -530,7 +533,7 @@ static void hierarchy(jb_t *j)
 static void chain_params(jb_t *j)
 {
     uint32_t i;
-    jb_put(j, "[" PERFORM_JSON "," SAVE_JSON);
+    jb_put(j, "[" PERFORM_JSON "," SAVE_JSON "," CPU_JSON);
     for (i = 0; i < G_N; i++) {
         jb_put(j, ",");
         jb_param(j, GDEF[i].key, GDEF[i].name, &GDEF[i]);
@@ -704,6 +707,14 @@ static void kit_save(const char *name)           /* SAVE KIT: the state as a fil
 #define PRESS_WIN 4410u
 static uint32_t e_clk;                           /* samples rendered */
 static uint32_t e_quiet;                         /* blocks in a row without a sound (QUIET: e_render) */
+/* the CPU meter: render time a block, over each second - its average and peak (CPU, the log) */
+static uint32_t cpu_sum, cpu_max, cpu_n, cpu_busy, cpu_vmax, cpu_avg_last, cpu_peak_last;
+static double now_us(void)
+{
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return t.tv_sec * 1e6 + t.tv_nsec / 1e3;
+}
 static uint32_t pr_at, nt_at, focus_n;
 static uint8_t pr_on, nt_on, nt_snd;
 static void focus_to(uint32_t t)
@@ -768,6 +779,7 @@ static void e_init(uint32_t seed)
     e_tsnd = 0;
     e_focus = 0;
     e_clk = pr_at = nt_at = focus_n = e_quiet = 0;
+    cpu_sum = cpu_max = cpu_n = cpu_busy = cpu_vmax = cpu_avg_last = cpu_peak_last = 0;
     pr_on = nt_on = 0;
     k_pend = k_guard = 0;
     k_saving[0] = 0;
@@ -916,6 +928,8 @@ static int e_get(const char *key, char *buf, int buf_len)
         jb_put(&j, "%s", kit_name(e_kit));
     } else if (!strcmp(key, "k_delete")) {
         jb_put(&j, "-");
+    } else if (!strcmp(key, "k_cpu")) {          /* the last second: average and peak, of the 2.9 ms of a block */
+        jb_put(&j, "%u%% pk %u%%", cpu_avg_last * 100u / 2902u, cpu_peak_last * 100u / 2902u);
     } else if (!strcmp(key, "k_error")) {
         jb_put(&j, "%s", lxu_error(f_kits));
     } else if (key[0] == 's' && key[1] >= '1' && key[1] <= '8' && !strcmp(key + 2, "_file")) {
@@ -943,12 +957,36 @@ static int e_get(const char *key, char *buf, int buf_len)
     buf[j.n] = 0;
     return j.n;
 }
+static void e_render_(int16_t *out, int frames, float bpm, double beat);
 static void e_render(int16_t *out, int frames, float bpm, double beat)
+{
+    double t0 = now_us();
+    uint32_t us, t, nv = 0;
+    e_render_(out, frames, bpm, beat);
+    us = (uint32_t)(now_us() - t0);
+    for (t = 0; t < NTRK; t++)
+        nv += voice[t].active + ghost[t].active;
+    cpu_sum += us;
+    cpu_n++;
+    if (us > cpu_max) cpu_max = us;
+    if (nv > cpu_vmax) cpu_vmax = nv;
+    cpu_busy |= nv != 0;
+    if (cpu_n >= 345u) {                         /* (a second) */
+        cpu_avg_last = cpu_sum / cpu_n;
+        cpu_peak_last = cpu_max;
+        if (cpu_busy)
+            lxu_cpu(f_kits, cpu_avg_last, cpu_peak_last, cpu_vmax, kit_name(e_kit));
+        cpu_sum = cpu_max = cpu_n = cpu_busy = cpu_vmax = 0;
+    }
+}
+static void e_render_(int16_t *out, int frames, float bpm, double beat)
 {
     int32_t o[2 * CTL];
     int b, i;
-    if (bpm >= 20.0f)
-        song.bpm = (uint8_t)clamp((int32_t)(bpm + 0.5f), 60, 200);   /* (the delay's time, the LFOs, GATE) */
+    if (bpm >= 20.0f && (bpm > song.bpm + 0.75f || bpm < song.bpm - 0.75f))   /* (the delay's time, the LFOs, GATE:
+                                                  * a tempo that wobbles around a value - a host measuring the clock -
+                                                  * must not make the delay line jump; a step of a BPM or more passes) */
+        song.bpm = (uint8_t)clamp((int32_t)(bpm + 0.5f), 60, 200);
     for (b = 0; b < NTRK; b++) {                 /* the WAVs the loader has ready (a pointer swap) */
         f_cur[b] = lxw_take(f_ld, (uint32_t)b, f_cur[b]);
         lx_file[b].d = f_cur[b] && f_cur[b]->n ? f_cur[b]->d : 0;
