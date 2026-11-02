@@ -379,6 +379,58 @@ int main(int argc, char **argv)
         CHECK(!strcmp(v1, val), "a press and a note 290 ms apart are not a hit: %s", v1);
     }
 
+    /* a key without its sound: the sound in focus (what the host's pickers and LFOs address, from chain_params) */
+    {
+        api->set_param(a, "ui_voice", "snd6");
+        api->set_param(a, "p2", "77");
+        api->get_param(a, "s6_p2", val, sizeof val);
+        CHECK(!strcmp(val, "77"), "p2 sets the tom's decay (%s)", val);
+        api->get_param(a, "p2", val, sizeof val);
+        CHECK(!strcmp(val, "77"), "and reads it (%s)", val);
+    }
+
+    /* a set reopened: the host sets "preset", then the state, then (the browser's choice) the kit again - the sound
+     * stays as it was saved, edits and all; a kit chosen afterwards loads */
+    {
+        char sv[1 << 15], back[1 << 15];
+        void *c;
+        api->set_param(a, "kit", "4");
+        api->set_param(a, "s2_p1", "3");
+        api->set_param(a, "k_rev_lvl", "11");
+        api->get_param(a, "state", sv, sizeof sv);
+        c = api->create_instance("/tmp", NULL);
+        CHECK(c != NULL, "an instance for the set");
+        if (c) {
+            api->set_param(c, "preset", "0");
+            api->set_param(c, "state", sv);
+            api->set_param(c, "kit", "4");
+            api->get_param(c, "state", back, sizeof back);
+            CHECK(!strcmp(sv, back), "the set's sound, not the preset's");
+            api->set_param(c, "kit", "4");       /* (chosen again by hand: the preset itself) */
+            api->get_param(c, "s2_p1", val, sizeof val);
+            CHECK(strcmp(val, "3"), "the preset chosen again loads it (s2_p1 %s)", val);
+            api->destroy_instance(c);
+        }
+    }
+
+    /* delay and reverb rest when nothing is sent - but an echo on its way is not lost */
+    {
+        double e0, e1;
+        api->set_param(a, "kit", "13");          /* (Factory: no sends) */
+        api->set_param(a, "s1_dly", "120");
+        api->set_param(a, "k_dly_div", "2");      /* (a beat: 0.5 s at 120) */
+        api->set_param(a, "k_dly_fb", "0");
+        api->set_param(a, "k_dly_lvl", "127");
+        api->set_param(a, "s1_p2", "20");        /* (a short kick) */
+        block_rms(a, 800, 0, 0, 0);              /* (all quiet: the FX resting) */
+        note(a, 36, 120);
+        e0 = block_rms(a, 40, 0, 0, 0);          /* (the kick) */
+        block_rms(a, 120, 0, 0, 0);
+        e1 = block_rms(a, 40, 0, 0, 0);          /* (0.46 .. 0.58 s: the echo) */
+        printf("  delay: kick %.0f, its echo %.0f\n", e0, e1);
+        CHECK(e1 > e0 * 0.05 && e1 > 50.0, "the echo comes (%f)", e1);
+    }
+
     /* kits of your own: saved, listed, loaded back, deleted */
     {
         char nm[64], st0[1 << 15], st1[1 << 15];

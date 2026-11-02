@@ -93,7 +93,7 @@ static void kit_apply(const lxk_kit_t *k)
 
 /* ----------------------------------------------------------- parameters --- */
 static uint8_t e_kit, e_vol = 100, e_map, e_tsnd;  /* the kit loaded, VOLUME, NOTE MAP, TONAL SND */
-static uint8_t e_focus;                          /* the sound being edited (ui_voice: PERFORM sets it, the grid follows) */
+/* (e_focus: the sound being edited - ui_voice: a pad hit or PERFORM; the grid follows) */
 enum { PT_INT, PT_ENUM };
 typedef struct {
     const char *key, *name;
@@ -332,7 +332,8 @@ static const char *s_name(uint32_t t, uint32_t i)   /* the synth layer's eight: 
 }
 
 /* a key: the kit's (G_*) or a sound's (sN_ + S_*); -1 none */
-static int key_find(const char *key, uint32_t *t, uint32_t *i)
+static uint8_t e_focus;
+static int key_find(const char *key, uint32_t *t, uint32_t *i)   /* sN_<key>: sound N; <key> alone: the sound in focus */
 {
     uint32_t k;
     if (key[0] == 's' && key[1] >= '1' && key[1] <= '8' && key[2] == '_') {
@@ -348,6 +349,12 @@ static int key_find(const char *key, uint32_t *t, uint32_t *i)
         if (!strcmp(key, GDEF[k].key)) {
             *i = k;
             return 0;
+        }
+    for (k = 0; k < S_N; k++)
+        if (!strcmp(key, SDEF[k].key)) {
+            *t = e_focus;
+            *i = k;
+            return 1;
         }
     return -1;
 }
@@ -516,31 +523,24 @@ static void hierarchy(jb_t *j)
     }
     jb_put(j, "}}");
 }
-/* chain_params: what can be automated and locked by a scene - the kit's numbers and each sound's (no enums: their
- * pages own them, and the chain's cap of 256 stays far) - and the WAVs' file browsers */
+/* chain_params: EVERY key the host may look up - each of the kit's, each of a sound's once (bare: the host maps
+ * s1_ .. s8_ onto them by the sounds' template, which module.json repeats for it; bare, they address the sound in focus),
+ * the WAV's browser, PERFORM and SAVE / DELETE. A key missing here costs the host a full re-read of the list every
+ * 250 ms (with 1 MB of parsing, on the audio thread) for as long as it is automated, modulated or locked. */
 static void chain_params(jb_t *j)
 {
-    uint32_t t, i;
-    char key[16], name[32];
+    uint32_t i;
     jb_put(j, "[" PERFORM_JSON "," SAVE_JSON);
-    for (i = 0; i < G_N; i++)
-        if (GDEF[i].type == PT_INT) {
-            jb_put(j, ",");
-            jb_param(j, GDEF[i].key, GDEF[i].name, &GDEF[i]);
-        }
-    for (t = 0; t < NTRK; t++)
-        for (i = 0; i < S_N; i++)
-            if (SDEF[i].type == PT_INT && i != S_VAR && i != S_GATE && i != S_ATK && i != S_REL) {
-                snprintf(key, sizeof key, "s%u_%s", t + 1u, SDEF[i].key);
-                snprintf(name, sizeof name, "%.3s %.12s", TRK_SHORT[t], s_name(t, i));
-                jb_put(j, ",");
-                jb_param(j, key, name, &SDEF[i]);
-            }
-    for (t = 0; t < NTRK; t++) {
-        snprintf(key, sizeof key, "s%u_file", t + 1u);
+    for (i = 0; i < G_N; i++) {
         jb_put(j, ",");
-        jb_file(j, key);
+        jb_param(j, GDEF[i].key, GDEF[i].name, &GDEF[i]);
     }
+    for (i = 0; i < S_N; i++) {
+        jb_put(j, ",");
+        jb_param(j, SDEF[i].key, i <= S_P8 ? SYN_NAME[i] : SDEF[i].name, &SDEF[i]);
+    }
+    jb_put(j, ",");
+    jb_file(j, "file");
     jb_put(j, "]");
 }
 static char doc_hier[48 * 1024], doc_cp[64 * 1024];   /* (built once: e_init) */
@@ -557,15 +557,43 @@ static void docs_build(void)
 }
 
 /* state: the kit's number and every value, as "key":number (the host stores it with the set and the presets) */
+static void jb_kv(jb_t *j, char snd, const char *key, int32_t v)   /* ,"[sN_]key":v - by hand: the host reads the
+                                                                     * state often (autosave, presets), on the audio thread */
+{
+    char b[48], *p = b, d[12];
+    uint32_t u = (uint32_t)(v < 0 ? -v : v), n = 0;
+    *p++ = ',';
+    *p++ = '"';
+    if (snd) {
+        *p++ = 's';
+        *p++ = snd;
+        *p++ = '_';
+    }
+    while (*key && p < b + 36)
+        *p++ = *key++;
+    *p++ = '"';
+    *p++ = ':';
+    if (v < 0)
+        *p++ = '-';
+    do d[n++] = (char)('0' + u % 10u); while ((u /= 10u) && n < sizeof d);
+    while (n)
+        *p++ = d[--n];
+    if (j->n + (p - b) >= j->cap) {
+        j->n = j->cap;
+        return;
+    }
+    memcpy(j->b + j->n, b, (size_t)(p - b));
+    j->n += (int)(p - b);
+}
 static void state_get(jb_t *j)
 {
     uint32_t t, i;
     jb_put(j, "{\"v\":1,\"kit\":%u", e_kit);
     for (i = 0; i < G_N; i++)
-        jb_put(j, ",\"%s\":%d", GDEF[i].key, (int)g_get(i));
+        jb_kv(j, 0, GDEF[i].key, g_get(i));
     for (t = 0; t < NTRK; t++)
         for (i = 0; i < S_N; i++)
-            jb_put(j, ",\"s%u_%s\":%d", t + 1u, SDEF[i].key, (int)s_get(t, i));
+            jb_kv(j, (char)('1' + t), SDEF[i].key, s_get(t, i));
     for (t = 0; t < NTRK; t++)
         if (f_path[t][0]) {
             jb_put(j, ",\"s%u_file\":", t + 1u);
@@ -641,6 +669,8 @@ static void state_set(const char *js)            /* a flat object: numbers, and 
 /* ------------------------------------------------------------- the ops --- */
 /* the kits: LUXR's own (LXK_KITS: the preset patches, Factory last) and then yours (luxr_user.c, files) */
 static lxu_t *f_kits;
+static uint8_t k_guard;                          /* a state just restored: the host's "kit" that follows it (the
+                                                  * browser's selection, re-applied) must not overwrite the sound */
 static uint8_t k_pend;                           /* a kit of yours being read: its number + 1 in the list (0 none) */
 static char k_saving[LXU_NAME];                  /* the kit of yours being saved (selected once it is on disk) */
 static char k_text[LXU_TEXT];                    /* (a state for the file: built here, copied by lxu_save) */
@@ -739,8 +769,9 @@ static void e_init(uint32_t seed)
     e_focus = 0;
     e_clk = pr_at = nt_at = focus_n = e_quiet = 0;
     pr_on = nt_on = 0;
-    k_pend = 0;
+    k_pend = k_guard = 0;
     k_saving[0] = 0;
+    fx_still = 0;
     master_set();
     if (!f_kits)
         f_kits = lxu_open();
@@ -830,7 +861,13 @@ static void set_value(const char *key, const char *val)
 static void e_set(const char *key, const char *val)
 {
     if (!strcmp(key, "kit")) {
-        kit_load((uint32_t)clamp(atoi(val), 0, (int32_t)kit_count() - 1));
+        uint32_t k = (uint32_t)clamp(atoi(val), 0, (int32_t)kit_count() - 1);
+        if (k_guard && k == e_kit) {             /* (the kit the state was made from: keep the state's sound) */
+            k_guard = 0;
+            return;
+        }
+        k_guard = 0;
+        kit_load(k);
     } else if (!strcmp(key, "k_save")) {         /* SAVE KIT: its name */
         kit_save(val);
     } else if (!strcmp(key, "k_delete")) {       /* DELETE KIT: the kit of yours loaded */
@@ -841,8 +878,11 @@ static void e_set(const char *key, const char *val)
         pr_at = e_clk;
     } else if (!strcmp(key, "state")) {
         state_set(val);
+        k_guard = 1;
     } else if (key[0] == 's' && key[1] >= '1' && key[1] <= '8' && !strcmp(key + 2, "_file")) {
         file_set((uint32_t)(key[1] - '1'), val);
+    } else if (!strcmp(key, "file")) {           /* (bare: the sound in focus) */
+        file_set(e_focus, val);
     } else if (!strcmp(key, "ui_voice")) {       /* "snd3", "<count>:2" or 2 (0-based) */
         const char *c = strchr(val, ':');
         int n = !strncmp(val, "snd", 3) ? atoi(val + 3) - 1 : atoi(c ? c + 1 : val);
@@ -880,6 +920,8 @@ static int e_get(const char *key, char *buf, int buf_len)
         jb_put(&j, "%s", lxu_error(f_kits));
     } else if (key[0] == 's' && key[1] >= '1' && key[1] <= '8' && !strcmp(key + 2, "_file")) {
         jb_put(&j, "%s", f_path[key[1] - '1']);
+    } else if (!strcmp(key, "file")) {
+        jb_put(&j, "%s", f_path[e_focus]);
     } else if (key[0] == 's' && key[1] >= '1' && key[1] <= '8' && !strcmp(key + 2, "_file_status")) {
         static const char *const ST[] = {"Failed", "None", "Loading", "Loaded"};
         jb_put(&j, "%s", ST[clamp(lxw_status(f_ld, (uint32_t)(key[1] - '1')), -1, 2) + 1]);
@@ -937,12 +979,13 @@ static void e_render(int16_t *out, int frames, float bpm, double beat)
     }
     if (beat >= 0.0)                             /* the LFOs on Move's beat (phase-locked while it plays) */
         lfo_clk = (uint32_t)(beat * 4.0 * step_base());
-    {                                            /* QUIET: no voice sounding and the FX' tails gone for 30 ms - the
-                                                  * engine rests (silence costs nothing) until the next hit */
+    {                                            /* QUIET: no voice sounding, the output silent and delay and reverb
+                                                  * resting (1 s without a send or a sound of theirs) - the engine
+                                                  * rests (silence costs nothing) until the next hit */
         int busy = 0;
         for (b = 0; b < NTRK && !busy; b++)
             busy = voice[b].active || ghost[b].active;
-        if (!busy && e_quiet >= 10u) {
+        if (!busy && e_quiet >= 10u && fx_still >= FX_IDLE_N) {   /* (and no echo on its way: lx_synth.c) */
             memset(out, 0, (size_t)frames * 2u * sizeof *out);
             lfo_clk += (uint32_t)frames;
             fm1_ms += (uint32_t)frames / 44u + 1u;

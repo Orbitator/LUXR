@@ -96,21 +96,40 @@ der Liste. Ein gespeichertes Set stellt natürlich seinen eigenen Klang wieder h
 ## Rechenlast
 
 Gemessen auf einem Rechner (x86, 2,1 GHz), je Block von 128 Samples (2,9 ms): ~35 µs mit allen acht Sounds auf jedem
-16tel, **~2 µs in Stille**. Was v0.4.0 dafür geändert hat:
+16tel, **~2 µs in Stille**. Ein Profil (callgrind) des vollen Betriebs: die acht Stimmen ~55 %, Hall und Delay ~20 %,
+die Mischung ~12 %, Kompressor, Limiter und Drive zusammen ~3 %.
 
-- **Seitenbeschreibungen fest:** `ui_hierarchy` (17 KB) und `chain_params` wurden bei jeder Abfrage neu als JSON gebaut
-  – im Audio-Thread, ~190 µs bzw. ~75 µs (auf dem Move ein Mehrfaches), jedes Mal, wenn Schwung die Seiten neu plant.
-  Jetzt einmal beim Laden gebaut, eine Abfrage kostet 0,1 µs.
-- **Stille kostet nichts:** klingt keine Stimme und sind Delay- und Hall-Fahnen verklungen, ruht die Engine bis zum
-  nächsten Anschlag.
-- **Kein Knacksen beim Neuanschlag:** wie auf dem FM-1 hat jeder Sound eine Stimme; ein neuer Schlag schnitt den
-  laufenden bisher hart ab. Jetzt klingt der alte noch ~3 ms aus (die Ausblendung, mit der die geschlossene die offene
-  Hi-Hat abwürgt). Im Test: der größte Sprung zwischen zwei Samples beim Neuanschlag ist kleiner als im Sound selbst.
-  (Nur im Modul: `#ifdef LX_GHOST` in `lx_synth.c`, die Firmware bleibt gleich.)
+Was beim **Schrauben während des Spielens** den Move überlastete, war nicht die Klangerzeugung, sondern das
+Zusammenspiel mit dem Host:
+
+- **Fehlende Parameter-Beschreibungen.** Schwung schlägt bei jeder Änderung, die Automation („Lanes“), Modulation oder
+  Scenes betrifft, den Parameter in `chain_params` nach. Fehlt er dort, liest der Host **alle 250 ms die ganze Liste
+  neu und zerlegt sie in rund 1 MB Strukturen – im Audio-Thread**, solange daran gedreht wird. Bis 0.3.0 fehlten alle
+  Auswahl-Parameter (Sample, LFO-Ziel/-Welle/-Rate, Length, Note Map …), Variation, Attack, Gate und Release, und die
+  Liste wurde dafür jedes Mal neu als JSON gebaut. Jetzt steht **jeder** Schlüssel drin: die 33 Kit-Parameter und die 34
+  eines Sounds je einmal – `module.json` nennt dem Host die Vorlage `s{index}_{key}`, mit der er `s1_…`–`s8_…` darauf
+  abbildet; ohne Sound-Nummer (`p2`, `level` …) meint ein Schlüssel den Sound im Fokus. 71 Einträge statt 210, fest
+  gebaut, eine Abfrage kostet 0,1 µs. `schwung/tests/check_docs.py` prüft bei jedem Build, dass jeder Schlüssel jeder
+  Seite so aufgelöst wird, wie der Host es tut.
+- **Seitenbeschreibung fest** (`ui_hierarchy`, 17 KB): einmal gebaut statt bei jeder Abfrage (~190 µs).
+- **Zustand schnell:** den `state` liest Schwung nach Änderungen (Autosave, Preset-Markierung) – 4 µs statt 31 µs.
+- **Hall und Delay ruhen**, solange nichts an sie gesendet wird und sie seit 1 s still sind (länger als die
+  Delay-Leitung, 0,74 s: kein Echo geht verloren). Das spart ihre ~20 %, wenn ein Kit sie nicht nutzt.
+- **Stille kostet nichts:** klingt keine Stimme, ist der Ausgang still und ruhen Hall und Delay, ruht die Engine bis
+  zum nächsten Anschlag.
+- **Kein Knacksen beim Neuanschlag:** der laufende Schlag klingt noch ~3 ms aus statt hart abgeschnitten zu werden.
 - `-O3` statt `-O2`.
 
-Knackt es trotzdem: jede LUXR-Instanz rechnet für sich – auf mehreren Spuren zugleich addiert sich das. Und LUXR kann
-selbst übersteuern: *Setup › Output* auf 0 dB oder *Comp & Limiter › Limiter* ein.
+(Hall-Ruhe, Ausklingen und die WAV-Ebene stehen in `lx_synth.c` unter `#ifdef`, nur im Modul eingeschaltet – die
+Firmware bleibt gleich.)
+
+## Speichern mit dem Projekt
+
+Alles, was den Klang ausmacht – alle acht Sounds, Kit-FX, Master, Kompressor, Limiter, die WAV-Pfade, die Nummer des
+Kits – steht im `state`, den Schwung mit dem Set speichert und beim Öffnen zurückgibt, **unabhängig davon, welches
+Preset gewählt war**: auch geänderte Sounds kommen so zurück, wie sie zuletzt klangen. Schwung stellt beim Öffnen auch
+die Auswahl des Preset-Browsers wieder ein; dieses erste Setzen desselben Kits nach einem Zustand überschreibt den
+Klang nicht. Wählt man ein Kit danach von Hand, lädt es.
 
 ## Seiten
 
