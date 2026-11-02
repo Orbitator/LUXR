@@ -24,6 +24,8 @@ struct lxw_loader {
     pthread_t th;
     int run;                                     /* (atomic) */
     uint32_t nslots;
+    void (*idle)(void *);
+    void *arg;
     struct {
         char path[LXW_PATH];                     /* written by the audio thread, then gen bumped (release) */
         uint32_t gen, done;                      /* (atomic) requested, served */
@@ -143,16 +145,20 @@ static void *worker(void *arg)
                 l->s[k].done = g;
             }
         }
+        if (l->idle)
+            l->idle(l->arg);
         nanosleep(&ts, 0);
     }
     return 0;
 }
 
-HID lxw_loader_t *lxw_start(uint32_t nslots)
+HID lxw_loader_t *lxw_start(uint32_t nslots, void (*idle)(void *), void *arg)
 {
     lxw_loader_t *l = calloc(1, sizeof *l);
     if (!l)
         return 0;
+    l->idle = idle;
+    l->arg = arg;
     l->nslots = nslots < NSLOT_MAX ? nslots : NSLOT_MAX;
     l->run = 1;
     if (pthread_create(&l->th, 0, worker, l)) {

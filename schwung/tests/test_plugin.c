@@ -132,6 +132,13 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: test_plugin dsp.so [outdir]\n");
         return 2;
     }
+    {                                            /* (the kits of yours: a fresh folder of the test's own) */
+        char kd[600], cmd[700];
+        snprintf(kd, sizeof kd, "%s/kits", dir);
+        snprintf(cmd, sizeof cmd, "rm -rf '%s'", kd);
+        if (system(cmd)) {}
+        setenv("LUXR_KITS_DIR", kd, 1);
+    }
     if (!(so = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL))) {
         fprintf(stderr, "dlopen: %s\n", dlerror());
         return 1;
@@ -167,17 +174,14 @@ int main(int argc, char **argv)
     printf("  kits: %s\n", val);
     CHECK(atoi(val) >= 2, "kits");
     api->get_param(a, "s1_p1", val, sizeof val);
-    CHECK(!strcmp(val, "14"), "the factory kick's pitch: %s", val);
+    CHECK(!strcmp(val, "16"), "the first preset (Patch 1) at the start: kick pitch %s", val);
+    api->get_param(a, "kit_name", val, sizeof val);
+    CHECK(!strcmp(val, "Patch 1"), "the first preset's name: %s", val);
     CHECK(api->get_param(a, "nonsense", val, sizeof val) == -1, "an unknown key");
     n = api->get_param(a, "ui_hierarchy", big, sizeof big);
-    CHECK(strstr(big, "\"focus_param\":\"ui_voice\"") && strstr(big, "\"canvas_script\":\"perform.js\""),
+    CHECK(strstr(big, "\"focus_param\":\"ui_voice\"") && strstr(big, "\"canvas_script\":\"perform.js\"") &&
+          strstr(big, "\"focus_press_param\":\"ui_press\"") && strstr(big, "\"child_key_template\":\"s{index}_{key}\""),
           "the hierarchy: focus and PERFORM");
-    api->set_param(a, "ui_voice", "snd5");
-    api->get_param(a, "ui_voice", val, sizeof val);
-    CHECK(!strcmp(val, "snd5"), "ui_voice: %s", val);
-    api->set_param(a, "ui_voice", "snd9");
-    api->get_param(a, "ui_voice", val, sizeof val);
-    CHECK(!strcmp(val, "snd5"), "ui_voice out of range ignored: %s", val);
 
     /* silence, then the eight sounds on the Move map, then accents */
     r = block_rms(a, 40, 0, 0, 0);
@@ -341,6 +345,124 @@ int main(int argc, char **argv)
         api->set_param(a, "s1_syn", "127");
     }
 
+    {                                            /* the focus: PERFORM's, and a pad HIT (a press and its note) */
+        char v0[32], v1[32];
+        api->get_param(a, "ui_voice", v0, sizeof v0);
+        api->set_param(a, "ui_voice", "snd5");
+        api->get_param(a, "ui_voice", val, sizeof val);
+        CHECK(strstr(val, ":4") && strcmp(val, v0), "ui_voice: %s", val);
+        api->set_param(a, "ui_voice", "snd9");
+        api->get_param(a, "ui_voice", v1, sizeof v1);
+        CHECK(!strcmp(v1, val), "ui_voice out of range ignored: %s", v1);
+        note(a, 38, 100);                        /* (a sequenced note: no press, no focus) */
+        block_rms(a, 10, 0, 0, 0);
+        api->get_param(a, "ui_voice", v1, sizeof v1);
+        CHECK(!strcmp(v1, val), "a note alone moves nothing: %s", v1);
+        api->set_param(a, "ui_press", "1");      /* (the press first, its note a block later) */
+        block_rms(a, 1, 0, 0, 0);
+        note(a, 39, 100);
+        api->get_param(a, "ui_voice", v1, sizeof v1);
+        CHECK(strstr(v1, ":3") && strcmp(v1, val), "press + note: the closed hat (39) is in focus (%s)", v1);
+        note(a, 39, 100);                        /* (the note first, its press after) */
+        block_rms(a, 1, 0, 0, 0);
+        strcpy(val, v1);
+        api->set_param(a, "ui_press", "1");
+        block_rms(a, 40, 0, 0, 0);               /* (no note after the press: the one before it, once the window ends) */
+        api->get_param(a, "ui_voice", v1, sizeof v1);
+        CHECK(strstr(v1, ":3") && strcmp(v1, val), "the same pad again: a new count (%s after %s)", v1, val);
+        block_rms(a, 200, 0, 0, 0);              /* (a press long after its note pairs with nothing) */
+        strcpy(val, v1);
+        api->set_param(a, "ui_press", "1");
+        block_rms(a, 100, 0, 0, 0);
+        note(a, 36, 100);
+        api->get_param(a, "ui_voice", v1, sizeof v1);
+        CHECK(!strcmp(v1, val), "a press and a note 290 ms apart are not a hit: %s", v1);
+    }
+
+    /* kits of your own: saved, listed, loaded back, deleted */
+    {
+        char nm[64], st0[1 << 15], st1[1 << 15];
+        int nk0, nk, ok = 0;
+        api->set_param(a, "kit", "2");
+        api->set_param(a, "s3_p2", "111");
+        api->set_param(a, "k_tune", "7");
+        api->get_param(a, "kit_count", val, sizeof val);
+        nk0 = atoi(val);
+        api->get_param(a, "state", st0, sizeof st0);
+        api->set_param(a, "k_save", "  My Kit/1!  ");   /* (a name made safe for a file: "My Kit1") */
+        for (k = 0; k < 300 && !ok; k++) {
+            int16_t o[256];
+            api->render_block(a, o, 128);
+            api->get_param(a, "kit_count", val, sizeof val);
+            api->get_param(a, "kit_name", nm, sizeof nm);
+            ok = atoi(val) == nk0 + 1 && !strcmp(nm, "My Kit1");
+            if (!ok) usleep(10000);
+        }
+        api->get_param(a, "k_error", val, sizeof val);
+        CHECK(ok, "SAVE KIT: listed and selected (%s; error \"%s\")", nm, val);
+        api->get_param(a, "kit", val, sizeof val);
+        nk = atoi(val);
+        CHECK(nk == nk0, "the saved kit is the last in the list (%d)", nk);
+        api->set_param(a, "kit", "0");           /* (another kit, then the saved one back) */
+        api->get_param(a, "s3_p2", val, sizeof val);
+        CHECK(strcmp(val, "111"), "another kit loaded (%s)", val);
+        snprintf(val, sizeof val, "%d", nk);
+        api->set_param(a, "kit", val);
+        for (k = 0, ok = 0; k < 300 && !ok; k++) {
+            int16_t o[256];
+            api->render_block(a, o, 128);
+            api->get_param(a, "s3_p2", val, sizeof val);
+            ok = !strcmp(val, "111");
+            if (!ok) usleep(10000);
+        }
+        CHECK(ok, "the saved kit loads back (s3_p2 %s)", val);
+        api->get_param(a, "k_tune", val, sizeof val);
+        CHECK(!strcmp(val, "7"), "with its kit values (tune %s)", val);
+        api->get_param(a, "state", st1, sizeof st1);
+        {   /* (the same state but for the kit's number) */
+            char *p0 = strstr(st0, ",\"k_vol\""), *p1 = strstr(st1, ",\"k_vol\"");
+            CHECK(p0 && p1 && !strcmp(p0, p1), "the whole kit came back");
+            if (!(p0 && p1 && !strcmp(p0, p1))) { put_file(dir, "kit_saved.json", st0, (int)strlen(st0)); put_file(dir, "kit_loaded.json", st1, (int)strlen(st1)); }
+        }
+        api->get_param(a, "kit_name", nm, sizeof nm);
+        CHECK(!strcmp(nm, "My Kit1"), "its name: %s", nm);
+        api->set_param(a, "k_delete", "Delete");
+        for (k = 0, ok = 0; k < 300 && !ok; k++) {
+            int16_t o[256];
+            api->render_block(a, o, 128);
+            api->get_param(a, "kit_count", val, sizeof val);
+            ok = atoi(val) == nk0;
+            if (!ok) usleep(10000);
+        }
+        CHECK(ok, "DELETE KIT: gone from the list (%s kits)", val);
+        api->set_param(a, "kit", "0");
+        api->set_param(a, "k_delete", "Delete");   /* (a preset of LUXR's is never deleted) */
+        block_rms(a, 30, 0, 0, 0);
+        api->get_param(a, "kit_count", val, sizeof val);
+        CHECK(atoi(val) == nk0, "the presets stay (%s)", val);
+    }
+
+    /* a retriggered sound fades its tail instead of cutting it (no click): the largest step between two samples at a
+     * retrigger is no larger than the sound's own */
+    {
+        int16_t o[256], prev = 0;
+        int jump_hit = 0, jump_all = 0, b2, i2;
+        api->set_param(a, "kit", "0");
+        block_rms(a, 300, 0, 0, 0);
+        for (b2 = 0; b2 < 400; b2++) {
+            if (b2 % 20 == 0) note(a, 46, 120);  /* (the open hat, retriggered long before it ends) */
+            api->render_block(a, o, 128);
+            for (i2 = 0; i2 < 256; i2 += 2) {
+                int d = abs(o[i2] - prev);
+                prev = o[i2];
+                if (b2 % 20 == 0 && b2 && i2 < 8) { if (d > jump_hit) jump_hit = d; }
+                else if (d > jump_all) jump_all = d;
+            }
+        }
+        printf("  retrigger: largest step %d at a hit, %d elsewhere\n", jump_hit, jump_all);
+        CHECK(jump_hit <= jump_all + 2000, "no click at a retrigger (%d vs %d)", jump_hit, jump_all);
+    }
+
     /* the slots: six engines, the seventh instance refused, a freed slot taken again */
     ins[0] = a; ins[1] = b;
     for (k = 2; k < 6; k++) {
@@ -352,7 +474,7 @@ int main(int argc, char **argv)
     ins[3] = api->create_instance("/tmp", NULL);
     CHECK(ins[3] != NULL, "a freed slot");
     api->get_param(ins[3], "s1_p1", val, sizeof val);
-    CHECK(!strcmp(val, "14"), "a new instance starts with the factory kit: %s", val);
+    CHECK(!strcmp(val, "16"), "a new instance starts with the first preset: %s", val);
 
     /* cost: one instance, a hit on every sound every 16th, delay and reverb on */
     {

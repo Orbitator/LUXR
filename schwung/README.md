@@ -6,7 +6,7 @@ Delay, Reverb), Master-Filter, Kompressor und Limiter – derselbe Festkomma-Cod
 (`firmware/src/lx_synth.c`, unverändert eingebunden). Der Sequencer und das Panel von LUXR bleiben auf dem FM-1: auf dem
 Move sequenziert der Move, LUXR klingt.
 
-Status: **v0.3.0, auf dem Rechner und unter QEMU (aarch64) getestet, noch nie auf einem Move gelaufen.**
+Status: **v0.4.0, auf dem Rechner und unter QEMU (aarch64) getestet, noch nie auf einem Move gelaufen.**
 
 ## Installieren
 
@@ -43,7 +43,7 @@ Modul Knöpfe, Jog-Rad, Jog-Klick und Pads selbst bekommt und abfragen darf, ob 
 | Seite | Knopf 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
 |---|---|---|---|---|---|---|---|---|
 | LUXR (die erste) | Volume | Tune | Decay | Filter | Reso | Drive | Delay-Return | Reverb-Return |
-| Sound, Seite 1 (Synth) | LUXRs EDIT 1 | 2 | 3 | 4 | EDIT 5 (auf LUXR mit SHIFT) | 6 | 7 | 8 |
+| Sound, Seite 1 (Synth) | Pitch (EDIT 1) | Decay (2) | Syn 3 | Syn 4 | Syn 5 (auf LUXR mit SHIFT) | Syn 6 | Syn 7 | Drive (8) |
 | Sound, Seite 2 (Sample) | Sample | Pegel | Pitch | Decay | Start | Tone | Bend | Synth-Pegel |
 | Sound, Seite 3 (Mix/Env) | Level | Pan | Delay | Reverb | Drive | Attack | Gate | Release |
 | Sound, Seite 4 (LFOs) | LFO 1 Ziel | Welle | Rate | Tiefe | LFO 2 Ziel | Welle | Rate | Tiefe |
@@ -52,6 +52,7 @@ Modul Knöpfe, Jog-Rad, Jog-Klick und Pads selbst bekommt und abfragen darf, ob 
 | Delay | Mode | Zeit | Zeit R | Feedback | Tone | Return | | |
 | Comp & Limiter | Threshold | Ratio | Attack | Release | Makeup | Limiter | Ceiling | Lim Release |
 | Setup | Output | Note Map | Tonal Snd | | Pre-Clip | Auto Level | Target | |
+| Setup (Zellen) | Save Kit | Delete Kit | | | | | | |
 
 Der Synth-Layer liegt wie auf dem FM-1: Knöpfe 1–4 sind LUXRs Reihe A, 5–8 die Reihe B, die man dort mit SHIFT
 (GLO halten) erreicht – z. B. Kick: Pitch, Decay, P.Env, P.Dec | Wave, FM, Click, Drive.
@@ -75,9 +76,45 @@ spielen eine Reihe, **mit Shift die zweite**.
 
 Der gewählte Sound ist auch der, dem das Grid folgt (`focus_param` `ui_voice`).
 
+**Sounds per Pad.** Die acht Sounds sind *eine* Seitengruppe „Sounds“ (eine Child-Ebene in Schwung): das Grid zeigt
+immer nur den Sound im Fokus, das Jog-Rad blättert also nicht mehr durch alle 40 Seiten. **Pad anschlagen** – Schwung
+meldet den Fingerdruck (`ui_press`), LUXR verbindet ihn mit der Note, die das Pad gespielt hat (innerhalb 100 ms; erst
+eine Note danach, sonst die davor), und das Grid springt auf die Seiten dieses Sounds; nochmal dasselbe Pad holt sie
+zurück, auch wenn man inzwischen weitergeblättert hat. Vom Sequencer gespielte Noten verschieben den Fokus nicht.
+Weil alle acht Sounds dieselben Seiten teilen, tragen die Synth-Knöpfe 3–7 im Grid neutrale Namen (*Syn 3* … *Syn 7*,
+die Stellen von LUXRs EDIT); PERFORM zeigt jeweils die echten (Kick: P.Env, P.Dec, Wave, FM, Click …).
+
+**Eigene Kits.** *Setup › Save Kit* öffnet die Bildschirmtastatur (vorbelegt mit dem Namen des Kits): der Name wird
+gespeichert und das Kit erscheint im Preset-Browser hinter den LUXR-Presets und ist gleich ausgewählt. *Delete Kit*
+löscht das geladene eigene Kit (LUXRs Presets bleiben). Gespeichert wird alles, was den Klang ausmacht (alle Sounds, FX,
+Master, die WAV-Pfade) als JSON in `/data/UserData/schwung/luxr/kits/<Name>.json` – außerhalb des Moduls, ein Update
+lässt sie stehen. Lesen, Schreiben und Löschen erledigt derselbe Hintergrund-Thread wie die WAVs.
+
+**Beim Start** lädt LUXR das erste Preset (*Patch 1*), wie der FM-1 beim Einschalten; *Factory* steht jetzt am Ende
+der Liste. Ein gespeichertes Set stellt natürlich seinen eigenen Klang wieder her.
+
+## Rechenlast
+
+Gemessen auf einem Rechner (x86, 2,1 GHz), je Block von 128 Samples (2,9 ms): ~35 µs mit allen acht Sounds auf jedem
+16tel, **~2 µs in Stille**. Was v0.4.0 dafür geändert hat:
+
+- **Seitenbeschreibungen fest:** `ui_hierarchy` (17 KB) und `chain_params` wurden bei jeder Abfrage neu als JSON gebaut
+  – im Audio-Thread, ~190 µs bzw. ~75 µs (auf dem Move ein Mehrfaches), jedes Mal, wenn Schwung die Seiten neu plant.
+  Jetzt einmal beim Laden gebaut, eine Abfrage kostet 0,1 µs.
+- **Stille kostet nichts:** klingt keine Stimme und sind Delay- und Hall-Fahnen verklungen, ruht die Engine bis zum
+  nächsten Anschlag.
+- **Kein Knacksen beim Neuanschlag:** wie auf dem FM-1 hat jeder Sound eine Stimme; ein neuer Schlag schnitt den
+  laufenden bisher hart ab. Jetzt klingt der alte noch ~3 ms aus (die Ausblendung, mit der die geschlossene die offene
+  Hi-Hat abwürgt). Im Test: der größte Sprung zwischen zwei Samples beim Neuanschlag ist kleiner als im Sound selbst.
+  (Nur im Modul: `#ifdef LX_GHOST` in `lx_synth.c`, die Firmware bleibt gleich.)
+- `-O3` statt `-O2`.
+
+Knackt es trotzdem: jede LUXR-Instanz rechnet für sich – auf mehreren Spuren zugleich addiert sich das. Und LUXR kann
+selbst übersteuern: *Setup › Output* auf 0 dB oder *Comp & Limiter › Limiter* ein.
+
 ## Seiten
 
-- **Preset-Browser**: *Factory* und die Kits der 13 Preset-Patches (dieselben, mit denen der Emulator startet:
+- **Preset-Browser**: die Kits der 13 Preset-Patches, *Factory*, dann die eigenen Kits (dieselben, mit denen der Emulator startet:
   `web/emu/luxr-backup-*.luxr`, beim Bauen von `schwung/tools/gen_kits.c` mit dem Firmware-Code ausgelesen).
 - **LUXR (Root)**: Perform, dann Volume, Tune (±24 Halbtöne), Decay (alle Sounds), Master-Filter (− Tiefpass,
   + Hochpass), Resonanz, Drive, Delay- und Reverb-Return; Output, Note Map und Tonal Snd stehen unter **Setup**.
@@ -135,6 +172,7 @@ Bauen braucht dasselbe wie `tools/build.py --gen` (Python mit Pillow; die LXR-Tr
 | `dsp/luxr_plugin.c` | Plugin API v2: jede Instanz bekommt eine der sechs Maschinen |
 | `dsp/luxr_tables.c` | die Transienten, einmal für alle Maschinen |
 | `dsp/luxr_wav.c` | WAV-Dateien lesen, im eigenen Thread, Übergabe an den Audio-Thread |
+| `dsp/luxr_user.c` | eigene Kits speichern, auflisten, laden, löschen (im selben Thread) |
 | `dsp/plugin_api_v1.h` | aus Schwung (MIT, `LICENSE-SCHWUNG`) |
 | `src/module.json`, `src/help.json` | das Modul, die Hilfe auf dem Move |
 | `src/perform.js` | PERFORM: die Knöpfe mit Reihe A / Shift-Reihe B, Jog, Pads |

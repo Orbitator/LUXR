@@ -112,8 +112,9 @@
             st.vals = {};                        /* (a kit may have been loaded meanwhile: read afresh) */
             st.layer = st.layer || 0;
             st.touch = -1;
-            const v = String(ctx.getParam("ui_voice") || "snd1");
-            st.snd = Math.max(0, Math.min(7, num(v.replace(/^snd/, ""), 1) - 1));
+            const v = String(ctx.getParam("ui_voice") || "0:0");   /* "<count>:<sound 0..7>" (or "snd1".."snd8") */
+            const c = v.indexOf(":");
+            st.snd = Math.max(0, Math.min(7, c >= 0 ? num(v.slice(c + 1), 0) : num(v.replace(/^snd/, ""), 1) - 1));
             st.map = num(ctx.getParam("k_map"), 0);
             fetchRows(ctx);
         },

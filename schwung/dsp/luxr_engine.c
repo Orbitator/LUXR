@@ -57,6 +57,7 @@ static uint32_t rng(void)
 #define LX_FILE_LAYER 1                          /* (the sample layer may be a WAV: lx_synth.c TR_FILE) */
 #include "lx_synth.c"
 #include "luxr_wav.h"
+#include "luxr_user.h"
 
 /* the parts of the firmware left behind: no sequencer (Move's), no parameter locks */
 static void lock_apply(sound_t *s, uint32_t pid, uint32_t val) { (void)s; (void)pid; (void)val; }
@@ -382,7 +383,7 @@ static void jb_put(jb_t *j, const char *fmt, ...)
     va_end(ap);
     j->n = r < 0 ? j->cap : j->n + r > j->cap ? j->cap : j->n + r;
 }
-static void jb_param(jb_t *j, const char *key, const char *name, const pdef_t *d, int32_t val)
+static void jb_param(jb_t *j, const char *key, const char *name, const pdef_t *d)
 {
     jb_put(j, "{\"key\":\"%s\",\"name\":\"%s\",", key, name);
     if (d->type == PT_ENUM) {
@@ -390,19 +391,21 @@ static void jb_param(jb_t *j, const char *key, const char *name, const pdef_t *d
         jb_put(j, "\"type\":\"enum\",\"options\":[");
         for (k = 0; k <= d->max; k++)
             jb_put(j, "%s\"%s\"", k ? "," : "", d->opt ? d->opt[k] : o_smp[k]);
-        jb_put(j, "],\"default\":%d}", (int)val);
+        jb_put(j, "]}");
         return;
     }
-    jb_put(j, "\"type\":\"int\",\"min\":%d,\"max\":%d,\"step\":1,\"default\":%d", d->min, d->max, (int)val);
+    jb_put(j, "\"type\":\"int\",\"min\":%d,\"max\":%d,\"step\":1", d->min, d->max);
     if (d->unit)
         jb_put(j, ",\"unit\":\"%s\"", d->unit);
     jb_put(j, "}");
 }
-/* The eight knobs. ROOT: the kit's performance macros (knob 1 VOLUME .. 8 REVERB RETURN). A sound (Kick .. Cymbal): page
- * 1 its synth layer in LUXR's EDIT order (knobs 1-4 LUXR's row A, 5-8 the row B LUXR has under SHIFT), page 2 the sample
- * layer, page 3 the mix and the envelope (LEVEL PAN DELAY REVERB | DRIVE ATTACK GATE RELEASE), page 4 the LFOs (1 on
- * knobs 1-4, 2 on 5-8), page 5 VARIATION. The kit's other pages below. PERFORM (perform.js) puts two of these pages on
- * the knobs at once: the first as they are, the second with SHIFT held. */
+/* The pages and the eight knobs. ROOT: the kit's performance macros (knob 1 VOLUME .. 8 REVERB RETURN); then SOUND - one
+ * level for all eight sounds (a child level: the grid shows the sound in focus only, and a pad hit brings you to it);
+ * page 1 its synth layer in LUXR's EDIT order (knobs 1-4 LUXR's row A, 5-8 the row B LUXR has under SHIFT), page 2 the
+ * sample layer, page 3 mix and envelope (LEVEL PAN DELAY REVERB | DRIVE ATTACK GATE RELEASE), page 4 the LFOs (1 on
+ * knobs 1-4, 2 on 5-8), page 5 the WAV, LENGTH, VARIATION. Then the kit's pages. PERFORM (perform.js) puts two of these
+ * pages on the knobs at once: the first as they are, the second with SHIFT held. Both documents are fixed: built once,
+ * when an instance is made, and served as they are (a get_param runs on the audio thread). */
 static void jb_str(jb_t *j, const char *v)       /* a JSON string, escaped */
 {
     jb_put(j, "\"");
@@ -417,12 +420,10 @@ static void jb_str(jb_t *j, const char *v)       /* a JSON string, escaped */
     }
     jb_put(j, "\"");
 }
-static void jb_file(jb_t *j, uint32_t t)         /* the sound's WAV: Schwung's file browser, from Move's samples */
+static void jb_file(jb_t *j, const char *key)    /* a sound's WAV: Schwung's file browser, from Move's samples */
 {
-    jb_put(j, "{\"key\":\"s%u_file\",\"name\":\"WAV File\",\"type\":\"filepath\",\"root\":\"/data/UserData\","
-              "\"start_path\":\"/data/UserData/UserLibrary/Samples\",\"filter\":[\".wav\",\".WAV\"],\"default\":", t + 1u);
-    jb_str(j, f_path[t]);
-    jb_put(j, "}");
+    jb_put(j, "{\"key\":\"%s\",\"name\":\"WAV File\",\"type\":\"filepath\",\"root\":\"/data/UserData\","
+              "\"start_path\":\"/data/UserData/UserLibrary/Samples\",\"filter\":[\".wav\",\".WAV\"]}", key);
 }
 static const uint8_t KIT_ROOT[8] = {G_VOL, G_TUNE, G_DDEC, G_MFLT, G_MRES, G_DRVA, G_DLYL, G_REVL};
 static const uint8_t KIT_PAGE[][8] = {           /* (G_*; 0xFF a gap) */
@@ -433,8 +434,13 @@ static const uint8_t KIT_PAGE[][8] = {           /* (G_*; 0xFF a gap) */
 };
 static const char *const KIT_PAGE_NAME[] = {"Drive & Reverb", "Delay", "Comp & Limiter", "Setup"};
 static const char *const KIT_PAGE_ID[] = {"fx", "delay", "dyn", "setup"};
+/* the synth layer's eight on the SOUND pages: one name for every sound's (the kinds differ; PERFORM names them all) */
+static const char *const SYN_NAME[8] = {"Pitch", "Decay", "Syn 3", "Syn 4", "Syn 5", "Syn 6", "Syn 7", "Drive"};
 #define PERFORM_JSON "{\"key\":\"perform\",\"name\":\"Perform\",\"type\":\"canvas\",\"canvas_script\":\"perform.js\"," \
                      "\"enterable\":true,\"show_footer\":false,\"show_value\":false}"
+#define SAVE_JSON "{\"key\":\"k_save\",\"name\":\"Save Kit\",\"type\":\"string\"}," \
+                  "{\"key\":\"k_delete\",\"name\":\"Delete Kit\",\"type\":\"enum\",\"options\":[\"-\",\"Delete\"]," \
+                  "\"access\":\"write\"}"
 static void knobs_put(jb_t *j, const uint8_t *g, uint32_t n)   /* a knob list of G_* (0xFF: null), trailing gaps dropped */
 {
     uint32_t i, last = 0;
@@ -459,45 +465,51 @@ static void gparams_put(jb_t *j, const uint8_t *g, uint32_t n)
         if (g[i] != 0xFF) {
             if (k++)
                 jb_put(j, ",");
-            jb_param(j, GDEF[g[i]].key, GDEF[g[i]].name, &GDEF[g[i]], g_get(g[i]));
+            jb_param(j, GDEF[g[i]].key, GDEF[g[i]].name, &GDEF[g[i]]);
         }
 }
 static void hierarchy(jb_t *j)
 {
+    static const char *const ROLE[NTRK] = {"kick", "snare", "clap", "hat", "hat", "tom", "rim", "cymbal"};
     uint32_t t, k, i;
-    jb_put(j, "{\"pad_layout\":\"drums\",\"focus_param\":\"ui_voice\",\"levels\":{\"root\":{\"name\":\"LUXR\","
-              "\"list_param\":\"kit\",\"count_param\":\"kit_count\",\"name_param\":\"kit_name\",\"params\":["
-              PERFORM_JSON ",");
+    jb_put(j, "{\"pad_layout\":\"drums\",\"focus_param\":\"ui_voice\",\"focus_press_param\":\"ui_press\",\"levels\":{"
+              "\"root\":{\"name\":\"LUXR\",\"list_param\":\"kit\",\"count_param\":\"kit_count\",\"name_param\":\"kit_name\","
+              "\"params\":[" PERFORM_JSON ",");
     gparams_put(j, KIT_ROOT, 8);
-    for (t = 0; t < NTRK; t++)
-        jb_put(j, ",{\"level\":\"snd%u\",\"label\":\"%s\"}", t + 1u, O_SND[t]);
+    jb_put(j, ",{\"level\":\"sound\",\"label\":\"Sounds\"}");
     for (k = 0; k < NELEM(KIT_PAGE); k++)
         jb_put(j, ",{\"level\":\"%s\",\"label\":\"%s\"}", KIT_PAGE_ID[k], KIT_PAGE_NAME[k]);
     jb_put(j, "],");
     knobs_put(j, KIT_ROOT, 8);
-    jb_put(j, "}");
-    for (t = 0; t < NTRK; t++) {                 /* a voice a sound: its note as the MOVE map has it */
-        static const char *const ROLE[NTRK] = {"kick", "snare", "clap", "hat", "hat", "tom", "rim", "cymbal"};
-        char key[16];
-        jb_put(j, ",\"snd%u\":{\"name\":\"%s\",\"note\":%u,\"role\":\"%s\",\"params\":[", t + 1u, O_SND[t], 36u + t,
-               ROLE[t]);
-        for (i = 0; i < S_N; i++) {
-            snprintf(key, sizeof key, "s%u_%s", t + 1u, SDEF[i].key);
-            if (i)
-                jb_put(j, ",");
-            jb_param(j, key, s_name(t, i), &SDEF[i], s_get(t, i));
-        }
-        jb_put(j, ",");
-        jb_file(j, t);
-        jb_put(j, "],\"knobs\":[");
-        for (i = 0; i < S_VAR; i++)
-            jb_put(j, "%s\"s%u_%s\"", i ? "," : "", t + 1u, SDEF[i].key);
-        jb_put(j, ",\"s%u_file\",\"s%u_slen\",\"s%u_var\"]}", t + 1u, t + 1u, t + 1u);   /* (page 5: the WAV, LENGTH,
-                                                                                         * VARIATION) */
+    /* the sounds: one level, an instance a sound (s1_ .. s8_), the notes of the MOVE map; the focus is ours (ui_voice:
+     * a pad hit - ui_press and its note together - or PERFORM), so no child_index_param here */
+    jb_put(j, "},\"sound\":{\"name\":\"Sound\",\"child_count\":%u,\"child_label\":\"Sound\",\"child_key_template\":"
+              "\"s{index}_{key}\",\"child_index_base\":1,\"child_press_param\":\"ui_press\",\"child_notes\":[", NTRK);
+    for (t = 0; t < NTRK; t++)
+        jb_put(j, "%s%u", t ? "," : "", 36u + t);
+    jb_put(j, "],\"child_names\":[");
+    for (t = 0; t < NTRK; t++)
+        jb_put(j, "%s\"%s\"", t ? "," : "", O_SND[t]);
+    jb_put(j, "],\"child_roles\":[");
+    for (t = 0; t < NTRK; t++)
+        jb_put(j, "%s\"%s\"", t ? "," : "", ROLE[t]);
+    jb_put(j, "],\"params\":[");
+    for (i = 0; i < S_N; i++) {
+        if (i)
+            jb_put(j, ",");
+        jb_param(j, SDEF[i].key, i <= S_P8 ? SYN_NAME[i] : SDEF[i].name, &SDEF[i]);
     }
+    jb_put(j, ",");
+    jb_file(j, "file");
+    jb_put(j, "],\"knobs\":[");
+    for (i = 0; i < S_VAR; i++)
+        jb_put(j, "%s\"%s\"", i ? "," : "", SDEF[i].key);
+    jb_put(j, ",\"file\",\"slen\",\"var\"]}");      /* (page 5: the WAV, LENGTH, VARIATION) */
     for (k = 0; k < NELEM(KIT_PAGE); k++) {
         jb_put(j, ",\"%s\":{\"name\":\"%s\",\"params\":[", KIT_PAGE_ID[k], KIT_PAGE_NAME[k]);
         gparams_put(j, KIT_PAGE[k], 8);
+        if (!strcmp(KIT_PAGE_ID[k], "setup"))
+            jb_put(j, "," SAVE_JSON);
         jb_put(j, "],");
         knobs_put(j, KIT_PAGE[k], 8);
         jb_put(j, "}");
@@ -505,33 +517,43 @@ static void hierarchy(jb_t *j)
     jb_put(j, "}}");
 }
 /* chain_params: what can be automated and locked by a scene - the kit's numbers and each sound's (no enums: their
- * pages own them, and the chain's cap of 256 stays far) */
+ * pages own them, and the chain's cap of 256 stays far) - and the WAVs' file browsers */
 static void chain_params(jb_t *j)
 {
-    uint32_t t, i, n = 0;
+    uint32_t t, i;
     char key[16], name[32];
-    jb_put(j, "[" PERFORM_JSON ",{\"key\":\"kit\",\"name\":\"Kit\",\"type\":\"int\",\"min\":0,\"max\":%u,\"step\":1}",
-           LXK_NKITS - 1u);
+    jb_put(j, "[" PERFORM_JSON "," SAVE_JSON);
     for (i = 0; i < G_N; i++)
         if (GDEF[i].type == PT_INT) {
             jb_put(j, ",");
-            jb_param(j, GDEF[i].key, GDEF[i].name, &GDEF[i], g_get(i));
+            jb_param(j, GDEF[i].key, GDEF[i].name, &GDEF[i]);
         }
     for (t = 0; t < NTRK; t++)
         for (i = 0; i < S_N; i++)
             if (SDEF[i].type == PT_INT && i != S_VAR && i != S_GATE && i != S_ATK && i != S_REL) {
                 snprintf(key, sizeof key, "s%u_%s", t + 1u, SDEF[i].key);
-                snprintf(name, sizeof name, "%s %s", TRK_SHORT[t], s_name(t, i));
+                snprintf(name, sizeof name, "%.3s %.12s", TRK_SHORT[t], s_name(t, i));
                 jb_put(j, ",");
-                jb_param(j, key, name, &SDEF[i], s_get(t, i));
-                n++;
+                jb_param(j, key, name, &SDEF[i]);
             }
     for (t = 0; t < NTRK; t++) {
+        snprintf(key, sizeof key, "s%u_file", t + 1u);
         jb_put(j, ",");
-        jb_file(j, t);
+        jb_file(j, key);
     }
-    (void)n;
     jb_put(j, "]");
+}
+static char doc_hier[48 * 1024], doc_cp[64 * 1024];   /* (built once: e_init) */
+static int doc_hier_n, doc_cp_n;
+static void docs_build(void)
+{
+    jb_t j1 = {doc_hier, 0, (int)sizeof doc_hier - 1}, j2 = {doc_cp, 0, (int)sizeof doc_cp - 1};
+    hierarchy(&j1);
+    chain_params(&j2);
+    doc_hier_n = j1.n < j1.cap ? j1.n : -1;
+    doc_cp_n = j2.n < j2.cap ? j2.n : -1;
+    if (doc_hier_n >= 0) doc_hier[doc_hier_n] = 0;
+    if (doc_cp_n >= 0) doc_cp[doc_cp_n] = 0;
 }
 
 /* state: the kit's number and every value, as "key":number (the host stores it with the set and the presets) */
@@ -593,8 +615,11 @@ static void state_set(const char *js)            /* a flat object: numbers, and 
             val[n] = 0;
             if (*p)
                 p++;
-            if (key[0] == 's' && key[1] >= '1' && key[1] <= '8' && !strcmp(key + 2, "_file"))
+            if (key[0] == 's' && key[1] >= '1' && key[1] <= '8' && !strcmp(key + 2, "_file")) {
+                e_restoring = 1;                 /* (the file only: SAMPLE stays as the state has it) */
                 file_set((uint32_t)(key[1] - '1'), val);
+                e_restoring = 0;
+            }
             continue;
         }
         if (!((*p >= '0' && *p <= '9') || *p == '-'))
@@ -614,13 +639,66 @@ static void state_set(const char *js)            /* a flat object: numbers, and 
 }
 
 /* ------------------------------------------------------------- the ops --- */
+/* the kits: LUXR's own (LXK_KITS: the preset patches, Factory last) and then yours (luxr_user.c, files) */
+static lxu_t *f_kits;
+static uint8_t k_pend;                           /* a kit of yours being read: its number + 1 in the list (0 none) */
+static char k_saving[LXU_NAME];                  /* the kit of yours being saved (selected once it is on disk) */
+static char k_text[LXU_TEXT];                    /* (a state for the file: built here, copied by lxu_save) */
+static uint32_t kit_count(void) { return LXK_NKITS + lxu_count(f_kits); }
+static const char *kit_name(uint32_t k) { return k < LXK_NKITS ? LXK_KITS[k].name : lxu_name(f_kits, k - LXK_NKITS); }
 static void kit_load(uint32_t k)
 {
     uint32_t t;
-    e_kit = (uint8_t)(k < LXK_NKITS ? k : 0u);
+    if (k >= LXK_NKITS) {                        /* yours: read by the worker, set when it is there (e_render) */
+        if (!lxu_load(f_kits, k - LXK_NKITS))
+            k_pend = (uint8_t)(k + 1u);
+        return;
+    }
+    e_kit = (uint8_t)k;
     kit_apply(&LXK_KITS[e_kit]);
     for (t = 0; t < NTRK; t++)
-        voice[t].active = 0;
+        voice[t].active = ghost[t].active = 0;
+}
+static void kit_save(const char *name)           /* SAVE KIT: the state as a file of yours (the worker writes it) */
+{
+    jb_t j = {k_text, 0, (int)sizeof k_text - 1};
+    state_get(&j);
+    if (j.n >= j.cap || lxu_save(f_kits, name, k_text, (uint32_t)j.n))
+        return;
+    snprintf(k_saving, sizeof k_saving, "%s", name);
+}
+/* the sound in focus: a pad HIT (Schwung's press - ui_press - and the note it played, within 100 ms of each other) or
+ * PERFORM; served as "<count>:<sound>" so that hitting the same pad again brings the pages back to it. A press takes
+ * the first note after it; only when none comes within the window, the last note before it (a sequenced note just
+ * before a finger must not win over the finger's own) */
+#define PRESS_WIN 4410u
+static uint32_t e_clk;                           /* samples rendered */
+static uint32_t e_quiet;                         /* blocks in a row without a sound (QUIET: e_render) */
+static uint32_t pr_at, nt_at, focus_n;
+static uint8_t pr_on, nt_on, nt_snd;
+static void focus_to(uint32_t t)
+{
+    e_focus = (uint8_t)(t % NTRK);
+    focus_n++;
+}
+static void press_note(uint32_t t)               /* a note played now */
+{
+    if (pr_on && e_clk - pr_at <= PRESS_WIN) {   /* (after the press: its note) */
+        focus_to(t);
+        pr_on = nt_on = 0;
+        return;
+    }
+    nt_on = 1;
+    nt_at = e_clk;
+    nt_snd = (uint8_t)t;
+}
+static void press_tick(void)                     /* (a block's start) a press with no note after it: the one before */
+{
+    if (pr_on && e_clk - pr_at > PRESS_WIN) {
+        if (nt_on && pr_at - nt_at <= PRESS_WIN && (int32_t)(pr_at - nt_at) >= 0)
+            focus_to(nt_snd);
+        pr_on = nt_on = 0;
+    }
 }
 static void file_set(uint32_t t, const char *path)   /* the WAV asked for (the loader reads it; no I/O here) */
 {
@@ -635,8 +713,10 @@ static void file_set(uint32_t t, const char *path)   /* the WAV asked for (the l
 static void e_fini(void)
 {
     uint32_t t;
-    lxw_stop(f_ld);
+    lxw_stop(f_ld);                              /* (the worker gone first: it serves the kits too) */
     f_ld = 0;
+    lxu_close(f_kits);
+    f_kits = 0;
     for (t = 0; t < NTRK; t++) {
         lxw_free(f_cur[t]);
         f_cur[t] = 0;
@@ -647,6 +727,7 @@ static void e_init(uint32_t seed)
 {
     uint32_t i;
     memset(voice, 0, sizeof voice);
+    memset(ghost, 0, sizeof ghost);
     memset(&song, 0, sizeof song);
     rng_state = seed | 1u;
     song.bpm = 120;
@@ -656,9 +737,15 @@ static void e_init(uint32_t seed)
     e_map = 0;
     e_tsnd = 0;
     e_focus = 0;
+    e_clk = pr_at = nt_at = focus_n = e_quiet = 0;
+    pr_on = nt_on = 0;
+    k_pend = 0;
+    k_saving[0] = 0;
     master_set();
+    if (!f_kits)
+        f_kits = lxu_open();
     if (!f_ld)
-        f_ld = lxw_start(NTRK);
+        f_ld = lxw_start(NTRK, lxu_poll, f_kits);
     memset(f_path, 0, sizeof f_path);
     memset(f_whole, 0, sizeof f_whole);
     rv_init();
@@ -673,7 +760,9 @@ static void e_init(uint32_t seed)
         else snprintf(n, sizeof o_smp_names[i], "%s", lxe_MACH_NAME[i - TR_MACH0]);
         o_smp[i] = n;
     }
-    kit_load(0);
+    if (!doc_hier_n)                             /* (once: the documents are the same for every instance) */
+        docs_build();
+    kit_load(0);                                 /* the first preset (Patch 1), as LUXR at power-on */
 }
 static void hit(uint32_t t, uint32_t vel, uint32_t acc, int32_t semi)
 {
@@ -712,13 +801,16 @@ static void e_midi(const uint8_t *m, int len)
             hit((uint32_t)t, v, v > 110u, 0);
         break;
     case 2:                                      /* TONAL: the sound chosen, C3 its own pitch */
-        hit(e_tsnd, v, v > 110u, (int32_t)n - 60);
+        hit((uint32_t)(t = e_tsnd), v, v > 110u, (int32_t)n - 60);
         break;
     default:                                     /* MOVE: the pads' first row 1..8, the second the same accented */
-        if (n >= 36u && n < 52u)
-            hit((n - 36u) % 8u, v, n >= 44u || v > 110u, 0);
+        t = n >= 36u && n < 52u ? (int32_t)((n - 36u) % 8u) : -1;
+        if (t >= 0)
+            hit((uint32_t)t, v, n >= 44u || v > 110u, 0);
         break;
     }
+    if (t >= 0)                                  /* (a note: a pad's, if a press comes with it) */
+        press_note((uint32_t)t);
 }
 static void set_value(const char *key, const char *val)
 {
@@ -738,15 +830,24 @@ static void set_value(const char *key, const char *val)
 static void e_set(const char *key, const char *val)
 {
     if (!strcmp(key, "kit")) {
-        kit_load((uint32_t)clamp(atoi(val), 0, LXK_NKITS - 1));
+        kit_load((uint32_t)clamp(atoi(val), 0, (int32_t)kit_count() - 1));
+    } else if (!strcmp(key, "k_save")) {         /* SAVE KIT: its name */
+        kit_save(val);
+    } else if (!strcmp(key, "k_delete")) {       /* DELETE KIT: the kit of yours loaded */
+        if ((!strcmp(val, "Delete") || !strcmp(val, "1")) && e_kit >= LXK_NKITS)
+            lxu_delete(f_kits, e_kit - LXK_NKITS);
+    } else if (!strcmp(key, "ui_press")) {       /* a finger on a pad (its note comes on its own) */
+        pr_on = 1;
+        pr_at = e_clk;
     } else if (!strcmp(key, "state")) {
         state_set(val);
     } else if (key[0] == 's' && key[1] >= '1' && key[1] <= '8' && !strcmp(key + 2, "_file")) {
         file_set((uint32_t)(key[1] - '1'), val);
-    } else if (!strcmp(key, "ui_voice")) {       /* "snd3" (a level), or 0..7 */
-        int n = !strncmp(val, "snd", 3) ? atoi(val + 3) - 1 : atoi(val);
+    } else if (!strcmp(key, "ui_voice")) {       /* "snd3", "<count>:2" or 2 (0-based) */
+        const char *c = strchr(val, ':');
+        int n = !strncmp(val, "snd", 3) ? atoi(val + 3) - 1 : atoi(c ? c + 1 : val);
         if (n >= 0 && n < NTRK)
-            e_focus = (uint8_t)n;
+            focus_to((uint32_t)n);
     } else {
         set_value(key, val);
     }
@@ -759,14 +860,24 @@ static int e_get(const char *key, char *buf, int buf_len)
     if (buf_len <= 0)
         return -1;
     buf[0] = 0;
-    if (!strcmp(key, "ui_hierarchy")) {
-        hierarchy(&j);
-    } else if (!strcmp(key, "chain_params")) {
-        chain_params(&j);
+    if (!strcmp(key, "ui_hierarchy") || !strcmp(key, "chain_params")) {   /* (fixed: built once) */
+        int n = key[0] == 'u' ? doc_hier_n : doc_cp_n;
+        if (n < 0 || n >= buf_len)
+            return -1;
+        memcpy(buf, key[0] == 'u' ? doc_hier : doc_cp, (size_t)n + 1u);
+        return n;
     } else if (!strcmp(key, "state")) {
         state_get(&j);
     } else if (!strcmp(key, "ui_voice")) {
-        jb_put(&j, "snd%u", e_focus + 1u);
+        jb_put(&j, "%u:%u", focus_n, e_focus);
+    } else if (!strcmp(key, "ui_press")) {
+        jb_put(&j, "0");
+    } else if (!strcmp(key, "k_save")) {         /* (the keyboard opens on the kit's name) */
+        jb_put(&j, "%s", kit_name(e_kit));
+    } else if (!strcmp(key, "k_delete")) {
+        jb_put(&j, "-");
+    } else if (!strcmp(key, "k_error")) {
+        jb_put(&j, "%s", lxu_error(f_kits));
     } else if (key[0] == 's' && key[1] >= '1' && key[1] <= '8' && !strcmp(key + 2, "_file")) {
         jb_put(&j, "%s", f_path[key[1] - '1']);
     } else if (key[0] == 's' && key[1] >= '1' && key[1] <= '8' && !strcmp(key + 2, "_file_status")) {
@@ -777,9 +888,9 @@ static int e_get(const char *key, char *buf, int buf_len)
     } else if (!strcmp(key, "kit")) {
         jb_put(&j, "%u", e_kit);
     } else if (!strcmp(key, "kit_count")) {
-        jb_put(&j, "%u", LXK_NKITS);
+        jb_put(&j, "%u", kit_count());
     } else if (!strcmp(key, "kit_name")) {
-        jb_put(&j, "%s", LXK_KITS[e_kit % LXK_NKITS].name);
+        jb_put(&j, "%s", kit_name(e_kit));
     } else if ((k = key_find(key, &t, &i)) >= 0) {
         jb_put(&j, "%d", (int)(k ? s_get(t, i) : g_get(i)));
     } else {
@@ -803,15 +914,59 @@ static void e_render(int16_t *out, int frames, float bpm, double beat)
         lx_file[b].rate = f_cur[b] ? f_cur[b]->rate : 0;
         lx_file[b].whole = f_whole[b];
     }
+    {                                            /* the kits of yours: one read, one saved */
+        const char *txt = lxu_loaded(f_kits);
+        char nm[LXU_NAME];
+        if (txt && k_pend) {
+            uint32_t t;
+            state_set(txt);
+            e_kit = (uint8_t)(k_pend - 1u);
+            k_pend = 0;
+            for (t = 0; t < NTRK; t++)
+                voice[t].active = ghost[t].active = 0;
+        }
+        if (lxu_saved(f_kits, nm, sizeof nm)) {  /* (selected in the list as it is now) */
+            uint32_t k;
+            for (k = 0; k < lxu_count(f_kits); k++)
+                if (!strcmp(lxu_name(f_kits, k), nm))
+                    e_kit = (uint8_t)(LXK_NKITS + k);
+            k_saving[0] = 0;
+        }
+        if (e_kit >= kit_count())                /* (one of yours deleted) */
+            e_kit = (uint8_t)(kit_count() - 1u);
+    }
     if (beat >= 0.0)                             /* the LFOs on Move's beat (phase-locked while it plays) */
         lfo_clk = (uint32_t)(beat * 4.0 * step_base());
-    for (b = 0; b < frames; b += CTL) {
-        int m = frames - b < CTL ? frames - b : CTL;
-        mix_block(o, (uint32_t)m);
-        for (i = 0; i < 2 * m; i++)
-            out[2 * b + i] = (int16_t)clamp(o[i], -32767, 32767);
-        fm1_ms += (uint32_t)m / 44u + 1u;
+    {                                            /* QUIET: no voice sounding and the FX' tails gone for 30 ms - the
+                                                  * engine rests (silence costs nothing) until the next hit */
+        int busy = 0;
+        for (b = 0; b < NTRK && !busy; b++)
+            busy = voice[b].active || ghost[b].active;
+        if (!busy && e_quiet >= 10u) {
+            memset(out, 0, (size_t)frames * 2u * sizeof *out);
+            lfo_clk += (uint32_t)frames;
+            fm1_ms += (uint32_t)frames / 44u + 1u;
+            e_clk += (uint32_t)frames;
+            press_tick();
+            return;
+        }
     }
+    {
+        int32_t pk = 0;
+        for (b = 0; b < frames; b += CTL) {
+            int m = frames - b < CTL ? frames - b : CTL;
+            mix_block(o, (uint32_t)m);
+            for (i = 0; i < 2 * m; i++) {
+                out[2 * b + i] = (int16_t)clamp(o[i], -32767, 32767);
+                if (o[i] > pk) pk = o[i];
+                else if (-o[i] > pk) pk = -o[i];
+            }
+            fm1_ms += (uint32_t)m / 44u + 1u;
+        }
+        e_quiet = pk < 3 ? e_quiet + 1u : 0u;
+    }
+    e_clk += (uint32_t)frames;
+    press_tick();
 }
 
 static const lxe_ops_t OPS = {e_init, e_midi, e_set, e_get, e_render, e_fini};

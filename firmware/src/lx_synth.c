@@ -149,6 +149,9 @@ static const sound_t *voice_sound(uint32_t t, const voice_t *v, sound_t *tmp)
  * 16 bit mono at its own rate, its position Q12 - either its first 50 ms, played as a transient inside the synth's
  * envelope, or WHOLE, past the envelope to its end. The firmware is built without it.) */
 #define TR_FILE TR_N
+/* a retriggered voice's tail, faded out over ~3 ms (the choke's fade) instead of cut off: no click */
+#define LX_GHOST 1
+static voice_t ghost[NTRK];
 typedef struct { const int16_t *d; uint32_t n, rate; uint8_t whole; } lx_file_t;
 static lx_file_t lx_file[NTRK];
 static uint32_t lx_file_len(const lx_file_t *f)   /* the frames played: all, or the first 50 ms */
@@ -172,6 +175,12 @@ static void voice_hit_lk(uint32_t t, uint32_t vel, uint32_t acc, int32_t pan, ui
     sound_t tmp;
     const sound_t *s;
     uint32_t i;
+#ifdef LX_GHOST
+    if (v->active) {                             /* (the hit before keeps sounding a moment, fading) */
+        ghost[t % NTRK] = *v;
+        ghost[t % NTRK].choke = 1;
+    }
+#endif
     v->nlk = (uint8_t)(nlk < NLK_V ? nlk : NLK_V);
     for (i = 0; i < v->nlk; i++) {
         v->lk[i][0] = lk[i][0];
@@ -832,11 +841,23 @@ static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the 
         sound_t tmp;
         const sound_t *s = voice_sound(t, &voice[t], &tmp);
         int32_t g, pan, pl, pr, dg = s->dly, rg = s->rev, vg = s->drv, pk = 0;
+#ifdef LX_GHOST
+        if (!voice[t].active && !ghost[t].active)
+            continue;
+#else
         if (!voice[t].active)
             continue;
+#endif
         for (i = 0; i < n; i++)
             tb[i] = 0;
+#ifdef LX_GHOST
+        if (voice[t].active)
+            lx_render(t, &voice[t], s, tb, n);
+        if (ghost[t].active)
+            lx_render(t, &ghost[t], s, tb, n);
+#else
         lx_render(t, &voice[t], s, tb, n);
+#endif
         if (!trk_audible(t))
             continue;
         g = s->level * 2;                        /* 0..254, 200 at the default */

@@ -11,16 +11,23 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const hier = JSON.parse(fs.readFileSync(process.argv[2] || "build/schwung/out/ui_hierarchy.json", "utf8"));
 const known = new Map();                         // key -> its param (min, max, options)
-for (const lvl of Object.values(hier.levels))
-    for (const p of lvl.params || []) if (p.key) known.set(p.key, p);
+for (const lvl of Object.values(hier.levels))      // (a child level: its keys for every instance, by its template)
+    for (const p of lvl.params || []) if (p.key) {
+        if (lvl.child_key_template)
+            for (let i = 0; i < lvl.child_count; i++)
+                known.set(lvl.child_key_template.replace("{index}", String(i + (lvl.child_index_base || 0))).replace("{key}", p.key), p);
+        else known.set(p.key, p);
+    }
 known.set("ui_voice", { key: "ui_voice" });
 
 let fails = 0;
 const check = (c, m) => { if (!c) { fails++; console.log("FAIL", m); } };
 
 const vals = new Map();                          // the plugin, pretended: every key at its default
-for (const [k, p] of known) vals.set(k, String(p.default ?? 0));
-vals.set("ui_voice", "snd1");
+for (const [k, p] of known)                      // (the plugin's hierarchy has no defaults: a value mid-range)
+    vals.set(k, String(p.default ?? (p.type === "int" ? Math.round((p.min + p.max) / 2) : 0)));
+vals.set("k_vol", "100");
+vals.set("ui_voice", "0:0");
 const sets = [];
 let shift = false, offscreen = 0, reads = 0;
 const ctx = {
