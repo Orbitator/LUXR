@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# LUXR for Ableton Move (Schwung): the module built and tested (natively, with the sanitizers; the aarch64 build under
+# QEMU), packed as luxr-module.tar.gz. From main it is published as the release "schwung":
+# .../releases/download/schwung/luxr-module.tar.gz - the address release.json gives Schwung Manager
+# (Install Custom Module: https://github.com/Orbitator/LUXR). The sample layer holds the Sonic Potions LXR's transient
+# samples (their licence is not the GPL: schwung/NOTICE-LXR.txt).
+name: schwung
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, "feature/**", "claude/**"]
+    paths: ["schwung/**", "firmware/src/lx_*", "tools/gen_*", "tools/build.py", "host/lx_host.c", "web/emu/**",
+            "release.json", ".github/workflows/schwung.yml"]
+permissions: { contents: write }
+concurrency: { group: "schwung-${{ github.ref }}", cancel-in-progress: true }
+jobs:
+  module:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Tools
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y libraqm0 libfribidi0 gcc-aarch64-linux-gnu qemu-user >/dev/null
+          pip install -q pillow
+      - name: Versions agree (module.json, release.json)
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+          m = json.load(open("schwung/src/module.json"))["version"]
+          r = json.load(open("release.json"))
+          ok = r["version"] == m and r["download_url"].endswith("/releases/download/schwung/luxr-module.tar.gz")
+          print("module.json", m, "release.json", r["version"]); sys.exit(0 if ok else 1)
+          EOF
+      - name: Test (native, sanitizers)
+        run: |
+          EXTRA_CFLAGS="-fsanitize=address,undefined -fno-sanitize=shift" NATIVE=1 schwung/scripts/build.sh
+          cc -O1 -g -fsanitize=address,undefined -Ischwung/dsp -o build/schwung/test_plugin schwung/tests/test_plugin.c -ldl -lm
+          mkdir -p build/schwung/out && build/schwung/test_plugin build/schwung/native/dsp.so build/schwung/out
+          for f in ui_hierarchy chain_params state; do python3 -m json.tool build/schwung/out/$f.json >/dev/null; done
+          python3 -m json.tool schwung/src/help.json >/dev/null
+      - name: Module (aarch64), tested under QEMU
+        run: |
+          schwung/scripts/build.sh
+          aarch64-linux-gnu-gcc -O1 -Ischwung/dsp -o build/schwung/test_plugin_arm schwung/tests/test_plugin.c -ldl -lm
+          mkdir -p build/schwung/out_arm
+          qemu-aarch64 -L /usr/aarch64-linux-gnu build/schwung/test_plugin_arm build/schwung/aarch64/dsp.so build/schwung/out_arm
+          cmp build/schwung/out/luxr_move.wav build/schwung/out_arm/luxr_move.wav   # (fixed point: the same samples)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: luxr-schwung-module
+          path: |
+            build/schwung/luxr-module.tar.gz
+            build/schwung/out/luxr_move.wav
+      - name: Release "schwung"
+        if: github.ref == 'refs/heads/main'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          V=$(python3 -c 'import json;print(json.load(open("schwung/src/module.json"))["version"])')
+          gh release delete schwung -y --cleanup-tag 2>/dev/null || true
+          gh release create schwung build/schwung/luxr-module.tar.gz --target "$GITHUB_SHA" --prerelease \
+            --title "LUXR for Ableton Move (Schwung) $V, build ${{ github.run_number }}" \
+            --notes "LUXR's drum engine as a Schwung sound generator, built from ${GITHUB_SHA::7}. Install: Schwung Manager > Install Custom Module > https://github.com/Orbitator/LUXR (or upload luxr-module.tar.gz). For personal, non-commercial use: the sample layer is the Sonic Potions LXR's transient samples (NOTICE-LXR.txt in the module)."

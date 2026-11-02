@@ -19,6 +19,10 @@ cc -O1 -g -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Wno-sign-com
 build/test_lx build/lx
 clang --target=i686-unknown-none-elf -ffreestanding -fsyntax-only -Wall -Wno-unused-function -Ifirmware/hal $CF firmware/src/lxrfm1.c
 python3 -c "import importlib.util,sys;sys.argv=['x'];s=importlib.util.spec_from_file_location('b','tools/build.py');b=importlib.util.module_from_spec(s);s.loader.exec_module(b);e=b.mmio_check();print('register access:', e or 'hal/ only');sys.exit(1 if e else 0)"
+# LUXR for Ableton Move (Schwung): the module's plugin loaded as Schwung loads it (sound, parameters, state, instances)
+NATIVE=1 schwung/scripts/build.sh >/dev/null
+cc -O1 -g -Wall -Ischwung/dsp -o build/schwung/test_plugin schwung/tests/test_plugin.c -ldl -lm
+mkdir -p build/schwung/out && build/schwung/test_plugin build/schwung/native/dsp.so build/schwung/out >/dev/null
 # the voice pool: audible cuts a minute over 40 songs (limit 2), and the render cost (ratios only)
 clang -O2 -w $CF -o build/voices_bench tests/voices_bench.c -lm
 build/voices_bench 40 8 2 | tail -2
