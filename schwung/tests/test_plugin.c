@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 #include "plugin_api_v1.h"
 
 static int fails;
@@ -70,6 +71,51 @@ static void wav(const char *dir, const int16_t *s, int n)
     { uint16_t h[2] = {4, 16}; fwrite(h, 2, 2, f); }
     fwrite("data", 1, 4, f); fwrite(&bytes, 4, 1, f); fwrite(s, 2, (size_t)n, f);
     fclose(f);
+}
+
+/* a test WAV: a 1 s sine at 220 Hz, rate, channels, 16 / 24 bit PCM or 32 bit float */
+static void wav_make(const char *path, uint32_t rate, uint32_t ch, uint32_t bits, int flt)
+{
+    FILE *f = fopen(path, "wb");
+    uint32_t n = rate, i, c, bps = bits / 8u, data = n * ch * bps, v;
+    uint16_t h;
+    if (!f)
+        return;
+    fwrite("RIFF", 1, 4, f); v = 36u + data; fwrite(&v, 4, 1, f); fwrite("WAVE", 1, 4, f);
+    fwrite("LIST", 1, 4, f); v = 4; fwrite(&v, 4, 1, f); fwrite("INFO", 1, 4, f);   /* (a chunk to skip) */
+    fwrite("fmt ", 1, 4, f); v = 16; fwrite(&v, 4, 1, f);
+    h = flt ? 3 : 1; fwrite(&h, 2, 1, f); h = (uint16_t)ch; fwrite(&h, 2, 1, f);
+    fwrite(&rate, 4, 1, f); v = rate * ch * bps; fwrite(&v, 4, 1, f);
+    h = (uint16_t)(ch * bps); fwrite(&h, 2, 1, f); h = (uint16_t)bits; fwrite(&h, 2, 1, f);
+    fwrite("data", 1, 4, f); fwrite(&data, 4, 1, f);
+    for (i = 0; i < n; i++)
+        for (c = 0; c < ch; c++) {
+            double x = 0.8 * sin(2 * M_PI * 220.0 * i / rate);
+            if (flt) { float y = (float)x; fwrite(&y, 4, 1, f); }
+            else if (bits == 16) { int16_t y = (int16_t)(x * 32767); fwrite(&y, 2, 1, f); }
+            else { int32_t y = (int32_t)(x * 8388607); fwrite(&y, 3, 1, f); }
+        }
+    fclose(f);
+}
+static int wait_status(void *in, const char *key, const char *want)
+{
+    char v[32];
+    int k;
+    int16_t o[256];
+    for (k = 0; k < 300; k++) {                  /* (up to 3 s: the loader polls every 10 ms) */
+        api->render_block(in, o, 128);
+        api->get_param(in, key, v, sizeof v);
+        if (!strcmp(v, want))
+            return 1;
+        usleep(10000);
+    }
+    printf("  %s: %s, not %s\n", key, v, want);
+    return 0;
+}
+static double rms_window(void *in, int from_blocks, int blocks)   /* (after from_blocks) */
+{
+    block_rms(in, from_blocks, 0, 0, 0);
+    return block_rms(in, blocks, 0, 0, 0);
 }
 
 int main(int argc, char **argv)
@@ -216,6 +262,84 @@ int main(int argc, char **argv)
     ra = block_rms(a, 10, 0, 0, 0);
     rb = block_rms(b, 10, 0, 0, 0);
     CHECK(ra > 100.0 && rb < 1.0, "a hit on one instance only (%f, %f)", ra, rb);
+
+    /* the sample layer from a WAV: its first 50 ms, or the whole of it */
+    {
+        char w16[600], w24[600], wfl[600], st2[1 << 15];
+        snprintf(w16, sizeof w16, "%s/test 16bit \"st\".wav", dir);   /* (a space and quotes: the state escapes them) */
+        snprintf(w24, sizeof w24, "%s/test24.wav", dir);
+        snprintf(wfl, sizeof wfl, "%s/testfloat.wav", dir);
+        wav_make(w16, 48000, 2, 16, 0);
+        wav_make(w24, 22050, 1, 24, 0);
+        wav_make(wfl, 44100, 1, 32, 1);
+        api->set_param(a, "kit", "0");
+        api->set_param(a, "s1_syn", "0");        /* (the kick's synth layer silent: the sample layer alone) */
+        api->set_param(a, "s1_sdec", "127");
+        api->set_param(a, "s1_p2", "127");       /* (the longest decay) */
+        api->set_param(a, "s1_file", w16);
+        CHECK(wait_status(a, "s1_file_status", "Loaded"), "the 16 bit stereo WAV loads");
+        api->get_param(a, "s1_smp", val, sizeof val);
+        CHECK(!strcmp(val, "46"), "a file chosen: the sample layer plays it (smp %s)", val);
+        api->get_param(a, "s1_slen", val, sizeof val);
+        CHECK(!strcmp(val, "0"), "LENGTH 50 ms at first (%s)", val);
+        block_rms(a, 400, 0, 0, 0);
+        note(a, 36, 100);
+        ra = block_rms(a, 12, 0, 0, 0);          /* (the first 35 ms) */
+        rb = rms_window(a, 30, 100);             /* (0.12 .. 0.4 s) */
+        printf("  WAV 50 ms: %.0f in the first 35 ms, %.0f after 120 ms\n", ra, rb);
+        CHECK(ra > 1000.0 && rb < 30.0, "50 ms: a transient (%f, %f)", ra, rb);
+        api->set_param(a, "s1_slen", "Whole");
+        block_rms(a, 400, 0, 0, 0);
+        note(a, 36, 100);
+        ra = block_rms(a, 12, 0, 0, 0);
+        rb = rms_window(a, 150, 60);             /* (0.45 .. 0.62 s: the sine is 1 s) */
+        r = rms_window(a, 250, 40);              /* (1.4 s on: over) */
+        printf("  WAV whole: %.0f at first, %.0f at 0.5 s, %.0f after its end\n", ra, rb, r);
+        CHECK(rb > 1000.0 && r < 30.0, "WHOLE: to the end of the file and no further (%f, %f)", rb, r);
+        api->set_param(a, "s1_spitch", "127");   /* (PITCH 1.75: shorter) */
+        block_rms(a, 400, 0, 0, 0);
+        note(a, 36, 100);
+        rb = rms_window(a, 220, 40);             /* (0.65 .. 0.76 s: past 1 / 1.75) */
+        CHECK(rb < 30.0, "PITCH plays the whole file faster (%f)", rb);
+        api->set_param(a, "s1_spitch", "64");
+        n = api->get_param(a, "state", st2, sizeof st2);
+        CHECK(n > 0 && strstr(st2, "\"s1_file\":") && strstr(st2, "\\\"st\\\""), "the state has the path, escaped");
+        {
+            void *c = api->create_instance("/tmp", NULL);
+            CHECK(c != NULL, "an instance for the state");
+            if (c) {
+                api->set_param(c, "state", st2);
+                CHECK(wait_status(c, "s1_file_status", "Loaded"), "the state loads the WAV again");
+                api->get_param(c, "s1_file", big, sizeof big);
+                CHECK(!strcmp(big, w16), "the path comes back: %s", big);
+                api->get_param(c, "s1_slen", val, sizeof val);
+                CHECK(!strcmp(val, "1"), "LENGTH comes back: %s", val);
+                block_rms(c, 10, 0, 0, 0);
+                note(c, 36, 100);
+                CHECK(rms_window(c, 150, 60) > 1000.0, "and plays whole");
+                api->destroy_instance(c);
+            }
+        }
+        api->set_param(a, "s2_file", w24);
+        CHECK(wait_status(a, "s2_file_status", "Loaded"), "24 bit mono at 22.05 kHz");
+        api->set_param(a, "s3_file", wfl);
+        CHECK(wait_status(a, "s3_file_status", "Loaded"), "32 bit float");
+        api->set_param(a, "s4_file", "/nonexistent/x.wav");
+        CHECK(wait_status(a, "s4_file_status", "Failed"), "a missing file fails");
+        note(a, 39, 100);
+        block_rms(a, 20, 0, 0, 0);               /* (and plays nothing from it, safely) */
+        for (k = 0; k < 40; k++) {               /* files switched faster than the loader: nothing leaks, nothing breaks */
+            api->set_param(a, "s5_file", k % 3 == 0 ? w16 : k % 3 == 1 ? w24 : wfl);
+            note(a, 40, 100);
+            block_rms(a, 2, 0, 0, 0);
+            if (k % 7 == 0) usleep(12000);
+        }
+        CHECK(wait_status(a, "s5_file_status", "Loaded"), "the last file switched to");
+        api->set_param(a, "s5_file", "");
+        CHECK(wait_status(a, "s5_file_status", "None"), "a file cleared");
+        api->set_param(a, "s1_smp", "14");       /* (back to a transient of its own) */
+        api->set_param(a, "s1_syn", "127");
+    }
 
     /* the slots: six engines, the seventh instance refused, a freed slot taken again */
     ins[0] = a; ins[1] = b;

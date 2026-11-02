@@ -50,6 +50,7 @@ static void destroy_instance(void *instance)
     inst_t *in = instance;
     if (!in)
         return;
+    in->e->fini();
     __atomic_store_n(&slot_used[in->slot], 0, __ATOMIC_RELEASE);
     free(in);
 }

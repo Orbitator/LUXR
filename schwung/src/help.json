@@ -73,7 +73,8 @@
             "Delay Reverb | Drive",
             "Attack Gate Release",
             "Page 4: LFO 1 | 2",
-            "Page 5: Variation",
+            "Page 5: WAV File,",
+            "Length, Variation",
             "",
             "Shift + knob: fine."
           ]
@@ -141,6 +142,36 @@
             "Variation rolls the",
             "sound anew (0 = its",
             "factory sound)."
+          ]
+        },
+        {
+          "title": "WAV layer",
+          "lines": [
+            "A sound's sample",
+            "layer can play a WAV",
+            "of your own:",
+            "Page 5 > WAV File",
+            "opens the sample",
+            "browser (UserLibrary",
+            "/Samples). Choosing",
+            "a file sets Sample",
+            "to WAV.",
+            "",
+            "Length:",
+            "50 ms - its first 50",
+            "ms, a transient, in",
+            "the drum's envelope",
+            "(like the LXR's).",
+            "Whole - the whole",
+            "file to its end,",
+            "past the envelope.",
+            "",
+            "Pitch, Smp Decay,",
+            "Start, Tone, Bend,",
+            "Smp Lvl: on both.",
+            "Up to 23 s at 44.1k,",
+            "PCM 8-32 bit, float,",
+            "mono or stereo."
           ]
         },
         {

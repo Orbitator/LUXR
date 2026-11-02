@@ -54,7 +54,9 @@ static uint32_t rng(void)
 }
 #define RING_PUBLISH() ((void)0)
 #include "lx_core.h"
+#define LX_FILE_LAYER 1                          /* (the sample layer may be a WAV: lx_synth.c TR_FILE) */
 #include "lx_synth.c"
+#include "luxr_wav.h"
 
 /* the parts of the firmware left behind: no sequencer (Move's), no parameter locks */
 static void lock_apply(sound_t *s, uint32_t pid, uint32_t val) { (void)s; (void)pid; (void)val; }
@@ -111,8 +113,15 @@ static const char *const O_SND[] = {"Kick", "Snare", "Clap", "Cl Hat", "Op Hat",
 static const char *const O_LDEST[] = {"Off", "Pitch", "Filter", "Decay", "Level", "Pan", "Sample"};
 static const char *const O_LWAVE[] = {"Sine", "Tri", "Saw", "Square", "S&H"};
 static const char *const O_LRATE[] = {"1/16", "1/8", "1/4", "1/2", "1 bar", "2 bars", "4 bars", "8 bars"};
-static char o_smp_names[TR_N][12];
-static const char *o_smp[TR_N];                  /* the sample layer: OFF, SNAP, the LXR's, the sound's own, the machines' */
+static char o_smp_names[TR_N + 1][12];
+static const char *o_smp[TR_N + 1];              /* the sample layer: OFF, SNAP, the LXR's, the sound's own, the machines',
+                                                  * WAV (the sound's file) */
+static const char *const O_SLEN[] = {"50 ms", "Whole"};
+/* the WAV of each sound: its path, LENGTH (0: its first 50 ms, a transient; 1: the whole of it), the buffer playing */
+static char f_path[NTRK][LXW_PATH];
+static uint8_t f_whole[NTRK];
+static const lxw_buf_t *f_cur[NTRK];
+static lxw_loader_t *f_ld;
 
 enum {                                           /* the kit */
     G_VOL, G_TUNE, G_DDEC, G_MAP, G_TSND, G_OGAIN,
@@ -197,13 +206,13 @@ enum {                                           /* a sound */
     S_SMP, S_SLVL, S_SPITCH, S_SDEC, S_SSTART, S_STONE, S_SBEND, S_SYN,
     S_LEVEL, S_PAN, S_DLY, S_REV, S_DRV, S_ATK, S_GATE, S_REL,
     S_L1D, S_L1W, S_L1R, S_L1A, S_L2D, S_L2W, S_L2R, S_L2A,
-    S_VAR, S_N
+    S_VAR, S_SLEN, S_N
 };
 static const pdef_t SDEF[S_N] = {
     {"p1", 0, PT_INT, 0, 127, 0, 0}, {"p2", 0, PT_INT, 0, 127, 0, 0}, {"p3", 0, PT_INT, 0, 127, 0, 0},
     {"p4", 0, PT_INT, 0, 127, 0, 0}, {"p5", 0, PT_INT, 0, 127, 0, 0}, {"p6", 0, PT_INT, 0, 127, 0, 0},
     {"p7", 0, PT_INT, 0, 127, 0, 0}, {"p8", 0, PT_INT, 0, 127, 0, 0},
-    {"smp", "Sample", PT_ENUM, 0, TR_N - 1, 0, 0},
+    {"smp", "Sample", PT_ENUM, 0, TR_FILE, 0, 0},
     {"slvl", "Smp Lvl", PT_INT, 0, 127, 0, 0},
     {"spitch", "Smp Pitch", PT_INT, 0, 127, 0, 0},
     {"sdec", "Smp Decay", PT_INT, 0, 127, 0, 0},
@@ -228,6 +237,7 @@ static const pdef_t SDEF[S_N] = {
     {"l2rate", "LFO2 Rate", PT_ENUM, 0, LR_N - 1, O_LRATE, 0},
     {"l2amt", "LFO2 Amt", PT_INT, -64, 63, 0, 0},
     {"var", "Variation", PT_INT, 0, 255, 0, 0},
+    {"slen", "Length", PT_ENUM, 0, 1, O_SLEN, 0},
 };
 static int32_t s_get(uint32_t t, uint32_t i)
 {
@@ -256,6 +266,7 @@ static int32_t s_get(uint32_t t, uint32_t i)
     case S_L1R: case S_L2R: return s->lfo[i >= S_L2D].rate;
     case S_L1A: case S_L2A: return s->lfo[i >= S_L2D].depth;
     case S_VAR: return s->preset;
+    case S_SLEN: return f_whole[t % NTRK];
     }
     return 0;
 }
@@ -289,6 +300,10 @@ static void s_set(uint32_t t, uint32_t i, int32_t v)
     case S_L1W: case S_L2W: s->lfo[i >= S_L2D].wave = (uint8_t)v; break;
     case S_L1R: case S_L2R: s->lfo[i >= S_L2D].rate = (uint8_t)v; break;
     case S_L1A: case S_L2A: s->lfo[i >= S_L2D].depth = (int8_t)v; break;
+    case S_SLEN:                                 /* LENGTH: the WAV's first 50 ms (a transient) or the whole of it */
+        f_whole[t % NTRK] = (uint8_t)v;
+        lx_file[t % NTRK].whole = (uint8_t)v;
+        break;
     case S_VAR:                                  /* VARIATION: the sound rolled again (0: the factory one), as PRESETS */
         if (e_restoring)
             s->preset = (uint8_t)v;
@@ -388,6 +403,27 @@ static void jb_param(jb_t *j, const char *key, const char *name, const pdef_t *d
  * layer, page 3 the mix and the envelope (LEVEL PAN DELAY REVERB | DRIVE ATTACK GATE RELEASE), page 4 the LFOs (1 on
  * knobs 1-4, 2 on 5-8), page 5 VARIATION. The kit's other pages below. PERFORM (perform.js) puts two of these pages on
  * the knobs at once: the first as they are, the second with SHIFT held. */
+static void jb_str(jb_t *j, const char *v)       /* a JSON string, escaped */
+{
+    jb_put(j, "\"");
+    for (; *v; v++) {
+        unsigned char c = (unsigned char)*v;
+        if (c == '"' || c == '\\')
+            jb_put(j, "\\%c", c);
+        else if (c < 0x20u)
+            jb_put(j, "\\u%04x", c);
+        else
+            jb_put(j, "%c", c);
+    }
+    jb_put(j, "\"");
+}
+static void jb_file(jb_t *j, uint32_t t)         /* the sound's WAV: Schwung's file browser, from Move's samples */
+{
+    jb_put(j, "{\"key\":\"s%u_file\",\"name\":\"WAV File\",\"type\":\"filepath\",\"root\":\"/data/UserData\","
+              "\"start_path\":\"/data/UserData/UserLibrary/Samples\",\"filter\":[\".wav\",\".WAV\"],\"default\":", t + 1u);
+    jb_str(j, f_path[t]);
+    jb_put(j, "}");
+}
 static const uint8_t KIT_ROOT[8] = {G_VOL, G_TUNE, G_DDEC, G_MFLT, G_MRES, G_DRVA, G_DLYL, G_REVL};
 static const uint8_t KIT_PAGE[][8] = {           /* (G_*; 0xFF a gap) */
     {G_DRVM, G_DRVA, G_DRVT, G_DRVL, G_REVS, G_REVD, G_REVP, G_REVL},
@@ -451,10 +487,13 @@ static void hierarchy(jb_t *j)
                 jb_put(j, ",");
             jb_param(j, key, s_name(t, i), &SDEF[i], s_get(t, i));
         }
+        jb_put(j, ",");
+        jb_file(j, t);
         jb_put(j, "],\"knobs\":[");
-        for (i = 0; i < S_N; i++)
+        for (i = 0; i < S_VAR; i++)
             jb_put(j, "%s\"s%u_%s\"", i ? "," : "", t + 1u, SDEF[i].key);
-        jb_put(j, "]}");
+        jb_put(j, ",\"s%u_file\",\"s%u_slen\",\"s%u_var\"]}", t + 1u, t + 1u, t + 1u);   /* (page 5: the WAV, LENGTH,
+                                                                                         * VARIATION) */
     }
     for (k = 0; k < NELEM(KIT_PAGE); k++) {
         jb_put(j, ",\"%s\":{\"name\":\"%s\",\"params\":[", KIT_PAGE_ID[k], KIT_PAGE_NAME[k]);
@@ -487,6 +526,10 @@ static void chain_params(jb_t *j)
                 jb_param(j, key, name, &SDEF[i], s_get(t, i));
                 n++;
             }
+    for (t = 0; t < NTRK; t++) {
+        jb_put(j, ",");
+        jb_file(j, t);
+    }
     (void)n;
     jb_put(j, "]");
 }
@@ -501,26 +544,61 @@ static void state_get(jb_t *j)
     for (t = 0; t < NTRK; t++)
         for (i = 0; i < S_N; i++)
             jb_put(j, ",\"s%u_%s\":%d", t + 1u, SDEF[i].key, (int)s_get(t, i));
+    for (t = 0; t < NTRK; t++)
+        if (f_path[t][0]) {
+            jb_put(j, ",\"s%u_file\":", t + 1u);
+            jb_str(j, f_path[t]);
+        }
     jb_put(j, "}");
 }
 static void set_value(const char *key, const char *val);
-static void state_set(const char *js)            /* a flat object of numbers: each key set as written */
+static void file_set(uint32_t t, const char *path);
+static void state_set(const char *js)            /* a flat object: numbers, and the WAVs' paths (strings) */
 {
     const char *p = js;
-    char key[24], val[24];
+    char key[24], val[LXW_PATH];
+    uint32_t t;
+    for (t = 0; t < NTRK; t++)                   /* (a state without a WAV for a sound: none) */
+        if (f_path[t][0] && !strstr(js, "_file\""))
+            file_set(t, "");
     while ((p = strchr(p, '"'))) {
         const char *q = strchr(p + 1, '"');
         size_t n;
         if (!q)
             return;
         n = (size_t)(q - p - 1);
+        if (n >= sizeof key) {
+            p = q + 1;
+            continue;
+        }
+        memcpy(key, p + 1, n);
+        key[n] = 0;
         p = q + 1;
         while (*p == ' ' || *p == ':')
             p++;
-        if (n >= sizeof key || !((*p >= '0' && *p <= '9') || *p == '-'))
+        if (*p == '"') {                         /* a string: unescaped */
+            for (p++, n = 0; *p && *p != '"'; p++) {
+                char c = *p;
+                if (c == '\\' && p[1]) {
+                    c = *++p;
+                    if (c == 'u' && p[1] && p[2] && p[3] && p[4]) {
+                        char hx[5] = {p[1], p[2], p[3], p[4], 0};
+                        c = (char)strtol(hx, 0, 16);
+                        p += 4;
+                    }
+                }
+                if (n + 1u < sizeof val)
+                    val[n++] = c;
+            }
+            val[n] = 0;
+            if (*p)
+                p++;
+            if (key[0] == 's' && key[1] >= '1' && key[1] <= '8' && !strcmp(key + 2, "_file"))
+                file_set((uint32_t)(key[1] - '1'), val);
             continue;
-        memcpy(key, q - n, n);
-        key[n] = 0;
+        }
+        if (!((*p >= '0' && *p <= '9') || *p == '-'))
+            continue;
         for (n = 0; n + 1u < sizeof val && ((p[n] >= '0' && p[n] <= '9') || p[n] == '-' || p[n] == '.'); n++)
             val[n] = p[n];
         val[n] = 0;
@@ -544,6 +622,27 @@ static void kit_load(uint32_t k)
     for (t = 0; t < NTRK; t++)
         voice[t].active = 0;
 }
+static void file_set(uint32_t t, const char *path)   /* the WAV asked for (the loader reads it; no I/O here) */
+{
+    size_t n = strlen(path);
+    if (n >= LXW_PATH)
+        return;
+    memcpy(f_path[t], path, n + 1u);
+    lxw_request(f_ld, t, path);
+    if (n && !e_restoring)                       /* (a file chosen: the sample layer plays it) */
+        snd[t].smp = TR_FILE;
+}
+static void e_fini(void)
+{
+    uint32_t t;
+    lxw_stop(f_ld);
+    f_ld = 0;
+    for (t = 0; t < NTRK; t++) {
+        lxw_free(f_cur[t]);
+        f_cur[t] = 0;
+        memset(&lx_file[t], 0, sizeof lx_file[t]);
+    }
+}
 static void e_init(uint32_t seed)
 {
     uint32_t i;
@@ -558,7 +657,13 @@ static void e_init(uint32_t seed)
     e_tsnd = 0;
     e_focus = 0;
     master_set();
+    if (!f_ld)
+        f_ld = lxw_start(NTRK);
+    memset(f_path, 0, sizeof f_path);
+    memset(f_whole, 0, sizeof f_whole);
     rv_init();
+    snprintf(o_smp_names[TR_FILE], sizeof o_smp_names[TR_FILE], "WAV");
+    o_smp[TR_FILE] = o_smp_names[TR_FILE];
     for (i = 0; i < TR_N; i++) {                 /* the sample layer's names */
         char *n = o_smp_names[i];
         if (i == TR_OFF) snprintf(n, sizeof o_smp_names[i], "Off");
@@ -636,6 +741,8 @@ static void e_set(const char *key, const char *val)
         kit_load((uint32_t)clamp(atoi(val), 0, LXK_NKITS - 1));
     } else if (!strcmp(key, "state")) {
         state_set(val);
+    } else if (key[0] == 's' && key[1] >= '1' && key[1] <= '8' && !strcmp(key + 2, "_file")) {
+        file_set((uint32_t)(key[1] - '1'), val);
     } else if (!strcmp(key, "ui_voice")) {       /* "snd3" (a level), or 0..7 */
         int n = !strncmp(val, "snd", 3) ? atoi(val + 3) - 1 : atoi(val);
         if (n >= 0 && n < NTRK)
@@ -660,6 +767,11 @@ static int e_get(const char *key, char *buf, int buf_len)
         state_get(&j);
     } else if (!strcmp(key, "ui_voice")) {
         jb_put(&j, "snd%u", e_focus + 1u);
+    } else if (key[0] == 's' && key[1] >= '1' && key[1] <= '8' && !strcmp(key + 2, "_file")) {
+        jb_put(&j, "%s", f_path[key[1] - '1']);
+    } else if (key[0] == 's' && key[1] >= '1' && key[1] <= '8' && !strcmp(key + 2, "_file_status")) {
+        static const char *const ST[] = {"Failed", "None", "Loading", "Loaded"};
+        jb_put(&j, "%s", ST[clamp(lxw_status(f_ld, (uint32_t)(key[1] - '1')), -1, 2) + 1]);
     } else if (!strcmp(key, "name")) {
         jb_put(&j, "LUXR");
     } else if (!strcmp(key, "kit")) {
@@ -684,6 +796,13 @@ static void e_render(int16_t *out, int frames, float bpm, double beat)
     int b, i;
     if (bpm >= 20.0f)
         song.bpm = (uint8_t)clamp((int32_t)(bpm + 0.5f), 60, 200);   /* (the delay's time, the LFOs, GATE) */
+    for (b = 0; b < NTRK; b++) {                 /* the WAVs the loader has ready (a pointer swap) */
+        f_cur[b] = lxw_take(f_ld, (uint32_t)b, f_cur[b]);
+        lx_file[b].d = f_cur[b] && f_cur[b]->n ? f_cur[b]->d : 0;
+        lx_file[b].n = f_cur[b] ? f_cur[b]->n : 0;
+        lx_file[b].rate = f_cur[b] ? f_cur[b]->rate : 0;
+        lx_file[b].whole = f_whole[b];
+    }
     if (beat >= 0.0)                             /* the LFOs on Move's beat (phase-locked while it plays) */
         lfo_clk = (uint32_t)(beat * 4.0 * step_base());
     for (b = 0; b < frames; b += CTL) {
@@ -695,5 +814,5 @@ static void e_render(int16_t *out, int frames, float bpm, double beat)
     }
 }
 
-static const lxe_ops_t OPS = {e_init, e_midi, e_set, e_get, e_render};
+static const lxe_ops_t OPS = {e_init, e_midi, e_set, e_get, e_render, e_fini};
 HID const lxe_ops_t *LXE_CAT(lxe_ops_, LXE_SLOT)(void) { return &OPS; }

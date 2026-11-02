@@ -32,7 +32,7 @@
     const LXR = ["CLK", "CK2", "TIK", "KIK", "RIM", "DRP", "HAT", "CLP", "KK2", "SNR", "TOM", "SP2"];
     const MACH = ["808A", "808B", "909A", "909B", "606", "707A", "707B", "DMXA", "DMXB", "LM1A", "LM1B", "LM2A", "LM2B",
                   "SDS6", "SDS7", "SDS8"];
-    const SMP = ["OFF", "SNAP"].concat(LXR, Array.from({ length: 16 }, (_, i) => "OWN" + (i + 1)), MACH);
+    const SMP = ["OFF", "SNAP"].concat(LXR, Array.from({ length: 16 }, (_, i) => "OWN" + (i + 1)), MACH, ["WAV"]);
     const O = {
         dest: ["OFF", "PITCH", "FILT", "DECAY", "LEVEL", "PAN", "SMP"],
         wave: ["SINE", "TRI", "SAW", "SQR", "S&H"],
@@ -43,7 +43,7 @@
     };
     /* a knob: key (s_ prefixed: the sound's), label, min, max, options */
     const P = (k, l, min, max, opt) => ({ k, l, min, max, opt });
-    const SOUND_B = [P("s_smp", "SMP", 0, 43, SMP), P("s_slvl", "S.LVL", 0, 127), P("s_spitch", "S.PIT", 0, 127),
+    const SOUND_B = [P("s_smp", "SMP", 0, 46, SMP), P("s_slvl", "S.LVL", 0, 127), P("s_spitch", "S.PIT", 0, 127),
                      P("s_sdec", "S.DEC", 0, 127), P("s_sstart", "START", 0, 127), P("s_stone", "S.TON", -64, 63),
                      P("s_sbend", "BEND", -64, 63), P("s_syn", "SYNTH", 0, 127)];
     const MIX_A = [P("s_level", "LEVEL", 0, 127), P("s_pan", "PAN", -64, 63), P("s_dly", "DELAY", 0, 127),

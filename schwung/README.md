@@ -6,7 +6,7 @@ Delay, Reverb), Master-Filter, Kompressor und Limiter – derselbe Festkomma-Cod
 (`firmware/src/lx_synth.c`, unverändert eingebunden). Der Sequencer und das Panel von LUXR bleiben auf dem FM-1: auf dem
 Move sequenziert der Move, LUXR klingt.
 
-Status: **v0.2.0, auf dem Rechner und unter QEMU (aarch64) getestet, noch nie auf einem Move gelaufen.**
+Status: **v0.3.0, auf dem Rechner und unter QEMU (aarch64) getestet, noch nie auf einem Move gelaufen.**
 
 ## Installieren
 
@@ -47,7 +47,7 @@ Modul Knöpfe, Jog-Rad, Jog-Klick und Pads selbst bekommt und abfragen darf, ob 
 | Sound, Seite 2 (Sample) | Sample | Pegel | Pitch | Decay | Start | Tone | Bend | Synth-Pegel |
 | Sound, Seite 3 (Mix/Env) | Level | Pan | Delay | Reverb | Drive | Attack | Gate | Release |
 | Sound, Seite 4 (LFOs) | LFO 1 Ziel | Welle | Rate | Tiefe | LFO 2 Ziel | Welle | Rate | Tiefe |
-| Sound, Seite 5 | Variation | | | | | | | |
+| Sound, Seite 5 | WAV-Datei | Length (50 ms / Whole) | Variation | | | | | |
 | Drive & Reverb | Drv Mode | Drv Gain | Drv Tone | Drv Return | Size | Damp | Pre-Delay | Rev Return |
 | Delay | Mode | Zeit | Zeit R | Feedback | Tone | Return | | |
 | Comp & Limiter | Threshold | Ratio | Attack | Release | Makeup | Limiter | Ceiling | Lim Release |
@@ -86,6 +86,20 @@ Der gewählte Sound ist auch der, dem das Grid folgt (`focus_param` `ui_voice`).
   eigene, 16 nach 808/909/606/707/DMX/LM-1/LM-2/SDS –, Pegel, Pitch, Decay, Start, Tone, Bend, Synth-Pegel), Level,
   Pan, die Sends Delay/Reverb/Drive, Attack/Gate/Release, zwei LFOs (Ziel, Welle, Rate im Tempo, Tiefe) und
   **Variation** (würfelt den Sound neu wie PRESETS auf LUXR; 0 = der Werks-Sound).
+- **WAV-Layer** (Sound, Seite 5): statt einer eingebauten Transiente spielt der Sample-Layer eine eigene WAV-Datei.
+  *WAV File* öffnet den Dateibrowser von Schwung (Start: `UserLibrary/Samples` des Move); eine gewählte Datei stellt
+  *Sample* auf **WAV**. **Length** wählt, wie viel davon klingt:
+  - **50 ms** – nur der Anfang, als Transiente wie die eingebauten (die sind alle 50 ms lang, die Maschinen-Samples
+    46 ms): mit 6 ms Ausblendung am Ende, innerhalb der Hüllkurve des Sounds, also zusammen mit dem Synth-Layer.
+  - **Whole** – die ganze Datei bis zu ihrem Ende, an der Hüllkurve des Synth-Layers vorbei (nur Attack und das
+    Abwürgen der offenen Hi-Hat wirken); Smp Decay unter 127 lässt sie trotzdem ausklingen.
+
+  Pitch (0,25–1,75 × und die Halbtöne der Tonal-Map), Smp Decay, Start, Tone, Bend und Smp Lvl gelten für beides.
+  Gelesen werden PCM 8/16/24/32 Bit, 32-Bit-Float und WAVE_FORMAT_EXTENSIBLE, mono oder mehrkanalig (zu mono gemischt),
+  in ihrer eigenen Abtastrate, bis 2^20 Frames (23,7 s bei 44,1 kHz; länger wird abgeschnitten). Der Pfad steht im
+  Zustand. Geladen wird in einem eigenen Thread (SCHED_OTHER, Kerne 0–2) und per Zeigertausch übergeben – im
+  Audio-Thread passiert kein Datei-Zugriff und keine Allokation, wie Schwung es verlangt. In der Firmware des FM-1 ist
+  das abgeschaltet (`#ifdef LX_FILE_LAYER` in `lx_synth.c`, dort ändert sich nichts).
 - **Drive & Reverb**, **Delay** (1/8 … 3/4 im Tempo des Move; Mono/Stereo/Ping-Pong), **Comp & Limiter**, **Setup**.
 
 Tempo und Takt kommen vom Move (`get_bpm`, `get_beat_position`): Delay-Zeiten, Gate und die LFOs laufen mit, die LFOs
@@ -120,6 +134,7 @@ Bauen braucht dasselbe wie `tools/build.py --gen` (Python mit Pillow; die LXR-Tr
 | `dsp/luxr_engine.c` | eine Maschine: `lx_core.h` + `lx_synth.c` der Firmware, Parameter, MIDI, Zustand, Hierarchie |
 | `dsp/luxr_plugin.c` | Plugin API v2: jede Instanz bekommt eine der sechs Maschinen |
 | `dsp/luxr_tables.c` | die Transienten, einmal für alle Maschinen |
+| `dsp/luxr_wav.c` | WAV-Dateien lesen, im eigenen Thread, Übergabe an den Audio-Thread |
 | `dsp/plugin_api_v1.h` | aus Schwung (MIT, `LICENSE-SCHWUNG`) |
 | `src/module.json`, `src/help.json` | das Modul, die Hilfe auf dem Move |
 | `src/perform.js` | PERFORM: die Knöpfe mit Reihe A / Shift-Reihe B, Jog, Pads |

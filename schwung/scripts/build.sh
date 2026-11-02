@@ -33,7 +33,8 @@ compile() {   # $1 the compiler, $2 the output, then flags
     done
     "$cc" "${CF[@]}" -c schwung/dsp/luxr_tables.c -o "$obj/tables.o"
     "$cc" "${CF[@]}" -c schwung/dsp/luxr_plugin.c -o "$obj/plugin.o"
-    "$cc" -shared ${EXTRA_CFLAGS:-} -o "$so" "$obj"/engine*.o "$obj/tables.o" "$obj/plugin.o" -lm
+    "$cc" "${CF[@]}" -c schwung/dsp/luxr_wav.c -o "$obj/wav.o"
+    "$cc" -shared ${EXTRA_CFLAGS:-} -o "$so" "$obj"/engine*.o "$obj/tables.o" "$obj/plugin.o" "$obj/wav.o" -lm -lpthread
 }
 
 if [ -n "${NATIVE:-}" ]; then

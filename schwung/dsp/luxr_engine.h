@@ -16,6 +16,7 @@ typedef struct {
     void (*set)(const char *key, const char *val);
     int (*get)(const char *key, char *buf, int buf_len);           /* the length written, -1 unknown key */
     void (*render)(int16_t *out_lr, int frames, float bpm, double beat);   /* beat < 0: no transport */
+    void (*fini)(void);                                            /* (destroy: the WAV loader stopped, freed) */
 } lxe_ops_t;
 
 #define LXE_DECL(k) const lxe_ops_t *lxe_ops_##k(void);
