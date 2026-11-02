@@ -263,8 +263,8 @@ dort gespeicherten Daten der anderen Firmware (sie erkennt fremde Daten und igno
 ## Ableton Move (Schwung)
 
 Die Klangerzeugung von LUXR gibt es auch als Sound Generator für **Schwung** auf dem Ableton Move: die acht Sounds,
-die Preset-Kits, Kit-FX, Master-Filter, Kompressor und Limiter, gespielt von den Pads des Move (1–8 die Sounds, 9–16
-mit Accent). Installieren über Schwung Manager › Install Custom Module mit `https://github.com/Orbitator/LUXR`;
+die Preset-Kits, Kit-FX, Master-Filter, Kompressor und Limiter, gespielt von den Pads des Move (die unteren acht Pads
+sind die acht Sounds). Installieren über Schwung Manager › Install Custom Module mit `https://github.com/Orbitator/LUXR`;
 alles Weitere in [`schwung/README.md`](schwung/README.md).
 
 ## Lizenz – bitte lesen

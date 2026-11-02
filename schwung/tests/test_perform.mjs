@@ -72,8 +72,10 @@ midi(0x90, 69, 100);                             // pad 2 of the rack: the snare
 check(vals.get("ui_voice") === "snd2", "a pad hit focuses its sound");
 midi(0x90, 76 + 2, 100);                         // pad 7 (second row, third): the rim
 check(vals.get("ui_voice") === "snd7", "pad 7: the rim " + vals.get("ui_voice"));
-midi(0x90, 84 + 0, 100);                         // pad 9: the kick, accented
-check(vals.get("ui_voice") === "snd1", "pad 9: the kick " + vals.get("ui_voice"));
+midi(0x90, 68, 100);                             // pad 1: the kick
+check(vals.get("ui_voice") === "snd1", "pad 1: the kick " + vals.get("ui_voice"));
+midi(0x90, 84 + 1, 100);                         // pad 10 (upper eight): nothing
+check(vals.get("ui_voice") === "snd1", "an upper pad changes nothing " + vals.get("ui_voice"));
 midi(0x90, 72, 100);                             // the right half: nothing
 check(vals.get("ui_voice") === "snd1", "the right half of the pads changes nothing");
 midi(0xB0, 3, 127);                              // click: MIX

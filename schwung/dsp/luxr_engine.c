@@ -6,8 +6,8 @@
  *
  * Built once for each slot: cc -DLXE_SLOT=k (luxr_engine.h). Everything here is static, so each copy is a machine.
  *
- * Notes in (NOTE MAP):  MOVE   36..43 the sounds 1..8 (a Move drum rack's first two pad rows), 44..51 the same with
- *                              accent; a velocity over 110 accents as well
+ * Notes in (NOTE MAP):  MOVE   36..43 the sounds 1..8 (a Move drum rack's lower eight pads); the upper eight (44..51)
+ *                              play nothing; a velocity over 110 accents
  *                       GM     General MIDI drums (as LUXR's MIDI IN: 36 kick, 38 snare, 39 clap, 42 hat ...)
  *                       TONAL  every note plays the sound TONAL SND, C3 (60) its own pitch, a semitone a key
  * Parameters: k_* the kit (FX, master), sN_* sound N (1..8); kit / kit_count / kit_name the preset browser; state. */
@@ -856,10 +856,10 @@ static void e_midi(const uint8_t *m, int len, int source)
     case 2:                                      /* TONAL: the sound chosen, C3 its own pitch */
         hit((uint32_t)(t = e_tsnd), v, v > 110u, (int32_t)n - 60);
         break;
-    default:                                     /* MOVE: the pads' first row 1..8, the second the same accented */
-        t = n >= 36u && n < 52u ? (int32_t)((n - 36u) % 8u) : -1;
+    default:                                     /* MOVE: the lower eight pads the sounds 1..8, the upper eight nothing */
+        t = n >= 36u && n < 44u ? (int32_t)(n - 36u) : -1;
         if (t >= 0)
-            hit((uint32_t)t, v, n >= 44u || v > 110u, 0);
+            hit((uint32_t)t, v, v > 110u, 0);
         break;
     }
     if (t >= 0)                                  /* (a note: a pad's, if a press comes with it) */

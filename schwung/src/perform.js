@@ -96,7 +96,7 @@
             const t = GM[36 + idx];
             return t === undefined ? -1 : t;
         }
-        return st.map === 2 ? -1 : idx % 8;
+        return st.map === 2 || idx >= 8 ? -1 : idx;   /* (MOVE: the lower eight pads only) */
     }
     function setSound(ctx, s) {
         const st = ctx.state;

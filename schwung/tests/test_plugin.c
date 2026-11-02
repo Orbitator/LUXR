@@ -195,9 +195,14 @@ int main(int argc, char **argv)
     note(a, 36, 100);
     ra = block_rms(a, 30, rec, &nrec, (int)(sizeof rec / sizeof *rec));
     block_rms(a, 200, rec, &nrec, (int)(sizeof rec / sizeof *rec));
-    note(a, 44, 100);
+    note(a, 36, 120);
     rb = block_rms(a, 30, rec, &nrec, (int)(sizeof rec / sizeof *rec));
-    CHECK(rb > ra, "the upper row accents (%f > %f)", rb, ra);
+    CHECK(rb > ra, "a velocity over 110 accents (%f > %f)", rb, ra);
+    block_rms(a, 400, 0, 0, 0);
+    for (k = 44; k < 52; k++)                    /* (the upper eight pads: nothing) */
+        note(a, k, 120);
+    r = block_rms(a, 20, 0, 0, 0);
+    CHECK(r < 1.0, "the upper eight pads play nothing (%f)", r);
     note(a, 60, 100);                            /* (MOVE: outside the two rows, nothing) */
     block_rms(a, 200, 0, 0, 0);
     r = block_rms(a, 10, 0, 0, 0);

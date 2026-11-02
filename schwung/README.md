@@ -25,7 +25,7 @@ Dann im Shadow-Modus auf einer Spur **LUXR** als Synth laden – am besten auf e
 
 | Note Map (Kit-Seite) | Noten |
 |---|---|
-| **Move** (Standard) | Pads 1–8 (Noten 36–43): Kick, Snare, Clap, Cl Hat, Op Hat, Tom, Rim, Cymbal; Pads 9–16 (44–51): dieselben mit Accent. Velocity über 110 gibt ebenfalls Accent. |
+| **Move** (Standard) | Pads 1–8 (Noten 36–43): Kick, Snare, Clap, Cl Hat, Op Hat, Tom, Rim, Cymbal; die oberen acht Pads 9–16 (44–51) spielen nichts. Velocity über 110 gibt Accent. |
 | **GM** | General-MIDI-Drums wie LUXRs MIDI IN (36 Kick, 38/40 Snare, 39 Clap, 42/44 CH, 46 OH, 41–50 Tom, 37 Rim, 49/51/57 Cymbal) |
 | **Tonal** | jede Note spielt den Sound **Tonal Snd**, C3 (60) ist seine eigene Tonhöhe, ein Halbton je Taste (±3 Oktaven) |
 
