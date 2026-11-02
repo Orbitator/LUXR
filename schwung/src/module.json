@@ -2,7 +2,7 @@
   "id": "luxr",
   "name": "LUXR",
   "abbrev": "LUXR",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "LUXR drum machine: eight LXR-style drum voices with sample layer, kit FX, compressor and limiter",
   "author": "orbitator",
   "license": "GPL-3.0 (LXR transient samples: non-commercial, see NOTICE-LXR.txt)",
@@ -15,6 +15,15 @@
     "midi_out": false,
     "chainable": true,
     "component_type": "sound_generator",
-    "subcategory": "drum-machine"
+    "subcategory": "drum-machine",
+    "ui_hierarchy": {
+      "levels": {
+        "sound": {
+          "child_count": 8,
+          "child_key_template": "s{index}_{key}",
+          "child_index_base": 1
+        }
+      }
+    }
   }
 }

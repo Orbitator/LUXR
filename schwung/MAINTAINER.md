@@ -1,6 +1,6 @@
 # LUXR for Schwung: notes for the Schwung maintainer
 
-**Module:** `luxr` (sound generator, drum machine), version 0.3.0
+**Module:** `luxr` (sound generator, drum machine), version 0.4.0
 **Repository:** https://github.com/Orbitator/LUXR (module sources in [`schwung/`](.))
 **Install (custom module):** Schwung Manager › Install Custom Module › `https://github.com/Orbitator/LUXR`
 **Download:** https://github.com/Orbitator/LUXR/releases/download/schwung/luxr-module.tar.gz (referenced by the repository's [`release.json`](../release.json))
@@ -28,15 +28,19 @@ LUXR's own sequencer is not included; Move sequences the module.
 |---|---|
 | API | Plugin API v2 only (`move_plugin_init_v2`); `plugin_api_v1.h` vendored from Schwung at `f288066` (MIT, `LICENSE-SCHWUNG` ships in the tarball). |
 | Instances | Up to 6, fully independent. The firmware engine keeps its state in statics, so `luxr_engine.c` is compiled once per slot. Each instance gets a free slot; a seventh `create_instance` returns NULL and logs one line. |
-| Hierarchy | Served from `get_param("ui_hierarchy")`, as required for sound generators. Uses `pad_layout: "drums"`, sibling-shape voices `snd1`..`snd8` with `note` 36..43 and `role`, and `focus_param: "ui_voice"`. The root level has a kit browser (`list_param`/`count_param`/`name_param`). |
+| Hierarchy | Served from `get_param("ui_hierarchy")`, as required for sound generators, and built once per process (both it and `chain_params` are fixed documents; a read is a memcpy). `pad_layout: "drums"`; the eight voices are ONE template child level `sound` (`child_key_template` `s{index}_{key}`, base 1, `child_notes` 36..43, `child_names`, `child_roles`, `child_press_param`), with `focus_param: "ui_voice"` answering `"<count>:<voice>"` and `focus_press_param: "ui_press"`. A press is paired with the next note within 100 ms (else the note just before it). The root level has a kit browser (`list_param`/`count_param`/`name_param`). |
 | Knobs | The root page holds the kit macros. Each voice has 5 pages of 8 knobs; the synth layer follows the FM-1's row A / SHIFT-row B layout. Kit pages: Drive & Reverb, Delay, Comp & Limiter, Setup. Short names are chosen for the 5-character cells. |
-| chain_params | 209 entries: the numeric kit and voice parameters plus 8 `filepath` entries. No enums (their pages own them). No `max_param`. |
+| chain_params | 71 entries: every kit key, every voice key once (bare), the WAV `filepath`, Perform, Save/Delete. `module.json` carries a minimal `ui_hierarchy` with the voice template (`s{index}_{key}`, base 1, 8) solely so `parse_child_templates` lets `find_param_by_key` resolve `s1_`..`s8_` keys onto those entries; a bare key addresses the focused voice. `schwung/tests/check_docs.py` checks that every key on every page resolves that way, because a miss makes `find_param_by_key` re-read and re-parse the whole list on the callback every 250 ms (`MOD_PARAM_CACHE_REFRESH_MS`). |
 | Enums | Reported as an index; set_param accepts the index or the option name. Unknown values are ignored. |
 | state | A flat JSON object: every value, plus the WAV paths (escaped). It describes what the engine currently holds, so scenes and LFOs read back their base values correctly. |
 | Tempo | `get_bpm` sets delay time, gate and LFO rate. `get_beat_position` phase-locks the LFOs while Move plays. Both are NULL-guarded. |
 | Canvas | `perform.js` is a fullscreen, `enterable` canvas cell on the root level with `wantsPads: true`. Knobs 1–8 edit row A and Shift+knobs edit row B (read through `ctx.shiftHeld()`). The jog wheel selects the voice, the jog click changes layer, and a pad hit focuses its voice. `handleBack` returns false. It only reads and writes params in `onOpen`/`onMidi`, never on the draw path. |
 | Files | Each voice has a `filepath` param (`root` `/data/UserData`, `start_path` `UserLibrary/Samples`, `.wav`). |
 | Help | `help.json` with `children`, lines of 20 characters or fewer, ASCII only. |
+
+### User kits
+
+`Setup › Save Kit` (a `string` param) saves the state as `/data/UserData/schwung/luxr/kits/<name>.json`; `Delete Kit` (an enum with `access: "write"`) removes the loaded one. The list follows LUXR's own kits in the browser. All file work happens on the same worker thread as the WAV loader (`luxr_user.c`); the audio thread posts a request and picks up the result.
 
 ### Realtime safety
 

@@ -18,7 +18,8 @@ typedef struct lxw_buf {
 } lxw_buf_t;
 
 typedef struct lxw_loader lxw_loader_t;
-lxw_loader_t *lxw_start(uint32_t nslots);        /* (create_instance: the loader thread) */
+lxw_loader_t *lxw_start(uint32_t nslots, void (*idle)(void *), void *arg);   /* (create_instance: the loader thread;
+                                                 * idle(arg) on each of its rounds: luxr_user.c) */
 void lxw_stop(lxw_loader_t *l);                  /* (destroy_instance: joined, everything freed) */
 void lxw_request(lxw_loader_t *l, uint32_t slot, const char *path);   /* (audio thread: no I/O, no allocation) */
 const lxw_buf_t *lxw_take(lxw_loader_t *l, uint32_t slot, const lxw_buf_t *cur);   /* (audio thread, a block's start:

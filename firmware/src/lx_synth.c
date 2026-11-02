@@ -149,6 +149,14 @@ static const sound_t *voice_sound(uint32_t t, const voice_t *v, sound_t *tmp)
  * 16 bit mono at its own rate, its position Q12 - either its first 50 ms, played as a transient inside the synth's
  * envelope, or WHOLE, past the envelope to its end. The firmware is built without it.) */
 #define TR_FILE TR_N
+/* a retriggered voice's tail, faded out over ~3 ms (the choke's fade) instead of cut off: no click */
+#define LX_GHOST 1
+static voice_t ghost[NTRK];
+/* delay and reverb rest while nothing is sent to them and they have been silent for 1 s (longer than the delay line,
+ * 0.74 s: no echo still on its way is lost) - they cost a fifth of the time otherwise, sent to or not */
+#define LX_FX_IDLE 1
+#define FX_IDLE_N (FS / CTL)
+static uint32_t fx_still;                        /* blocks of CTL without a send and without their output */
 typedef struct { const int16_t *d; uint32_t n, rate; uint8_t whole; } lx_file_t;
 static lx_file_t lx_file[NTRK];
 static uint32_t lx_file_len(const lx_file_t *f)   /* the frames played: all, or the first 50 ms */
@@ -172,6 +180,12 @@ static void voice_hit_lk(uint32_t t, uint32_t vel, uint32_t acc, int32_t pan, ui
     sound_t tmp;
     const sound_t *s;
     uint32_t i;
+#ifdef LX_GHOST
+    if (v->active) {                             /* (the hit before keeps sounding a moment, fading) */
+        ghost[t % NTRK] = *v;
+        ghost[t % NTRK].choke = 1;
+    }
+#endif
     v->nlk = (uint8_t)(nlk < NLK_V ? nlk : NLK_V);
     for (i = 0; i < v->nlk; i++) {
         v->lk[i][0] = lk[i][0];
@@ -832,11 +846,23 @@ static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the 
         sound_t tmp;
         const sound_t *s = voice_sound(t, &voice[t], &tmp);
         int32_t g, pan, pl, pr, dg = s->dly, rg = s->rev, vg = s->drv, pk = 0;
+#ifdef LX_GHOST
+        if (!voice[t].active && !ghost[t].active)
+            continue;
+#else
         if (!voice[t].active)
             continue;
+#endif
         for (i = 0; i < n; i++)
             tb[i] = 0;
+#ifdef LX_GHOST
+        if (voice[t].active)
+            lx_render(t, &voice[t], s, tb, n);
+        if (ghost[t].active)
+            lx_render(t, &ghost[t], s, tb, n);
+#else
         lx_render(t, &voice[t], s, tb, n);
+#endif
         if (!trk_audible(t))
             continue;
         g = s->level * 2;                        /* 0..254, 200 at the default */
@@ -880,7 +906,31 @@ static void mix_block(int32_t *out, uint32_t n)  /* n samples (n <= CTL) of the 
         if (pk >= 32768)                         /* (0 dB: the sound alone at the output's top) */
             clip_f |= (uint8_t)(1u << t);
     }
+#ifdef LX_FX_IDLE
+    {
+        int32_t sent = 0;
+        for (i = 0; i < n; i++)
+            sent |= dsl[i] | dsr[i] | rs[i];
+        if (sent || fx_still < FX_IDLE_N) {
+            int32_t L0[CTL], R0[CTL], fpk = 0;
+            for (i = 0; i < n; i++) {
+                L0[i] = L[i];
+                R0[i] = R[i];
+            }
+            fx_block(L, R, dsl, dsr, rs, n);
+            for (i = 0; i < n; i++) {
+                int32_t dl = L[i] - L0[i], dr = R[i] - R0[i];
+                dl = dl < 0 ? -dl : dl;
+                dr = dr < 0 ? -dr : dr;
+                if (dl > fpk) fpk = dl;
+                if (dr > fpk) fpk = dr;
+            }
+            fx_still = sent || fpk > 8 ? 0u : fx_still + 1u;
+        }
+    }
+#else
     fx_block(L, R, dsl, dsr, rs, n);
+#endif
     drive_block(L, R, dv, n);
     if (song.playing && (song.click == CLICK_ON || (song.click == CLICK_REC && song.rec)) && song.step % 4u == 0u) {
         uint32_t bar = song.pstep % 16u == 0u, p0 = song.pos >= n ? song.pos - n : 0u;

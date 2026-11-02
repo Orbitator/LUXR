@@ -26,7 +26,7 @@ compile() {   # $1 the compiler, $2 the output, then flags
     shift 2
     obj=$(dirname "$so")/obj
     mkdir -p "$obj"
-    local CF=(-O2 -fPIC -fvisibility=hidden -std=gnu99 -Wall -Wno-unused-function -Wno-unused-variable
+    local CF=(-O3 -fPIC -fvisibility=hidden -std=gnu99 -Wall -Wno-unused-function -Wno-unused-variable
               -Ibuild/gen -Ifirmware/src -Ischwung/dsp "$@" ${EXTRA_CFLAGS:-})
     for k in $(seq 0 $((SLOTS - 1))); do
         "$cc" "${CF[@]}" -DLXE_SLOT="$k" -c schwung/dsp/luxr_engine.c -o "$obj/engine$k.o"
@@ -34,7 +34,8 @@ compile() {   # $1 the compiler, $2 the output, then flags
     "$cc" "${CF[@]}" -c schwung/dsp/luxr_tables.c -o "$obj/tables.o"
     "$cc" "${CF[@]}" -c schwung/dsp/luxr_plugin.c -o "$obj/plugin.o"
     "$cc" "${CF[@]}" -c schwung/dsp/luxr_wav.c -o "$obj/wav.o"
-    "$cc" -shared ${EXTRA_CFLAGS:-} -o "$so" "$obj"/engine*.o "$obj/tables.o" "$obj/plugin.o" "$obj/wav.o" -lm -lpthread
+    "$cc" "${CF[@]}" -c schwung/dsp/luxr_user.c -o "$obj/user.o"
+    "$cc" -shared ${EXTRA_CFLAGS:-} -o "$so" "$obj"/engine*.o "$obj/tables.o" "$obj/plugin.o" "$obj/wav.o" "$obj/user.o" -lm -lpthread
 }
 
 if [ -n "${NATIVE:-}" ]; then
