@@ -94,6 +94,7 @@ static void kit_apply(const lxk_kit_t *k)
 
 /* ----------------------------------------------------------- parameters --- */
 static uint8_t e_kit, e_vol = 100, e_map, e_tsnd;  /* the kit loaded, VOLUME, NOTE MAP, TONAL SND */
+static uint8_t e_mch;                            /* MIDI CH: 0 every channel the slot passes on, else only that one */
 /* (e_focus: the sound being edited - ui_voice: a pad hit or PERFORM; the grid follows) */
 enum { PT_INT, PT_ENUM };
 typedef struct {
@@ -111,6 +112,8 @@ static const char *const O_RATIO[] = {"1:1", "1.5:1", "2:1", "3:1", "4:1", "6:1"
 static const char *const O_OFFON[] = {"Off", "On"};
 static const char *const O_OGAIN[] = {"0 dB", "+3 dB", "+6 dB"};
 static const char *const O_MAP[] = {"Move", "GM", "Tonal"};
+static const char *const O_MCH[] = {"All", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
+                                    "16"};
 static const char *const O_SND[] = {"Kick", "Snare", "Clap", "Cl Hat", "Op Hat", "Tom", "Rim", "Cymbal"};
 static const char *const O_LDEST[] = {"Off", "Pitch", "Filter", "Decay", "Level", "Pan", "Sample"};
 static const char *const O_LWAVE[] = {"Sine", "Tri", "Saw", "Square", "S&H"};
@@ -129,7 +132,7 @@ enum {                                           /* the kit */
     G_VOL, G_TUNE, G_DDEC, G_MAP, G_TSND, G_OGAIN,
     G_DRVM, G_DRVA, G_DRVT, G_DRVL, G_DLYD, G_DLYD2, G_DLYM, G_DLYF, G_DLYT, G_DLYL,
     G_REVS, G_REVD, G_REVP, G_REVL, G_MFLT, G_MRES, G_CTHR, G_CRAT, G_CATK, G_CREL, G_CMAK, G_PCLIP,
-    G_CLIM, G_LCEIL, G_LREL, G_ALVL, G_ATGT, G_N
+    G_CLIM, G_LCEIL, G_LREL, G_ALVL, G_ATGT, G_MCH, G_N
 };
 static const pdef_t GDEF[G_N] = {
     {"k_vol", "Volume", PT_INT, 0, 127, 0, 0},
@@ -165,13 +168,14 @@ static const pdef_t GDEF[G_N] = {
     {"k_lrel", "Lim Rel", PT_INT, 0, 127, 0, 0},
     {"k_alvl", "Auto Lvl", PT_ENUM, 0, 1, O_OFFON, 0},
     {"k_atgt", "Target", PT_INT, -12, 0, 0, "dB"},
+    {"k_mch", "MIDI Ch", PT_ENUM, 0, 16, O_MCH, 0},
 };
 static uint8_t *const GU8[G_N] = {           /* (the song's fields; 0: kept here, or signed) */
     0, 0, &song.ddec, 0, 0, &song.ogain,
     &song.drv_mode, &song.drv_amt, &song.drv_tone, &song.drv_lvl, &song.dly_div, &song.dly_div2, &song.dly_mode,
     &song.dly_fb, &song.dly_tone, &song.dly_lvl, &song.rev_size, &song.rev_damp, &song.rev_pre, &song.rev_lvl,
     0, &song.mres, &song.cthr, &song.crat, &song.catk, &song.crel, &song.cmak, &song.pclip,
-    &song.clim, 0, &song.lrel, &song.alvl, 0,
+    &song.clim, 0, &song.lrel, &song.alvl, 0, 0,
 };
 static int32_t g_get(uint32_t i)
 {
@@ -180,6 +184,7 @@ static int32_t g_get(uint32_t i)
     case G_TUNE: return song.tune;
     case G_MAP: return e_map;
     case G_TSND: return e_tsnd;
+    case G_MCH: return e_mch;
     case G_MFLT: return song.mflt;
     case G_LCEIL: return song.lceil;
     case G_ATGT: return song.atgt;
@@ -195,6 +200,7 @@ static void g_set(uint32_t i, int32_t v)
     case G_TUNE: song.tune = (int8_t)v; return;
     case G_MAP: e_map = (uint8_t)v; return;
     case G_TSND: e_tsnd = (uint8_t)v; return;
+    case G_MCH: e_mch = (uint8_t)v; return;
     case G_MFLT: song.mflt = (int8_t)v; return;
     case G_LCEIL: song.lceil = (int8_t)v; return;
     case G_ATGT: song.atgt = (int8_t)v; return;
@@ -438,7 +444,7 @@ static const uint8_t KIT_PAGE[][8] = {           /* (G_*; 0xFF a gap) */
     {G_DRVM, G_DRVA, G_DRVT, G_DRVL, G_REVS, G_REVD, G_REVP, G_REVL},
     {G_DLYM, G_DLYD, G_DLYD2, G_DLYF, G_DLYT, G_DLYL, 0xFF, 0xFF},
     {G_CTHR, G_CRAT, G_CATK, G_CREL, G_CMAK, G_CLIM, G_LCEIL, G_LREL},
-    {G_OGAIN, G_MAP, G_TSND, 0xFF, G_PCLIP, G_ALVL, G_ATGT, 0xFF},
+    {G_OGAIN, G_MAP, G_TSND, G_MCH, G_PCLIP, G_ALVL, G_ATGT, 0xFF},
 };
 static const char *const KIT_PAGE_NAME[] = {"Drive & Reverb", "Delay", "Comp & Limiter", "Setup"};
 static const char *const KIT_PAGE_ID[] = {"fx", "delay", "dyn", "setup"};
@@ -777,6 +783,7 @@ static void e_init(uint32_t seed)
     e_vol = 100;
     e_map = 0;
     e_tsnd = 0;
+    e_mch = 0;
     e_focus = 0;
     e_clk = pr_at = nt_at = focus_n = e_quiet = 0;
     cpu_sum = cpu_max = cpu_n = cpu_busy = cpu_vmax = cpu_avg_last = cpu_peak_last = 0;
@@ -837,6 +844,8 @@ static void e_midi(const uint8_t *m, int len)
     n = m[1] & 0x7Fu;
     v = m[2] & 0x7Fu;
     if (st != 0x90u || !v)                       /* (drums: a note off means nothing; GATE times the release) */
+        return;
+    if (e_mch && (uint32_t)(m[0] & 0x0Fu) + 1u != e_mch)   /* MIDI CH: notes of other channels are not LUXR's */
         return;
     switch (e_map) {
     case 1:                                      /* GM */

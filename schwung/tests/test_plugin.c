@@ -431,6 +431,24 @@ int main(int argc, char **argv)
         CHECK(e1 > e0 * 0.05 && e1 > 50.0, "the echo comes (%f)", e1);
     }
 
+    /* MIDI CH: All plays every channel the host passes on; a channel set, only that one */
+    {
+        uint8_t m4[3] = {0x93, 36, 120}, m1[3] = {0x90, 36, 120};
+        api->set_param(a, "kit", "0");
+        block_rms(a, 800, 0, 0, 0);
+        api->on_midi(a, m4, 3, 0);
+        CHECK(block_rms(a, 10, 0, 0, 0) > 100.0, "All: a note on channel 4 plays");
+        api->set_param(a, "k_mch", "1");
+        block_rms(a, 800, 0, 0, 0);
+        api->on_midi(a, m4, 3, 0);
+        CHECK(block_rms(a, 10, 0, 0, 0) < 1.0, "MIDI Ch 1: a note on channel 4 does not");
+        api->on_midi(a, m1, 3, 0);
+        CHECK(block_rms(a, 10, 0, 0, 0) > 100.0, "MIDI Ch 1: a note on channel 1 does");
+        api->get_param(a, "state", big, sizeof big);
+        CHECK(strstr(big, "\"k_mch\":1") != NULL, "MIDI Ch is in the state");
+        api->set_param(a, "k_mch", "All");
+    }
+
     /* kits of your own: saved, listed, loaded back, deleted */
     {
         char nm[64], st0[1 << 15], st1[1 << 15];

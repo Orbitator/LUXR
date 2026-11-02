@@ -46,7 +46,13 @@
         "own pitch.",
         "",
         "The closed hat",
-        "chokes the open one."
+        "chokes the open one.",
+        "",
+        "Setup > MIDI Ch:",
+        "All - every channel",
+        "the slot passes on.",
+        "1-16 - only that",
+        "channel plays LUXR."
       ]
     },
     {
