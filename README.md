@@ -276,3 +276,5 @@ gebautes `luxr.fwsc` ist nur für den **persönlichen, nicht-kommerziellen Gebra
 reine GPL-Firmware weitergeben. Die Update-Seite auf GitHub Pages bietet sie kostenlos und zusammen mit dem vollständigen
 Quelltext an (das verlangt die LXR-Lizenz); der Hinweis gilt auch für jede dort geladene Kopie. Ohne Samples (Sample-Layer auf OFF/SNAP) wäre die Firmware reines GPL; das ist hier nicht
 vorgesehen, weil der Sample-Layer ausdrücklich die Original-Samples nutzen soll.
+
+You can also try LUXR in the browser, no flashing needed, in the free community [FM-1 Emulator](https://fm1-emulator.atst.tools/).
